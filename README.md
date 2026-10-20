@@ -44,7 +44,7 @@ no Gmail filter or label needed. For each message, the `Message-ID` is checked a
 | received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list); top ≤ `MAX_STORIES` (6) exploited/TTP items marked for the **deep** read, every other item gets a **light** read |
 | parsed → fetched | deep stories: ≤ 2 links + one hop; light stories: first link only; ≤ `MAX_SOURCES` (40) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
 | fetched → extracted | one Claude call per story — deep: `claude-sonnet-5-5`, 50k chars of source; light: `claude-haiku-5-5`, 20k chars (structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
-| extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run |
+| extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run. Each story is then matched to the trailing 14 days (shared CVE, same specific malware family, or same actor + a shared IoC) and linked via `updates_story_id` |
 | normalized → validated → queried → rendered | **v1/v2 seams — pass-through in v0** |
 | rendered → sent | email to `EMAIL_TO` (skipped for dry runs or when over the monthly cap) and a Discord ✔ line |
 
@@ -62,6 +62,14 @@ is the catch-up for late or re-sent briefs and for resuming a stuck run; it's no
 reads on Haiku 5.5 → estimated $0.25–0.35 per brief for *every* item. `LLM_MODEL_DEEP=claude-opus-5-5`
 switches the deep tier back for a quality comparison. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops emailing and says
 so on Discord. `PAUSED=1` stops everything without a deploy.
+
+## Day-over-day diffing (`lib/diff.js`)
+
+- **Delta line** at the top of every email: new IoCs and never-seen behaviors vs. restated IoCs and story updates.
+- **Story updates:** a story continuing one from the last 14 days is titled "update to <date>'s story"; only
+  what's new is shown, restated IoCs and already-reported behaviors fold into collapsed sections.
+- **Behavior novelty:** a behavior is "seen before" if any behavior in the last 90 days has the same
+  `pattern_kind`, same parent, and ≥ 50 % overlapping children. New ones get a ★.
 
 ## Endpoints
 
@@ -83,7 +91,7 @@ npm test                                   # offline: memory store, fake network
 node scripts/run-local.js --eml fixtures/briefs/2026-10-20-pipeline.eml   # real sources + real API → out/latest.html
 node scripts/run-local.js --gmail --save-fixture                          # newest real brief from Gmail
 node scripts/run-local.js --eml … --record                                # also save LLM responses to fixtures/llm/
-npm run gmail-auth                         # one-time: read-only Gmail refresh token → .env
+npm run gmail-auth                         # one-time, in your own Terminal: read-only Gmail token → Vercel (no files)
 npm run update-attack                      # refresh the ATT&CK mirror when MITRE ships a release
 ```
 
