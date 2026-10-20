@@ -46,7 +46,7 @@ Received mail counts toward the Resend account's quota (~1–2/day). The `Messag
 |---|---|
 | received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list); top ≤ `MAX_STORIES` (6) exploited/TTP items marked for the **deep** read, every other item gets a **light** read |
 | parsed → fetched | deep stories: ≤ 2 links + one hop; light stories: first link only; ≤ `MAX_SOURCES` (40) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
-| fetched → extracted | one Claude call per story — deep: `claude-sonnet-5-5`, 50k chars of source; light: `claude-haiku-5-5`, 20k chars (structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
+| fetched → extracted | one Claude call per story — deep: `claude-opus-5-5`, 50k chars of source; light: `claude-haiku-5-5`, 20k chars (structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
 | extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run. Each story is then matched to the trailing 14 days (shared CVE, same specific malware family, or same actor + a shared IoC) and linked via `updates_story_id` |
 | normalized → validated → queried → rendered | **v1/v2 seams — pass-through in v0** |
 | rendered → sent | email to `EMAIL_TO` (skipped for dry runs or when over the monthly cap) and a Discord ✔ line |
@@ -61,9 +61,9 @@ hour, in **fixed UTC**. The brief lands ~11:10–12:10 UTC. `0 13 * * *` therefo
 UTC-scheduled on the sender's side, shifts with it or not — either way 13:00 UTC is after it). `0 17 * * *`
 is the catch-up for late or re-sent briefs and for resuming a stuck run; it's normally a no-op.
 
-**Cost.** First live run (Opus 5.5, 5 stories) cost $0.48. Now: 6 deep reads on Sonnet 5.5 + ~20 light
-reads on Haiku 5.5 → estimated $0.25–0.35 per brief for *every* item. `LLM_MODEL_DEEP=claude-opus-5-5`
-switches the deep tier back for a quality comparison. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops emailing and says
+**Cost.** First live run (Opus 5.5, 5 stories) cost $0.48. Sonnet for the deep tier was tried on
+2026-10-19 and judged weaker, so: 6 deep reads on Opus 5.5 + ~25 light reads on Haiku 5.5 → estimated
+$0.55–0.70 per brief, ~$17–21/month. `LLM_MODEL_DEEP=claude-sonnet-5-5` roughly halves the deep-tier cost. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops emailing and says
 so on Discord. `PAUSED=1` stops everything without a deploy.
 
 ## Day-over-day diffing (`lib/diff.js`)

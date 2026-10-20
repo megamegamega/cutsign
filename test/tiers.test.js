@@ -20,7 +20,7 @@ test('deep stories use the deep model, everything else the light model, all item
   const deep = t.stories.filter((s) => s.selected).length;
   assert.equal(calls.filter((c) => c.tier === 'deep').length, deep);
   assert.equal(calls.filter((c) => c.tier === 'light').length, t.stories.length - deep);
-  assert.ok(calls.filter((c) => c.tier === 'deep').every((c) => c.model === 'claude-sonnet-5-5'));
+  assert.ok(calls.filter((c) => c.tier === 'deep').every((c) => c.model === 'claude-opus-5-5'));
   assert.ok(calls.filter((c) => c.tier === 'light').every((c) => c.model === 'claude-haiku-5-5'));
   // light stories fetch only their first link
   const rankMath = t.stories.find((s) => /Rank Math/.test(s.brief_text));

@@ -63,3 +63,9 @@ test('html→text keeps <pre> blocks verbatim and drops nav/footer', () => {
   assert.equal(r.publishedAt, '2026-10-20');
   assert.equal(r.publisher, 'Vendor Fixture Research');
 });
+
+test('html→text picks the real story, not a sponsored <article> that comes first', () => {
+  const r = htmlToText(readFixture('sources/sponsored-first.html'), 'https://thehackernews.com/x');
+  assert.match(r.text, /PEERSTITCH implant/);
+  assert.doesNotMatch(r.text, /identity exposure/);
+});
