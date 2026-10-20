@@ -66,6 +66,24 @@ Opus output/thinking. Now: ≤ 4 deep reads at low effort → est. $0.70–0.90/
 line reports the deep/quick split. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops
 emailing and says so on Discord. `PAUSED=1` stops everything without a deploy.
 
+## Story watches (`lib/watch.js`, `api/watch.js`, migration `0002_watches.sql`)
+
+Each day's deep-read stories become **watches** for 14 days (a material change extends by 7, capped at 30);
+a later story about the same campaign (shared CVE, same malware, or actor + shared URL) extends the existing
+watch. Roughly hourly — 24 daily Vercel crons, one per hour, since Hobby allows only daily jobs — each watch:
+
+- re-fetches its pages and diffs them line by line (advisories edited in place),
+- checks CISA KEV, scans 11 news/vendor feeds for its CVE / actor / malware, and every 6 h checks NVD status
+  and GitHub for public repos.
+
+Checks are free. **Models run only on a change:** Haiku reads just the added text against what's known
+(material? new IoCs?); only material new behaviors/IoCs escalate to an Opus re-read (≤
+`WATCH_MAX_DEEP_PER_DAY`, default 2). The first look at a watch is a silent baseline; injection-shaped text is
+reported once and never analyzed. **HIGH** events (KEV listing, exploitation, new IoCs/behaviors, new
+versions/fix, PoC-looking repo) alert immediately (Discord `Cutsign ⚡` + "Cutsign update" email); all events
+appear in the next morning's email under "Watched stories — what changed". Watch spend counts toward
+`MAX_MONTHLY_USD`. `GET /api/watch?backfill=1` starts watches for the last 7 days of runs.
+
 ## Deep-read reuse (cost, without losing new information)
 
 Running campaigns recur for days. Before a deep read, the pipeline checks the last 14 days of deep reads; it
