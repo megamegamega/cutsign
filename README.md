@@ -64,6 +64,7 @@ so on Discord. `PAUSED=1` stops everything without a deploy.
 
 - `GET /api/cron` (`?dry=1` → new runs don't email) — Bearer `CRON_SECRET` (Vercel cron sends it).
 - `POST /api/advance` — internal self-chain, same secret.
+- `POST /api/inbound` (`?dry=1`) — feed a raw `.eml` brief by hand; same dedupe + allowlist as the poll.
 - `GET /api/health` — liveness + list of *missing* env var names (never values). `noindex` everywhere.
 
 ## Env vars
