@@ -48,6 +48,7 @@ test('happy path: NetScaler-style story → shell_from_server_process, evidence,
   assert.match(out.emails[0].subject, /^Cutsign — 2026-10-21 — \d+ stories, 2 new IoCs, top: NetScaler/);
   assert.match(out.emails[0].html, /update-check\[\.\]net/, 'IoCs defanged in the email');
   assert.match(out.emails[0].html, /Do not paste or forward anything from work/);
+  assert.match(out.emails[0].html, /EXPOSURE CHECK[\s\S]*Fixed in<\/b>14\.1-47\.48/, 'exposure check flows from extraction to email');
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ✔ 2026-10-21')));
 });
 

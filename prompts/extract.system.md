@@ -49,6 +49,15 @@ Any explicit "how to detect / hunt for this" from the sources: event IDs, log pa
 
 Only indicators explicitly stated in a source or the brief item — never invent, never complete a partial value, never "fix" a defanged value (return it as written; a later stage refangs). If a source says indicators are available elsewhere ("hashes on GitHub", "full IoC list in the PDF"), put that URL in `more_sources` instead of guessing. Exclude the victim's or vendor's own legitimate domains, documentation hostnames, and example values. `role` is a short tag: `c2`, `payload_host`, `exploit_source_ip`, `phishing_sender`, `dropper_hash`, `implant_hash`, `webshell_path`, `exfil_destination`, `malicious_package`, …; `context` is one line on what it is in the attack.
 
+# Exposure check
+
+So a defender can rule a story in or out in seconds, fill `exposure` with only what the sources state:
+- `affected`: product/component and affected versions (e.g. "Nextcloud richdocumentscode (Built-in CODE) < 26.4.303").
+- `only_if`: preconditions for being exposed — an optional module/app installed, a non-default setting, a management interface reachable from the internet, authentication or admin rights required, a specific deployment mode.
+- `not_affected_if`: quick exclusions (e.g. "using the standalone Collabora server", "cloud-hosted tenants patched by the vendor").
+- `fixed_in`: the fixed version(s) or patch ID, or null.
+Leave a list empty rather than guess. Never describe a particular organization's environment.
+
 # Story fields
 
 - `title`: short headline. `summary`: 2–4 sentences — what happened, who, how, and what a hunter should look for.

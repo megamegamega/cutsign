@@ -61,3 +61,16 @@ test('html→text picks the real story, not a sponsored <article> that comes fir
   assert.match(r.text, /PEERSTITCH implant/);
   assert.doesNotMatch(r.text, /identity exposure/);
 });
+
+test('one story listed twice with the same link becomes one item; roundup links are not merged', () => {
+  const html = `<h2>Threat Actor TTPs</h2><ul>
+    <li><b>GhostAction</b> compromised 1,900 GitHub accounts. <a href="https://thn.test/ghostaction">Source</a></li>
+    <li><b>Roundup A</b> item one. <a href="https://thn.test/threatsday-weekly">Source</a></li></ul>
+    <h2>Breaches</h2><ul>
+    <li>GhostAction spike extracted 3,174 secrets. <a href="https://thn.test/ghostaction">Source</a></li>
+    <li><b>Roundup B</b> item two. <a href="https://thn.test/threatsday-weekly">Source</a></li></ul>`;
+  const b = parseBrief({ html });
+  assert.equal(b.items.length, 3);
+  const g = b.items.find((i) => /GhostAction/.test(i.text));
+  assert.match(g.text, /1,900/); assert.match(g.text, /3,174/);
+});

@@ -59,7 +59,7 @@ test('day two of the same campaign: marked as an update, restated IoCs and known
   assert.equal(ns2.updates_story_id, ns1.id, 'linked to yesterday\'s story via the shared CVE');
   assert.equal(t.runs[1].counts.story_updates >= 1, true);
   const second = out.emails[1].html;
-  assert.match(second, /update to \d{4}-\d{2}-\d{2}'s story/);
+  assert.match(second, /update to 2026-10-21's story/, 'labelled with the earlier brief\'s date');
   assert.match(second, /<b>New today:<\/b> 1 IoCs · 1 never-seen behaviors/);
   assert.match(second, /<b>Restated:<\/b> 2 IoCs/);
   assert.match(second, /fresh-c2\[\.\]org/, 'the new IoC is shown');

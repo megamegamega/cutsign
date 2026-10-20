@@ -49,6 +49,7 @@ export const emptyExtraction = (title, priority = 3) => ({
   story: { title, summary: 'Thin story.', threat_actor: null, malware_family: null, cves: [], attack_techniques: [],
     sector_relevance: ['all'], priority, priority_reason: 'little detail', earliest_published: null },
   behaviors: [], detection_guidance: [], evidence_samples: [], iocs: [], more_sources: [],
+  exposure: { affected: [], only_if: [], not_affected_if: [], fixed_in: null },
 });
 
 export const NETSCALER_EXTRACTION = {
@@ -79,6 +80,12 @@ export const NETSCALER_EXTRACTION = {
     { type: 'ipv4', value: '10.0.0.1', role: 'c2', confidence: 'inferred', context: 'private — must be dropped' },
   ],
   more_sources: [],
+  exposure: {
+    affected: ['Citrix NetScaler ADC/Gateway 14.1 before 14.1-47.48'],
+    only_if: ['appliance configured as Gateway or AAA virtual server', 'management interface reachable'],
+    not_affected_if: ['NetScaler cloud-managed instances patched by Citrix'],
+    fixed_in: '14.1-47.48',
+  },
 };
 
 /**

@@ -35,3 +35,15 @@ test('a normal day renders in full', () => {
   assert.doesNotMatch(html, /to fit Gmail/);
   assert.match(html, /<style>/);
 });
+
+test('exposure check renders only stated conditions', () => {
+  const s = story(0, true);
+  s.raw_iocs.exposure = { affected: ['Nextcloud richdocumentscode < 26.4.303'], only_if: ['Built-in CODE app installed'], not_affected_if: [], fixed_in: '26.4.303' };
+  const d = { run: { id: 'r', dry: false }, brief: { subject: 'b' }, date: '2026-10-15', analyzed: [s], failed: [], notAnalyzed: [],
+    newIocCount: 0, restatedIocCount: 0, novelBehaviorCount: 0, updateCount: 0 };
+  const { html } = renderDigest(d);
+  assert.match(html, /EXPOSURE CHECK/);
+  assert.match(html, /<b>Only if<\/b>Built-in CODE app installed/);
+  assert.match(html, /<b>Fixed in<\/b>26\.4\.303/);
+  assert.doesNotMatch(html, /Not affected if/, 'empty rows are left out');
+});

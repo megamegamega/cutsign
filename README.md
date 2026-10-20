@@ -66,6 +66,15 @@ Opus output/thinking. Now: ≤ 4 deep reads at low effort → est. $0.70–0.90/
 line reports the deep/quick split. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops
 emailing and says so on Discord. `PAUSED=1` stops everything without a deploy.
 
+## Exposure check
+
+Every story carries an **Exposure check** box under its summary — *Affected* (product + versions), *Only if*
+(preconditions: optional module installed, non-default config, interface exposed, auth required), *Not
+affected if* (quick exclusions), *Fixed in* — so a story can be ruled out in seconds. Only conditions the
+sources state; empty rows are omitted. Generic product facts, never a description of anyone's environment.
+
+The brief sometimes lists one story twice under the same link; such items are merged (roundup pages excepted).
+
 ## Day-over-day diffing (`lib/diff.js`)
 
 - **Delta line** at the top of every email: new IoCs and never-seen behaviors vs. restated IoCs and story updates.
