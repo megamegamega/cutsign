@@ -64,5 +64,5 @@ test('day two of the same campaign: marked as an update, restated IoCs and known
   assert.match(second, /<b>Restated:<\/b> 2 IoCs/);
   assert.match(second, /fresh-c2\[\.\]org/, 'the new IoC is shown');
   assert.match(second, /Behaviors already reported \(2\)/, 'yesterday\'s behaviors fold away');
-  assert.match(second, />Persistence</, 'the new behavior shows with its readable label');
+  assert.match(second, /★ NEW<\/span>Persistence/, 'the new behavior shows with its readable label');
 });
