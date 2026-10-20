@@ -46,7 +46,7 @@ Received mail counts toward the Resend account's quota (~1–2/day). The `Messag
 |---|---|
 | received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list) |
 | parsed → fetched | each story's first link, ≤ `MAX_SOURCES` (40) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
-| fetched → extracted | **light read** of every story (`claude-haiku-5-5`, first source, 20k chars, 4 at a time) → **score** each on what it found (`lib/select.js`: behaviors, evidence, guidance, IoCs, KEV, primary source, financial relevance; unconfirmed/roundup penalized) → top ≤ `MAX_STORIES` (6) scoring ≥ `MIN_DEEP_SCORE` (6) get their second link + one hop to a vendor/CERT page and a **deep read** (`claude-opus-5-5`, 50k chars). A failed deep read falls back to the light result. (Structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
+| fetched → extracted | **light read** of every story (`claude-haiku-5-5`, first source, 20k chars, 4 at a time) → **score** each on what it found (`lib/select.js`: behaviors, evidence, guidance, IoCs, KEV, primary source, financial relevance; unconfirmed/roundup penalized) → top ≤ `MAX_STORIES` (6) scoring ≥ `MIN_DEEP_SCORE` (6) get their second link + one hop to a vendor/CERT page and a **deep read** (`claude-opus-5-5`, 50k chars). Stories the light read rated P3 never get a deep read, and two write-ups of the same campaign (shared CVE, or same actor + malware) never take two deep slots. A failed deep read falls back to the light result. (Structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
 | extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run. Each story is then matched to the trailing 14 days (shared CVE, same specific malware family, or same actor + a shared IoC) and linked via `updates_story_id` |
 | normalized → validated → queried → rendered | **v1/v2 seams — pass-through in v0** |
 | rendered → sent | email to `EMAIL_TO` (skipped for dry runs or when over the monthly cap) and a Discord ✔ line |
@@ -73,6 +73,10 @@ so on Discord. `PAUSED=1` stops everything without a deploy.
   what's new is shown, restated IoCs and already-reported behaviors fold into collapsed sections.
 - **Behavior novelty:** a behavior is "seen before" if any behavior in the last 90 days has the same
   `pattern_kind`, same parent, and ≥ 50 % overlapping children. New ones get a ★.
+
+**Email size.** Gmail clips bodies over ~102 KB. Styles are one `<style>` block, and if a heavy day still
+runs long the renderer trims quick-read stories (then lists them as one-liners) until it fits 95 KB; deep
+stories are never trimmed.
 
 ## Endpoints
 

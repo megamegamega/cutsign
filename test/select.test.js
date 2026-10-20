@@ -22,3 +22,12 @@ test('pickDeep: top N above the floor, ties by brief order', () => {
   assert.deepEqual(pickDeep([s(0, 5), s(1, 9), s(2, 9), s(3, 12)], { max: 2, min: 6 }).map((x) => x.story.ordinal), [3, 1]);
   assert.deepEqual(pickDeep([s(0, 5)], { max: 6, min: 6 }), [], 'a thin day sends nothing to the deep model');
 });
+
+test('P3 awareness stories and same-campaign duplicates do not take deep slots', () => {
+  const p3 = { story: { ordinal: 9, priority: 3, cves: [] }, score: 16, why: [] };
+  assert.deepEqual(pickDeep([p3], { max: 6, min: 6 }), [], 'P3 never gets a deep read, whatever it scores');
+  const a = { story: { ordinal: 0, cves: ['CVE-2026-102764'] }, score: 38, why: [] };
+  const b = { story: { ordinal: 5, cves: ['cve-2026-102764'] }, score: 15, why: [] };
+  const c = { story: { ordinal: 3, cves: ['CVE-2026-110447'] }, score: 12, why: [] };
+  assert.deepEqual(pickDeep([a, b, c], { max: 6, min: 6 }).map((x) => x.story.ordinal), [0, 3]);
+});
