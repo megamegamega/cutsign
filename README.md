@@ -73,7 +73,7 @@ a later story about the same campaign (shared CVE, same malware, or actor + shar
 watch. Roughly hourly — 24 daily Vercel crons, one per hour, since Hobby allows only daily jobs — each watch:
 
 - re-fetches its pages and diffs them line by line (advisories edited in place),
-- checks CISA KEV, scans 11 news/vendor feeds for its CVE / actor / malware, and every 6 h checks NVD status
+- checks CISA KEV, scans 13 news/vendor feeds for its CVE / actor / malware, and every 6 h checks NVD status
   and GitHub for public repos.
 
 Checks are free. **Models run only on a change:** Haiku reads just the added text against what's known
