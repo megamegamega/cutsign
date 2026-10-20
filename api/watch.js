@@ -27,6 +27,10 @@ export default async function handler(req, res) {
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
     return res.json({ ok: true, ...counts });
   } catch (e) {
+    // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting hourly
+    if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
+      return res.json({ ok: true, skipped: 'watches tables missing — apply supabase/migrations/0002_watches.sql' });
+    }
     await postDiscord(`Cutsign ✖ watch tick error=${String(e?.message || e).slice(0, 300)}`);
     res.statusCode = 500;
     return res.json({ ok: false, error: String(e?.message || e) });
