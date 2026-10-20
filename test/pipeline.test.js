@@ -195,10 +195,11 @@ test('time budget: a run yields mid-extract and the next invocation finishes it'
   const r2 = await advanceRun(store, run1.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 100_000 });
   assert.equal(r2, 'yielded');
   assert.equal(store._tables.runs[1].stage, 'fetched', 'parsed+fetched done; extract needs 150 s, so it yielded');
-  const before = calls.length;
   const r3 = await advanceRun(store, run1.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 10 * 60_000 });
   assert.equal(r3, 'sent');
-  assert.ok(calls.length > before);
+  // same sources, nothing new → yesterday's deep read is reused rather than paid for again
+  assert.equal(store._tables.runs[1].counts.deep_reused, 1);
+  void calls;
 });
 
 test('an IoC seen on two different days has seen_count 2 and shows as a repeat', async () => {

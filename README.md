@@ -66,6 +66,19 @@ Opus output/thinking. Now: ≤ 4 deep reads at low effort → est. $0.70–0.90/
 line reports the deep/quick split. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops
 emailing and says so on Discord. `PAUSED=1` stops everything without a deploy.
 
+## Deep-read reuse (cost, without losing new information)
+
+Running campaigns recur for days. Before a deep read, the pipeline checks the last 14 days of deep reads; it
+reuses one **only if nothing could be new**: every source today's deep read would use was read before with
+**byte-identical content** (same URL, same content hash — an advisory updated in place changes the hash), the
+quick read found **no IoC** the earlier read lacked, and the brief names **no new CVE**. Otherwise Opus reads
+it fresh. A reused story still shows in full ("Deep read reused from <date> — sources unchanged…") and its
+slot passes to the next story in the ranked list, so up to `MAX_STORIES` fresh deep reads still happen.
+Pages are re-fetched after 12 h, so in-place updates are seen the next day.
+
+The Discord line breaks cost down per tier: calls, uncached input, cache reads, cache writes, output
+(thinking is billed as output), and how many deep reads were reused.
+
 ## Exposure check
 
 Every story carries an **Exposure check** box under its summary — *Affected* (product + versions), *Only if*
