@@ -1,0 +1,30 @@
+From: A. Pendleton <briefs@example.test>
+To: briefs@example.test
+Subject: Cyber Threat Brief =?UTF-8?Q?=E2=80=94?= 2026-10-05
+Date: Mon, 05 Oct 2026 12:09:09 +0000
+Message-ID: <fixture-2026-10-05@mail.gmail.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+ # Cyber Threat Brief — 2026-10-05
+
+16 articles reviewed from the last 24 hours.
+## Top things to know today
+
+* *Citrix NetScaler* zero-day (CVE-2026-88779) is under active exploitation and can knock SAML deployments offline; some hits landed on appliances patched only days earlier.
+* Denmark's national population register was breached, exposing data on roughly *8.8 million people*.
+
+## Threat Actor TTPs & Campaigns
+
+* Attackers are actively exploiting a memory overflow zero-day in *Citrix NetScaler* ADC/Gateway (CVE-2026-88779, CVSS 8.7) that can take down SAML-based deployments; researchers are also probing it for potential RCE. Source: [The Hacker News](https://thehackernews.com/2026/10/new-netscaler-zero-day-exploited-in.html)
+* Attackers are targeting a critical *Rejetto HFS* flaw (CVE-2026-61500) rooted in a weak PRNG, allowing predictable session-signing keys that enable admin session forgery and remote code execution. Source: [The Hacker News](https://thehackernews.com/2026/10/attackers-target-rejetto-hfs-flaw-that.html)
+
+## Breaches & Incidents
+
+* Denmark is investigating a breach of its national population register after unauthorized access exposed data on about *8.8 million people*. Source: [The Record](https://therecord.media/denmark-breach-register-cyberattack)
+
+------------------------------
+
+Feed issues this run (check config/sources.yaml):
+
+* CISA Cybersecurity Advisories: :10:2: mismatched tag

@@ -1,0 +1,22 @@
+From: Morning Threat Brief <brief@example.test>
+To: brief@example.test
+Subject: [PIPELINE] Cyber Threat Brief - 2026-10-21
+Date: Wed, 21 Oct 2026 11:20:00 +0000
+Message-ID: <fixture-netscaler-style@mail.gmail.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<div>
+<h1>Daily Threat Intel Brief - 2026-10-21</h1>
+<h2>Top things to know</h2>
+<ul><li><b>Edge appliance post-exploitation:</b> patch now. → Actively exploited</li></ul>
+<h2>Actively exploited</h2>
+<ul>
+<li><b>[Critical] CVE-2026-88779 - Citrix NetScaler ADC post-exploitation:</b> Attackers exploiting the NetScaler flaw run shell commands from the appliance's web process and pull second-stage tooling. Vendor and community published detection guidance. <a href="https://research.vendor-fixture.test/netscaler-post-exploitation">Source</a></li>
+<li><b>[High] Poisoned write-up:</b> A blog post about an exploited flaw. <a href="https://news.fixture.test/poisoned">Source</a></li>
+<li><b>[High] Dead link story:</b> Source is gone. <a href="https://news.fixture.test/404">Source</a> (also: <a href="https://news.fixture.test/slow">slow</a>)</li>
+<li><b>[High] Huge page story:</b> Source is enormous. <a href="https://news.fixture.test/huge">Source</a></li>
+</ul>
+<h2>Breaches &amp; Incidents</h2>
+<ul><li><b>[Medium] Breach - Some retailer:</b> Data stolen. <a href="https://news.fixture.test/retailer">Source</a></li></ul>
+</div>

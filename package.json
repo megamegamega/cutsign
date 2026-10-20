@@ -1,0 +1,25 @@
+{
+  "name": "cutsign",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cutsign — daily threat brief → behaviors & IoCs → (later) validated hunt queries. Personal OSINT tool.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "LLM_MODE=replay node --test test/",
+    "run-local": "node scripts/run-local.js",
+    "gmail-auth": "node scripts/gmail-auth.js",
+    "update-attack": "node scripts/update-attack.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@vercel/functions": "^3.10.1",
+    "node-html-parser": "^9.0.5",
+    "postal-mime": "^4.0.11",
+    "resend": "^6.34.1",
+    "zod": "^4.6.7"
+  }
+}

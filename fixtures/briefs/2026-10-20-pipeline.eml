@@ -1,0 +1,37 @@
+From: Morning Threat Brief <brief@example.test>
+To: brief@example.test
+Subject: [PIPELINE] Cyber Threat Brief =?UTF-8?Q?=E2=80=94?= 2026-10-20
+Date: Tue, 20 Oct 2026 11:21:08 +0000
+Message-ID: <fixture-2026-10-20@mail.gmail.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:680px;margin:0 auto;">
+<h1 style="font-size:20px;">Daily Threat Intel Brief - 2026-10-20</h1>
+<h2 style="font-size:16px;margin:20px 0 6px;">Top things to know</h2>
+<ul style="padding-left:18px;">
+<li style="margin-bottom:6px;"><b>PAN-OS GlobalProtect:</b> Ransomware groups are chaining a KEV-listed auth bypass to reach ESXi and domain controllers, so patch GlobalProtect now. → Actively exploited</li>
+<li style="margin-bottom:6px;"><b>Fortinet FortiGate implant:</b> A suspected state actor chained Fortinet flaws to plant a stealthy implant on 500+ firewalls at a telecom; patch now. → Actively exploited</li>
+</ul>
+<h2 style="font-size:16px;margin:20px 0 6px;">Actively exploited</h2>
+<ul style="padding-left:18px;">
+<li style="margin-bottom:6px;"><b>[Critical] CVE-2026-0257 - Palo Alto Networks PAN-OS GlobalProtect:</b> Ransomware groups (Qilin, Inc, and Settra-linked actors) are exploiting this KEV-listed GlobalProtect auth bypass, alongside CVE-2023-27532, to move from VPN access to vCenter/ESXi hosts and domain controllers across many sectors. Patch both and hunt GlobalProtect logs for listed indicators. <a href="https://unit42.paloaltonetworks.com/active-exploitation-of-pan-os-cve-2026-0257/?utm_source=brief&amp;utm_medium=email">Source</a></li>
+<li style="margin-bottom:6px;"><b>[High] CVE-2024-47575 - Fortinet FortiManager/FortiGate:</b> A suspected state actor (UNC5820/CL-STA-0954) chained FortiJump (CVE-2024-47575, also CVE-2024-26008) for initial access and CVE-2025-61624 for root access against a telecom's FortiManager, pushing the PeerStitch implant to 500+ managed FortiGate firewalls. Patch CVE-2025-61624 immediately and check for rogue Virtual FortiGate registrations. <a href="https://www.securityweek.com/exploited-fortinet-bug-linked-to-stealthy-fortigate-implant-in-telecom-hack/">Source</a></li>
+<li style="margin-bottom:6px;"><b>[High] Rank Math PRO supply-chain backdoor:</b> Rank Math PRO 3.0.123, distributed from the vendor's own site Oct 15-16, shipped a persistent backdoor communicating with rank1cdn[.]com. Update to 3.0.124, check for listed IOCs, and restore from clean backups if hit. <a href="https://www.bleepingcomputer.com/news/security/wordpress-seo-plugin-rank-math-compromised-to-backdoor-websites/">Source</a> (also: <a href="https://thehackernews.com/2026/10/popular-wordpress-seo-plugin-rank-math.html">The Hacker News</a>)</li>
+<li style="margin-bottom:6px;"><b>[High] Unconfirmed - Silent Lynx WinRAR campaign (CVE-2025-8088):</b> Check Point's weekly roundup reports Silent Lynx exploiting the WinRAR flaw CVE-2025-8088. <a href="https://research.checkpoint.com/2026/19th-october-threat-intelligence-report/">Source</a></li>
+</ul>
+<h2 style="font-size:16px;margin:20px 0 6px;">Threat Actor TTPs &amp; Campaigns</h2>
+<ul style="padding-left:18px;">
+<li style="margin-bottom:6px;"><b>[High] APT28 (Fancy Bear) - Hookedge backdoor:</b> Russia's APT28 is running an espionage campaign, delivered by phishing since July, against NATO naval and aero-engine defense contractors. <a href="https://therecord.media/european-defense-contractors-fancy-bear-espionage">Source</a></li>
+<li style="margin-bottom:6px;"><b>[Medium] ROMULUS ClickFix delivery platform:</b> Forescout disclosed a new ClickFix-style platform using sandbox-evasion tricks to deliver Legion Loader via trojanized installers at scale. Hunt for user-launched PowerShell execution and DLL sideloading. <a href="https://thehackernews.com/2026/10/romulus-clickfix-platform-tricks-users.html">Source</a></li>
+<li style="margin-bottom:6px;"><b>[Low] Microsoft tech-support scam operation:</b> Researchers infiltrated a scam network impersonating Microsoft. <a href="https://www.darkreading.com/threat-intelligence/microsoft-tech-support-scam-operation">Source</a></li>
+</ul>
+<h2 style="font-size:16px;margin:20px 0 6px;">Breaches &amp; Incidents</h2>
+<ul style="padding-left:18px;">
+<li style="margin-bottom:6px;"><b>[High] Breach - California student records (ETS/CAASPP):</b> A single compromised login was used to copy California students' testing data from an ETS SFTP site. <a href="https://www.securityweek.com/one-compromised-login-exposed-millions-of-california-students-records/">Source</a></li>
+</ul>
+<h2 style="font-size:16px;margin:20px 0 6px;">Feed health</h2>
+<p>36 items collected, 30 in the brief, 6 dropped.</p>
+<p>Failed: none.</p>
+<p>&lt;/content&gt;</p>
+</div>
