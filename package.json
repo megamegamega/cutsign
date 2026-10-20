@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "LLM_MODE=replay node --test test/",
+    "test": "LLM_MODE=replay node --test 'test/*.test.js'",
     "run-local": "node scripts/run-local.js",
     "gmail-auth": "node scripts/gmail-auth.js",
     "update-attack": "node scripts/update-attack.js"
