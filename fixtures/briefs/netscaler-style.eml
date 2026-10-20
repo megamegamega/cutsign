@@ -14,7 +14,8 @@ Content-Type: text/html; charset="UTF-8"
 <ul>
 <li><b>[Critical] CVE-2026-88779 - Citrix NetScaler ADC post-exploitation:</b> Attackers exploiting the NetScaler flaw run shell commands from the appliance's web process and pull second-stage tooling. Vendor and community published detection guidance. <a href="https://research.vendor-fixture.test/netscaler-post-exploitation">Source</a></li>
 <li><b>[High] Poisoned write-up:</b> A blog post about an exploited flaw. <a href="https://news.fixture.test/poisoned">Source</a></li>
-<li><b>[High] Dead link story:</b> Source is gone. <a href="https://news.fixture.test/404">Source</a> (also: <a href="https://news.fixture.test/slow">slow</a>)</li>
+<li><b>[High] Dead link story:</b> Source is gone. <a href="https://news.fixture.test/404">Source</a></li>
+<li><b>[High] Slow page story:</b> Source times out. <a href="https://news.fixture.test/slow">Source</a></li>
 <li><b>[High] Huge page story:</b> Source is enormous. <a href="https://news.fixture.test/huge">Source</a></li>
 </ul>
 <h2>Breaches &amp; Incidents</h2>

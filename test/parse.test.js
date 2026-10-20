@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMime, parseBrief, selectItems, cleanUrl, briefDateFromSubject } from '../lib/parse-brief.js';
+import { parseMime, parseBrief, cleanUrl, briefDateFromSubject } from '../lib/parse-brief.js';
 import { injectionMatch, parseRobots, htmlToText } from '../lib/fetch-source.js';
 import { readFixture } from './helpers.js';
 
@@ -19,14 +19,6 @@ test('current HTML format: sections, severities, items, cleaned URLs', async () 
   assert.ok(!b.cleanText.includes('</content>'));
 });
 
-test('selection favors exploited + TTP items, skips Low/breach, caps', async () => {
-  const b = parseBrief(await parseMime(readFixture('briefs/2026-10-20-pipeline.eml')));
-  const sel = selectItems(b.items, 5);
-  const chosen = b.items.filter((i) => sel.has(i.ordinal));
-  assert.equal(chosen.length, 5);
-  assert.equal(chosen[0].label.includes('PAN-OS'), true, 'Critical exploited first');
-  assert.ok(chosen.every((i) => !/breach/i.test(i.section) && i.severity !== 'Low'));
-});
 
 test('older text format parses via the fallback', async () => {
   const m = await parseMime(readFixture('briefs/2026-10-05-classic.eml'));

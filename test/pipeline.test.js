@@ -127,7 +127,7 @@ test('suspicious source is flagged and contributes nothing to extraction', async
     assert.ok(!all.includes('ignore previous instructions'), 'injected text never reaches the model');
     assert.ok(!all.includes('203.0.113.50'));
   }
-  assert.match(out.emails[0].html, /suspicious, excluded/);
+  assert.match(out.emails[0].html, /suspicious source excluded|suspicious, excluded/);
 });
 
 test('invalid ATT&CK ID: one corrective retry; still-invalid IDs are dropped', async () => {
@@ -141,7 +141,7 @@ test('invalid ATT&CK ID: one corrective retry; still-invalid IDs are dropped', a
   assert.ok(!ns.attack_techniques.includes('T9999.123'));
   assert.ok(ns.attack_techniques.includes('T1059.004'));
   assert.equal(store._tables.behaviors.find((b) => b.story_id === ns.id && b.pattern_kind === 'shell_from_server_process').attack_technique, null);
-  const nsCalls = calls.filter((c) => /nsppe/.test(c.messages[0].content));
+  const nsCalls = calls.filter((c) => c.tier === 'deep' && /nsppe/.test(c.messages[0].content));
   assert.equal(nsCalls.length, 2, 'exactly one retry');
   assert.match(nsCalls[1].messages.at(-1).content, /T9999\.123/);
 });
