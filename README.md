@@ -24,6 +24,8 @@ Vercel cron 13:00 UTC ─┐                     ┌─ chain: POST /api/advance
 Vercel cron 17:00 UTC ─┴─ /api/cron ─ intake ─┴─ driveRuns ─ stages… ─ email + Discord ✔/✖
 ```
 
+Email goes to `EMAIL_TO` (default dispatch@liberto.us).
+
 **Inbound (stage `received`).** Gmail API polling with a read-only token (`gmail.readonly`, nothing
 else; the token refresh *fails* if any other scope appears). Query (env `GMAIL_QUERY`):
 `from:(brief@example.test OR briefs@example.test) subject:"Threat Brief" newer_than:3d` —
@@ -39,9 +41,9 @@ no Gmail filter or label needed. For each message, the `Message-ID` is checked a
 
 | from → to | what happens |
 |---|---|
-| received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list); top ≤ `MAX_STORIES` (5) exploited/TTP items selected, the rest stored as `skipped` |
-| parsed → fetched | ≤ 2 links per story, round-robin, ≤ `MAX_SOURCES` (12) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
-| fetched → extracted | one Claude call per story (`claude-opus-5-5`, structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
+| received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list); top ≤ `MAX_STORIES` (6) exploited/TTP items marked for the **deep** read, every other item gets a **light** read |
+| parsed → fetched | deep stories: ≤ 2 links + one hop; light stories: first link only; ≤ `MAX_SOURCES` (40) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
+| fetched → extracted | one Claude call per story — deep: `claude-sonnet-5-5`, 50k chars of source; light: `claude-haiku-5-5`, 20k chars (structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
 | extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run |
 | normalized → validated → queried → rendered | **v1/v2 seams — pass-through in v0** |
 | rendered → sent | email to `EMAIL_TO` (skipped for dry runs or when over the monthly cap) and a Discord ✔ line |
@@ -56,8 +58,9 @@ hour, in **fixed UTC**. The brief lands ~11:10–12:10 UTC. `0 13 * * *` therefo
 UTC-scheduled on the sender's side, shifts with it or not — either way 13:00 UTC is after it). `0 17 * * *`
 is the catch-up for late or re-sent briefs and for resuming a stuck run; it's normally a no-op.
 
-**Cost.** ~5 extraction calls per brief at Opus 5.5 rates, system prompt cached → roughly $0.30–0.80
-per brief. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops emailing and says
+**Cost.** First live run (Opus 5.5, 5 stories) cost $0.48. Now: 6 deep reads on Sonnet 5.5 + ~20 light
+reads on Haiku 5.5 → estimated $0.25–0.35 per brief for *every* item. `LLM_MODEL_DEEP=claude-opus-5-5`
+switches the deep tier back for a quality comparison. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops emailing and says
 so on Discord. `PAUSED=1` stops everything without a deploy.
 
 ## Endpoints

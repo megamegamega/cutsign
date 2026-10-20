@@ -39,8 +39,11 @@ test('happy path: NetScaler-style story → shell_from_server_process, evidence,
   const vals = t.iocs.map((i) => i.value_norm);
   assert.ok(vals.includes('45.61.139.12') && vals.includes('update-check.net'));
   assert.ok(!vals.includes('example.com') && !vals.includes('10.0.0.1'));
-  // breach item was not selected → no LLM call, listed as not analyzed
-  assert.equal(t.stories.find((s) => /retailer/i.test(s.title)).status, 'skipped');
+  // breach item is outside the deep set → still read, by the light model
+  const retailer = t.stories.find((s) => /retailer/i.test(s.brief_text));
+  assert.equal(retailer.selected, false);
+  assert.equal(retailer.status, 'extracted');
+  assert.match(out.emails[0].html, /Quick reads — nothing huntable found/);
   assert.equal(out.emails.length, 1);
   assert.match(out.emails[0].subject, /^Cutsign — 2026-10-21 — \d+ stories, 2 new IoCs, top: NetScaler/);
   assert.match(out.emails[0].html, /update-check\[\.\]net/, 'IoCs defanged in the email');
