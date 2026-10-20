@@ -26,12 +26,15 @@ Vercel cron 17:00 UTC ─┴─ /api/cron ─ intake ─┴─ driveRuns ─ sta
 
 Email goes to `EMAIL_TO` (default dispatch@liberto.us).
 
-**Inbound (stage `received`).** Gmail API polling with a read-only token (`gmail.readonly`, nothing
-else; the token refresh *fails* if any other scope appears). Query (env `GMAIL_QUERY`):
-`from:(brief@example.test OR briefs@example.test) subject:"Threat Brief" newer_than:3d` —
-no Gmail filter or label needed. For each message, the `Message-ID` is checked against `briefs`
-**before** the body is even downloaded; re-delivery is a no-op. Then:
+**Inbound (stage `received`).** A Gmail filter forwards the sender's brief (from
+`brief@example.test OR briefs@example.test`, subject "Threat Brief") to `BRIEF_INBOUND_ADDRESS`, a
+Resend Receiving address. Resend stores it; the cron lists received mail via Resend's API (same
+`EMAIL_API_KEY`, full access) and downloads the raw message — no webhook, so a failed run loses nothing.
+Received mail counts toward the Resend account's quota (~1–2/day). The `Message-ID` is checked against
+`briefs` **before** the body is downloaded; re-delivery is a no-op. Then:
 
+- Resend reports the message's DKIM result; anything without a DKIM pass is `rejected` with a Discord ⚠
+  (the public inbound address is otherwise spoofable);
 - sender not on `BRIEF_SENDER_ALLOWLIST` → stored as `rejected` (no body), Discord ⚠, nothing else;
 - subject contains `[TEST]` → `ignored`;
 - a brief for the same date was already accepted (the sender sometimes sends both formats) → `ignored`;
@@ -81,8 +84,8 @@ so on Discord. `PAUSED=1` stops everything without a deploy.
 ## Env vars
 
 See `.env.example` (names only). Required: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
-`ANTHROPIC_API_KEY`, `EMAIL_API_KEY`, `DISCORD_WEBHOOK_URL`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
-`GMAIL_REFRESH_TOKEN`.
+`ANTHROPIC_API_KEY`, `EMAIL_API_KEY` (full access), `DISCORD_WEBHOOK_URL`, `BRIEF_INBOUND_ADDRESS`. Gmail
+polling is still available as a fallback (`INBOUND_SOURCE=gmail` + the three `GMAIL_*` vars).
 
 ## Local work
 

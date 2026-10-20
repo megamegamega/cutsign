@@ -236,3 +236,19 @@ test('monthly cap: extracts but does not email, warns on Discord', async () => {
     assert.ok(out.discord.some((l) => /over the \$0\.001 cap/.test(l)));
   } finally { delete process.env.MAX_MONTHLY_USD; }
 });
+
+test('Resend-delivered mail must pass DKIM; a pass goes through, a fail is rejected loudly', async () => {
+  const store = memoryStore();
+  const calls = installFakeLLM(defaultResponder);
+  const raw = await fixtureMessage('netscaler-style.eml').getRaw();
+  const forged = { resendId: 'r1', messageId: '<forged@x>', getRaw: async function () { this.auth = { dkim: 'fail', spf: 'pass' }; return raw.replace(/^Message-ID: .*$/m, 'Message-ID: <forged@x>'); } };
+  const real = { resendId: 'r2', messageId: '<fixture-netscaler-style@mail.gmail.com>', getRaw: async function () { this.auth = { dkim: { result: 'pass', domain: 'gmail.com' } }; return raw; } };
+  const c = await intake(store, { messages: [forged, real] });
+  assert.equal(c.rejected, 1);
+  assert.equal(c.accepted, 1);
+  assert.equal(store._tables.briefs.find((b) => b.message_id === '<forged@x>').status_reason, 'DKIM did not pass');
+  assert.ok(out.discord.some((l) => /DKIM did not pass/.test(l)));
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  assert.equal(store._tables.runs.length, 1);
+  assert.ok(calls.length > 0);
+});
