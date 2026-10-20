@@ -47,7 +47,7 @@ test('day two of the same campaign: marked as an update, restated IoCs and known
   await driveRuns(store, { fetchImpl: fakeFetch() });
   const first = out.emails[0].html;
   assert.match(first, /<b>New today:<\/b> 2 IoCs · 2 never-seen behaviors/);
-  assert.match(first, /★ new behavior/);
+  assert.match(first, /★ NEW/);
   assert.doesNotMatch(first, /update to/);
 
   day = 2;
@@ -64,5 +64,5 @@ test('day two of the same campaign: marked as an update, restated IoCs and known
   assert.match(second, /<b>Restated:<\/b> 2 IoCs/);
   assert.match(second, /fresh-c2\[\.\]org/, 'the new IoC is shown');
   assert.match(second, /Behaviors already reported \(2\)/, 'yesterday\'s behaviors fold away');
-  assert.match(second, /persistence_artifact/);
+  assert.match(second, />Persistence</, 'the new behavior shows with its readable label');
 });
