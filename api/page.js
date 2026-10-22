@@ -6,7 +6,7 @@
 // so the page is public; noindex like every other endpoint.
 
 import { supabaseStore } from '../lib/db.js';
-import { buildDigestData, renderHtml } from '../lib/render.js';
+import { buildDigestData, renderHtml, exposureBox } from '../lib/render.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -68,6 +68,20 @@ ul{margin:4px 0;padding-left:20px} li{margin:3px 0}
 details{margin:6px 0} summary{cursor:pointer;color:var(--mut)} summary:hover{color:var(--text)}
 hr{border:none;border-top:1px solid var(--line);margin:28px 0 10px}
 footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-size:12px;font-family:var(--mono)}
+/* ---- CISO view ---- */
+.tabs{display:flex;gap:6px}
+.tabs a,.tabs span{font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid var(--chip-line);background:var(--chip);color:var(--mut)}
+.tabs span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.tabs a:hover{color:var(--text);text-decoration:none;border-color:var(--acc)}
+.exec{background:var(--panel);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:12px 16px;margin:18px 0;font-size:15px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:14px 0}
+.card h3{margin:0;border:none;padding:0;font-size:17px;display:inline}
+.card .ex{background:var(--panel2)}
+.chead{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.pri{font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;flex:none}
+.pri.p1{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.pri.p2{background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acc)}
+.pri.p3{background:var(--chip);color:var(--mut)}
 @media (max-width:600px){.hero h1{font-size:22px}.tile .n{font-size:20px}}`;
 
 const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta charset="utf-8">
@@ -76,6 +90,49 @@ const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta
 <main>${inner}</main><footer>${foot}</footer></body></html>`;
 
 const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
+
+// Executive view: verdict-shaped cards for the stories that matter (deep reads and P1/P2),
+// HIGH watch developments, one-liners for the rest. No IoC tables, no hunt cards.
+function cisoBody(d) {
+  const pri = (s) => s.priority ?? 3;
+  const cards = d.analyzed.filter((s) => s.selected || pri(s) <= 2);
+  const rest = d.analyzed.filter((s) => !cards.includes(s));
+  const highs = (d.watchEvents || []).filter((e) => e.level === 'HIGH');
+  const p1 = cards.filter((s) => pri(s) === 1).length;
+  const chips = (arr) => arr.filter(Boolean).map((c) => `<span class="c">${esc(c)}</span>`).join('');
+  const parts = [];
+
+  const top = d.analyzed[0];
+  parts.push(`<div class="exec"><b>Today:</b> ${d.analyzed.length} stories in the brief, ${p1} high-priority.`
+    + (top ? ` Top story: ${esc(top.title)}.` : '')
+    + (d.updateCount ? ` ${d.updateCount} are developments of stories already being tracked.` : '')
+    + (highs.length ? ` <b class="bad">${highs.length} tracked stor${highs.length === 1 ? 'y' : 'ies'} escalated in the last 48 h.</b>` : '')
+    + '</div>');
+
+  if (highs.length) {
+    parts.push('<h3 style="border:none;padding-top:0">Developments on tracked stories (48 h)</h3><ul>');
+    for (const e of highs) parts.push(`<li><b>${esc(e.watch_title)}</b> — ${esc(e.summary)}</li>`);
+    parts.push('</ul>');
+  }
+
+  for (const s of cards) {
+    const p = pri(s);
+    parts.push(`<div class="card"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
+      `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`,
+        ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}</div>`,
+      `<p style="margin:8px 0">${esc(s.summary)}</p>`,
+      exposureBox(s.raw_iocs?.exposure),
+      `<p class="s"><b>Why it matters:</b> ${esc(s.priority_reason || '')}</p></div>`);
+  }
+
+  if (rest.length) {
+    parts.push(`<h3>Also in today's read (${rest.length})</h3><ul>`);
+    for (const s of rest) parts.push(`<li><b>${esc(s.title)}</b> <span class="s">P${pri(s)} · ${esc(s.summary)}</span></li>`);
+    parts.push('</ul>');
+  }
+  parts.push('<p class="s" style="margin-top:28px">Priorities and summaries are drawn from public reporting only. The analyst view carries the full behaviors, evidence and indicators.</p>');
+  return parts.join('\n');
+}
 
 export default async function handler(req, res) {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
@@ -89,6 +146,8 @@ export default async function handler(req, res) {
     const days = runs.map((r, i) => ({ run: r, date: briefs[i]?.brief_date || String(briefs[i]?.received_at || r.started_at).slice(0, 10) }));
     const want = String(req.query.d || '').slice(0, 10);
     const pick = days.find((x) => x.date === want) || days[0];
+    const ciso = req.query.view === 'ciso';
+    const q = (date) => `/?d=${encodeURIComponent(date)}${ciso ? '&view=ciso' : ''}`;
 
     const d = await buildDigestData(store, pick.run);
     try { // web view: recent watch events regardless of digested/notified state
@@ -96,26 +155,31 @@ export default async function handler(req, res) {
       d.watchEvents = (await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff);
     } catch { /* watches table absent — keep whatever buildDigestData found */ }
 
-    // full (level 0) email body, minus the email-only chrome; if render.js markup drifts these
-    // strips become no-ops and the page just shows a little extra, never breaks
-    const full = renderHtml(d, 0);
-    let body = full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>'));
-    body = body
-      .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
-      .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
-      .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
-      .replace(/<p class="s">[^<]*brief: “[\s\S]*?<\/p>/, '')                         // meta line (hero sub replaces it)
-      .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '');           // email reply footer
+    // analyst view: full (level 0) email body, minus the email-only chrome; if render.js markup
+    // drifts these strips become no-ops and the page just shows a little extra, never breaks
+    const analystBody = () => {
+      const full = renderHtml(d, 0);
+      return full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>'))
+        .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
+        .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
+        .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
+        .replace(/<p class="s">[^<]*brief: “[\s\S]*?<\/p>/, '')                         // meta line (hero sub replaces it)
+        .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '');           // email reply footer
+    };
 
+    const tabs = `<nav class="tabs">${ciso
+      ? `<a href="/?d=${encodeURIComponent(pick.date)}">Analyst</a><span>CISO</span>`
+      : `<span>Analyst</span><a href="/?d=${encodeURIComponent(pick.date)}&view=ciso">CISO</a>`}</nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
-      ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="/?d=${encodeURIComponent(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
+      ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
     const hero = `<div class="hero"><h1>${esc(d.date)}${d.run.dry ? ' <span class="s">(dry run)</span>' : ''}</h1>
       <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p></div>
       <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0)}${tile(d.restatedIocCount, 'restated IoCs')}${tile(d.updateCount, 'story updates')}${tile((d.watchEvents || []).length, 'watch events 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'))}</div>`;
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
-    return res.status(200).send(doc(`Cutsign — ${d.date}`, nav, `${hero}<div class="w">${body}</div>`, foot));
+    const inner = `${hero}<div class="w">${ciso ? cisoBody(d) : analystBody()}</div>`;
+    return res.status(200).send(doc(`Cutsign — ${d.date}${ciso ? ' — CISO view' : ''}`, tabs + nav, inner, foot));
   } catch (e) {
     return res.status(500).send(doc('Cutsign', '', `<p class="bad">Error rendering page: ${esc(e.message)}</p>`, 'Cutsign'));
   }
