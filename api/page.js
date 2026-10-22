@@ -6,7 +6,7 @@
 // so the page is public; noindex like every other endpoint.
 
 import { supabaseStore } from '../lib/db.js';
-import { buildDigestData, renderHtml, exposureBox } from '../lib/render.js';
+import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -74,6 +74,9 @@ footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-s
 .tabs span{background:var(--text);border-color:var(--text);color:var(--bg)}
 .tabs a:hover{color:var(--text);text-decoration:none;border-color:var(--acc)}
 .exec{background:var(--panel);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:12px 16px;margin:18px 0;font-size:15px}
+.search input{background:var(--panel2);border:1px solid var(--chip-line);border-radius:999px;color:var(--text);font:12px var(--mono);padding:4px 12px;width:160px;outline:none;transition:width .15s,border-color .15s}
+.search input:focus{border-color:var(--acc);width:220px}
+a.c{color:var(--link)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:14px 0}
 .card h3{margin:0;border:none;padding:0;font-size:17px;display:inline}
 .card .ex{background:var(--panel2)}
@@ -90,6 +93,36 @@ const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta
 <main>${inner}</main><footer>${foot}</footer></body></html>`;
 
 const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
+
+const searchForm = (q) => `<form class="search" action="/"><input type="search" name="q" placeholder="search stories & IoCs" value="${esc(q)}" maxlength="80"></form>`;
+
+// Search results across every stored brief: extracted stories (title/summary/actor/malware/CVE)
+// and the IoC table (substring on normalized value). Capped at 30 each.
+function searchBody(q, stories, iocs) {
+  const chips = (arr) => arr.filter(Boolean).map((c) => `<span class="c">${esc(c)}</span>`).join('');
+  const cap = stories.length >= 30 || iocs.length >= 30 ? ' (capped at 30 each — narrow the term for more)' : '';
+  const parts = [`<div class="hero"><h1>Search — “${esc(q)}”</h1>
+    <p class="sub">${stories.length} stor${stories.length === 1 ? 'y' : 'ies'} · ${iocs.length} IoC${iocs.length === 1 ? '' : 's'}${cap}</p></div>`];
+  if (!stories.length && !iocs.length) parts.push('<p class="s" style="margin-top:20px">Nothing matched in extracted stories or IoCs.</p>');
+  if (stories.length) {
+    parts.push('<h3 style="border:none">Stories</h3>');
+    for (const s of stories) {
+      parts.push(`<div class="card"><div class="chead"><span class="pri p${s.priority ?? 3}">P${s.priority ?? '?'}</span><h3>${esc(s.title || '(untitled)')}</h3></div>`,
+        `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}">brief ${esc(s.brief_date)}</a>` : ''}`
+        + `${chips([s.selected ? 'deep read' : 'quick read', s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
+        `<p style="margin:8px 0 0">${esc(s.summary || '')}</p></div>`);
+    }
+  }
+  if (iocs.length) {
+    parts.push('<h3>IoCs</h3><table>');
+    for (const i of iocs) {
+      parts.push(`<tr><td>${esc(i.type)}</td><td class="v">${esc(defang(i.type, i.value_norm))}</td>`
+        + `<td>seen ${i.seen_count}×, first ${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}</td></tr>`);
+    }
+    parts.push('</table>');
+  }
+  return parts.join('\n');
+}
 
 // Executive view: verdict-shaped cards for the stories that matter (deep reads and P1/P2),
 // HIGH watch developments, one-liners for the rest. No IoC tables, no hunt cards.
@@ -145,6 +178,16 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   try {
     const store = supabaseStore();
+
+    const qraw = String(req.query.q || '').trim().slice(0, 80);
+    if (qraw) {
+      const [stories, iocs] = await Promise.all([store.searchStories(qraw), store.searchIocs(qraw)]);
+      return res.status(200).send(doc(`Cutsign — search “${qraw}”`,
+        searchForm(qraw) + '<nav class="tabs"><a href="/">← latest brief</a></nav>',
+        `<div class="w">${searchBody(qraw, stories, iocs)}</div>`,
+        'Cutsign · public OSINT digest · search across all stored briefs'));
+    }
+
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first
     if (!runs.length) return res.status(200).send(doc('Cutsign', '', '<p class="s">No briefs in the last 14 days.</p>', 'Cutsign'));
     const briefs = await Promise.all(runs.map((r) => store.getBrief(r.brief_id).catch(() => null)));
@@ -184,7 +227,7 @@ export default async function handler(req, res) {
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
     const inner = `${hero}<div class="w">${ciso ? cisoBody(d) : analystBody()}</div>`;
-    return res.status(200).send(doc(`Cutsign — ${d.date}${ciso ? ' — CISO view' : ''}`, tabs + nav, inner, foot));
+    return res.status(200).send(doc(`Cutsign — ${d.date}${ciso ? ' — CISO view' : ''}`, tabs + searchForm('') + nav, inner, foot));
   } catch (e) {
     return res.status(500).send(doc('Cutsign', '', `<p class="bad">Error rendering page: ${esc(e.message)}</p>`, 'Cutsign'));
   }
