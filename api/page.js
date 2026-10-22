@@ -98,6 +98,8 @@ function cisoBody(d) {
   const cards = d.analyzed.filter((s) => s.selected || pri(s) <= 2);
   const rest = d.analyzed.filter((s) => !cards.includes(s));
   const highs = (d.watchEvents || []).filter((e) => e.level === 'HIGH');
+  const highByStory = new Map(); // watch_title -> events, newest last
+  for (const e of highs) { if (!highByStory.has(e.watch_title)) highByStory.set(e.watch_title, []); highByStory.get(e.watch_title).push(e); }
   const p1 = cards.filter((s) => pri(s) === 1).length;
   const chips = (arr) => arr.filter(Boolean).map((c) => `<span class="c">${esc(c)}</span>`).join('');
   const parts = [];
@@ -106,12 +108,15 @@ function cisoBody(d) {
   parts.push(`<div class="exec"><b>Today:</b> ${d.analyzed.length} stories in the brief, ${p1} high-priority.`
     + (top ? ` Top story: ${esc(top.title)}.` : '')
     + (d.updateCount ? ` ${d.updateCount} are developments of stories already being tracked.` : '')
-    + (highs.length ? ` <b class="bad">${highs.length} tracked stor${highs.length === 1 ? 'y' : 'ies'} escalated in the last 48 h.</b>` : '')
+    + (highByStory.size ? ` <b class="bad">${highByStory.size} tracked stor${highByStory.size === 1 ? 'y' : 'ies'} escalated in the last 48 h.</b>` : '')
     + '</div>');
 
-  if (highs.length) {
+  if (highByStory.size) {
     parts.push('<h3 style="border:none;padding-top:0">Developments on tracked stories (48 h)</h3><ul>');
-    for (const e of highs) parts.push(`<li><b>${esc(e.watch_title)}</b> — ${esc(e.summary)}</li>`);
+    for (const [title, evs] of highByStory) {
+      const latest = evs[evs.length - 1];
+      parts.push(`<li><b>${esc(title)}</b> — ${evs.length === 1 ? '' : `${evs.length} developments; latest: `}${esc(latest.summary)}</li>`);
+    }
     parts.push('</ul>');
   }
 
