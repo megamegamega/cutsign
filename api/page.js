@@ -191,7 +191,14 @@ export default async function handler(req, res) {
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first
     if (!runs.length) return res.status(200).send(doc('Cutsign', '', '<p class="s">No briefs in the last 14 days.</p>', 'Cutsign'));
     const briefs = await Promise.all(runs.map((r) => store.getBrief(r.brief_id).catch(() => null)));
-    const days = runs.map((r, i) => ({ run: r, date: briefs[i]?.brief_date || String(briefs[i]?.received_at || r.started_at).slice(0, 10) }));
+    // one pill per brief date, newest date first; when a date has several runs keep the
+    // newest run (runs is newest-first, so the first one seen wins)
+    const byDate = new Map();
+    runs.forEach((r, i) => {
+      const date = briefs[i]?.brief_date || String(briefs[i]?.received_at || r.started_at).slice(0, 10);
+      if (!byDate.has(date)) byDate.set(date, { run: r, date });
+    });
+    const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
     const want = String(req.query.d || '').slice(0, 10);
     const pick = days.find((x) => x.date === want) || days[0];
     const ciso = req.query.view === 'ciso';
