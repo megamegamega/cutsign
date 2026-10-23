@@ -286,7 +286,7 @@ function cisoBody(d) {
   parts.push('<span id="cards"></span>');
   for (const s of cards) {
     const p = pri(s);
-    parts.push(`<div class="card"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
+    parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`,
         ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}</div>`,
       `<p style="margin:8px 0">${esc(s.summary)}</p>`,
@@ -393,6 +393,18 @@ export default async function handler(req, res) {
       const sorted = [...cards.values()].sort((a, b) => String(b.story.date || '').localeCompare(String(a.story.date || ''))
         || (a.story.priority ?? 3) - (b.story.priority ?? 3));
 
+      // behaviors + published detection guidance for every carded story
+      const storyIds = [...cards.keys()];
+      const [behaviors, evidence] = await Promise.all([store.listBehaviors(storyIds), store.listEvidence(storyIds)]);
+      const bLine = (b) => `<div class="s">${b.attack_technique
+        ? `<a href="https://attack.mitre.org/techniques/${esc(String(b.attack_technique).replace('.', '/'))}/">${esc(b.attack_technique)}</a> · ` : ''}`
+        + `${esc(b.pattern_kind)}: <code>${esc(b.parent || '?')}</code>${b.children?.length ? ' → ' + b.children.map(esc).join(', ') : ''}`
+        + `${b.log_source ? ` · hunt in: ${esc(b.log_source)}` : ''}</div>`;
+      const gLine = (g) => `<li>${esc(String(g.raw || '').split('\n')[0].slice(0, 300))}`
+        + `${g.publisher_tier ? ` <span class="c">tier ${esc(String(g.publisher_tier))}</span>` : ''}`
+        + `${/^https?:\/\//i.test(g.url || '') ? ` <a href="${esc(g.url)}">link</a>` : ''}`
+        + `${String(g.raw || '').includes('\n') ? `<pre>${esc(g.raw)}</pre>` : ''}</li>`;
+
       const row = (i, selfId) => {
         const also = (i.stories || []).filter((s) => s.id !== selfId && cards.has(s.id))
           .map((s) => `<a href="#${sid(s.id)}">also ${esc(s.date || 'brief')}</a>`).join(' ');
@@ -406,12 +418,17 @@ export default async function handler(req, res) {
         const parent = s.updates_story_id && cards.has(s.updates_story_id);
         const children = sorted.filter((x) => x.story.updates_story_id === s.id);
         const seen = new Set(); const uniq = c.iocs.filter((i) => !seen.has(`${i.type}|${i.value_norm}`) && seen.add(`${i.type}|${i.value_norm}`));
+        const behs = behaviors.filter((b) => b.story_id === s.id);
+        const guid = evidence.filter((e) => e.story_id === s.id && e.kind === 'guidance');
         parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
           `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}">brief ${esc(s.date)}</a>` : ''}`
+          + (s.date && ((s.priority ?? 3) <= 2 || s.selected) ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=ciso#${sid(s.id)}">CISO card</a>` : '')
           + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
           + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
-          `<table>${uniq.map((i) => row(i, s.id)).join('')}</table>`);
+          `<table>${uniq.map((i) => row(i, s.id)).join('')}</table>`,
+          behs.length ? `<details><summary class="s">Behaviors (${behs.length})</summary>${behs.map(bLine).join('')}</details>` : '',
+          guid.length ? `<details><summary class="s">Detection guidance (${guid.length})</summary><ul class="s">${guid.map(gLine).join('')}</ul></details>` : '');
         for (const e of c.watch) {
           parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(String(e.at).slice(0, 10))}</p><table>`
             + e.new_iocs.map((i) => row({ type: i.type, value_norm: i.value, seen_count: 1, first_seen_at: e.at, context: i.context })).join('') + '</table>');
