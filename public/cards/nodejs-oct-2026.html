@@ -61,10 +61,14 @@ th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color
 a{color:var(--ink)}
 .num{font-variant-numeric:tabular-nums}
 @media print{
+  /* Browsers render print as light and strip backgrounds; the data-print attribute is set
+     from the on-screen theme just before printing, and print-color-adjust keeps the ink. */
   :root{--bg:#fff;--panel:#fff;--ink:#111;--mut:#555;--line:#ccc;--lane:#8a5f00;--lane-bg:#f6ecd4;--ok:#2e6e3e;--bad:#a33232;--mono-bg:#f0f0f0}
+  html[data-print="dark"]{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e4b65a;--lane-bg:#2b2416;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   body{padding:0;font-size:12.5px}
   .top,.cl{display:none}
-  .card{border:none;max-width:none}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   a{text-decoration:none;color:inherit}
   tr,li{break-inside:avoid}
   h2{break-after:avoid}
@@ -76,7 +80,7 @@ a{color:var(--ink)}
 <div class="top">
   <a href="/?view=cards">← Verdict cards</a>
   <a href="/">Cutsign</a>
-  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+  <button class="pdf" onclick="printCard()">Print / save PDF</button>
 </div>
 
 <div class="card">
@@ -209,5 +213,22 @@ a{color:var(--ink)}
     <span>Tracked story: Cutsign 10-22 → 10-23 (Node2Shell update)</span>
   </div>
 </div>
+
+<script>
+// The PDF follows the theme you're viewing in. Chrome flips prefers-color-scheme to light
+// while rendering print, so the current theme is tracked live and pinned onto <html> as
+// data-print before the dialog opens (covers the button and Cmd/Ctrl+P alike).
+const mq = matchMedia('(prefers-color-scheme: dark)');
+let darkNow = mq.matches;
+mq.addEventListener('change', (e) => { darkNow = e.matches; });
+function printCard() {
+  document.documentElement.dataset.print = darkNow ? 'dark' : 'light';
+  window.print();
+}
+addEventListener('beforeprint', () => {
+  if (!document.documentElement.dataset.print) document.documentElement.dataset.print = darkNow ? 'dark' : 'light';
+});
+addEventListener('afterprint', () => { delete document.documentElement.dataset.print; });
+</script>
 </body>
 </html>
