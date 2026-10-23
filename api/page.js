@@ -7,6 +7,13 @@
 
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
+import { CARDS, cardByStory } from '../lib/cards.js';
+
+// "Verdict card" chip for a story that has a hand-written card in public/cards/
+const verdictChip = (storyId) => {
+  const c = cardByStory.get(storyId);
+  return c ? `<a class="c" href="/cards/${esc(c.slug)}.html">Verdict card</a>` : '';
+};
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -167,6 +174,7 @@ function searchBody(q, stories, iocs) {
         `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}#${a}">brief ${esc(s.brief_date)}</a>` : ''}`
         + (s.brief_date && (s.selected || (s.priority ?? 3) <= 2) ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}&view=ciso#${a}">CISO card</a>` : '')
         + (s.ioc_count ? `<a class="c" href="/?view=iocs#${a}">IoC card (${s.ioc_count})</a>` : '')
+        + verdictChip(s.id)
         + `${chips([s.selected ? 'deep read' : 'quick read', s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
         `<p style="margin:8px 0 0">${esc(s.summary || '')}</p></div>`);
     }
@@ -295,6 +303,7 @@ function agentJson(d, days) {
       id: s.id,
       updates_story_id: s.updates_story_id || null,
       brief_date: d.date,
+      verdict_card: cardByStory.has(s.id) ? `/cards/${cardByStory.get(s.id).slug}.html` : null,
       title: s.title,
       priority: s.priority ?? 3,
       deep_read: !!s.selected,
@@ -364,7 +373,7 @@ function cisoBody(d) {
     parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`,
         ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}`
-      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + '</div>',
+      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + verdictChip(s.id) + '</div>',
       `<p style="margin:8px 0">${esc(s.summary)}</p>`,
       exposureBox(s.raw_iocs?.exposure),
       `<p class="s"><b>Why it matters:</b> ${esc(s.priority_reason || '')}</p></div>`);
@@ -412,6 +421,20 @@ export default async function handler(req, res) {
         searchForm(qraw) + '<nav class="tabs"><a href="/">← latest brief</a></nav>',
         `<div class="w">${searchBody(qraw, stories, iocs)}</div>`,
         'Cutsign · public OSINT digest · search across all stored briefs'));
+    }
+
+    // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
+    if (req.query.view === 'cards') {
+      const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
+      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${CARDS.length} card${CARDS.length === 1 ? '' : 's'} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
+      const parts = [...CARDS].sort((a, b) => b.date.localeCompare(a.date)).map((c) =>
+        `<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
+        + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
+        + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
+        + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
+        + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`).join('\n');
+      return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
+        `${hero}<div class="w">${parts}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }
 
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first
@@ -499,6 +522,7 @@ export default async function handler(req, res) {
         parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
           `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}">brief ${esc(s.date)}</a>` : ''}`
           + (s.date && ((s.priority ?? 3) <= 2 || s.selected) ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=ciso#${sid(s.id)}">CISO card</a>` : '')
+          + verdictChip(s.id)
           + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
           + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
@@ -516,7 +540,7 @@ export default async function handler(req, res) {
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
-      const tabsIocs = `<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span></nav>`;
+      const tabsIocs = `<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=cards">Cards</a></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
         'Cutsign · public OSINT digest · cumulative IoC corpus'));
@@ -549,7 +573,7 @@ export default async function handler(req, res) {
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
       : `<a href="/?d=${encodeURIComponent(pick.date)}${v ? `&view=${v}` : ''}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a></nav>`;
+    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;

@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/", "destination": "/api/page" }
+    { "source": "/", "destination": "/api/page" },
+    { "source": "/cards", "destination": "/api/page?view=cards" }
   ],
   "functions": {
     "api/cron.js": {
