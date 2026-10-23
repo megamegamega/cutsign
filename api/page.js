@@ -368,8 +368,9 @@ function cisoBody(d) {
   if (highByStory.size) {
     parts.push('<h3 style="border:none;padding-top:0">Developments on tracked stories (48 h)</h3>');
     for (const [title, evs] of highByStory) {
+      const newestFirst = [...evs].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       parts.push(`<details><summary><b style="color:var(--text)">${esc(title)}</b> <span class="s">· ${evs.length} development${evs.length === 1 ? '' : 's'}</span></summary><ul>`
-        + evs.map((e) => `<li><span class="s">${esc(ts(e.created_at))}</span> ${esc(e.summary)}${e.url ? ` <a href="${esc(e.url)}">source</a>` : ''}</li>`).join('')
+        + newestFirst.map((e) => `<li><span class="s">${esc(ts(e.created_at))}</span> ${esc(e.summary)}${e.url ? ` <a href="${esc(e.url)}">source</a>` : ''}</li>`).join('')
         + '</ul></details>');
     }
   }
