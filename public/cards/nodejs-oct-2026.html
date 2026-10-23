@@ -162,8 +162,8 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
-      <tr><td rowspan="3">VM scanners</td><td>Qualys</td><td><span class="ok">QID <span class="v">389117</span></span> — covers CVE-2026-105481 / -105482 / -106069 / -106072 / -106073 / -106074 / -111497; flags builds below 22.23.4 / 24.22.1 / 26.12.1</td></tr>
-      <tr><td>Tenable</td><td><span class="bad">No Nessus plugin yet</span> for the October release — newest Node.js plugin still covers July 2026. CVE page is live (9.8 CVSS v3.1)</td></tr>
+      <tr><td rowspan="3">VM scanners</td><td><a href="https://blog.qualys.com/product-tech/2026/10/23/node-js-patches-brotli-remote-code-execution-flaw-find-vulnerable-runtimes-before-attackers-do">Qualys</a></td><td><span class="ok">QID <span class="v">389117</span></span> — covers CVE-2026-105481 / -105482 / -106069 / -106072 / -106073 / -106074 / -111497; flags builds below 22.23.4 / 24.22.1 / 26.12.1</td></tr>
+      <tr><td><a href="https://www.tenable.com/cve/CVE-2026-111497">Tenable</a></td><td><span class="bad">No Nessus plugin yet</span> for the October release — newest Node.js plugin still covers July 2026. CVE page is live (9.8 CVSS v3.1)</td></tr>
       <tr><td>Rapid7</td><td><span class="bad">Nothing published</span> — check InsightVM content release notes</td></tr>
       <tr><td rowspan="3">EDR / endpoint VM</td><td>CrowdStrike</td><td><span class="bad">Nothing published</span> on Falcon/Spotlight coverage — verify in the console or with support</td></tr>
       <tr><td>Microsoft Defender VM</td><td><span class="bad">Nothing published</span></td></tr>
@@ -171,8 +171,8 @@ a{color:var(--ink)}
       <tr><td rowspan="2">WAF / edge</td><td>Akamai</td><td><span class="bad">No published rule</span> for App &amp; API Protector; Cloudflare and AWS WAF managed-rule changelogs also silent as of Oct 22. Vercel shipped emergency WAF rules</td></tr>
       <tr><td>All WAFs</td><td>Inbound request bodies only — never the outbound <code>fetch()</code> path; a rule is a stopgap, not a patch</td></tr>
       <tr><td rowspan="2">Cloud / container</td><td>Wiz / Orca / Trivy / Grype</td><td><span class="bad">Nothing published</span>; image scanners flag this only if they map the bundled Node binary or the system brotli package — verify with a known-bad image before trusting registry scans</td></tr>
-      <tr><td>Linux distros</td><td><span class="ok">Errata shipped</span> — the CVE targets the Brotli library itself (1.0.3–1.2.0), so RHEL and AlmaLinux published brotli updates (RHSA-2026:2228, ALSA-2026:2042 / -2389); OS package scans catch distro copies, not official tarballs or nvm installs</td></tr>
-      <tr><td>Community</td><td>Nuclei / OSS</td><td><span class="bad">No template found</span>; the Node.js project ships <code>npx is-my-node-vulnerable</code> for per-host checks</td></tr>
+      <tr><td><a href="https://security-tracker.debian.org/tracker/CVE-2026-111497">Linux distros</a></td><td><span class="ok">Errata shipped</span> — the CVE targets the Brotli library itself (1.0.3–1.2.0), so RHEL and AlmaLinux published brotli updates (<a href="https://access.redhat.com/errata/RHSA-2026:2228">RHSA-2026:2228</a>, <a href="https://errata.almalinux.org/9/ALSA-2026-2042.html">ALSA-2026:2042</a> / -2389); OS package scans catch distro copies, not official tarballs or nvm installs</td></tr>
+      <tr><td>Community</td><td>Nuclei / OSS</td><td><span class="bad">No template found</span>; the Node.js project ships <a href="https://github.com/nodejs/is-my-node-vulnerable"><code>npx is-my-node-vulnerable</code></a> for per-host checks</td></tr>
     </table>
     <p class="src">Applies across every scanner above: this is a runtime flaw — SCA/dependency scanners will not surface it, and host scans see installed Node, not copies baked into container images or SEA binaries.</p>
 

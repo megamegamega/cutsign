@@ -168,13 +168,13 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
-      <tr><td rowspan="2">VM scanners</td><td>Tenable</td><td><span class="ok">FAQ published</span> for both CVEs; plugin IDs not confirmed in public reporting — check the plugin feed for the version checks</td></tr>
+      <tr><td rowspan="2">VM scanners</td><td><a href="https://www.tenable.com/blog/php2shell-cve-2026-109618-cve-2026-109619-frequently-asked-questions-about-critical-php-remote">Tenable</a></td><td><span class="ok">FAQ published</span> for both CVEs; plugin IDs not confirmed in public reporting — check the plugin feed for the version checks</td></tr>
       <tr><td>Qualys / Rapid7</td><td><span class="bad">Nothing published</span> found — verify QID / InsightVM content directly</td></tr>
-      <tr><td>Hunting content</td><td>Huntress / watchTowr / Wiz</td><td><span class="ok">Published</span> — Huntress process-spawn guidance (Florian Roth's process-watcher for Linux without EDR) with Sigma/YARA promised to <code>huntresslabs/threat-intel</code>; watchTowr reproduction + ITW reporting; Wiz behavior write-up (the hunt list above)</td></tr>
+      <tr><td>Hunting content</td><td><a href="https://www.huntress.com/blog/php2shell-leaked-critical-php-vulnerabilities">Huntress</a> / <a href="https://watchtowr.com/intelligence/php-remote-code-execution-php2shell/">watchTowr</a> / <a href="https://www.wiz.io/blog/php2shell-php-rce">Wiz</a></td><td><span class="ok">Published</span> — Huntress process-spawn guidance (Florian Roth's process-watcher for Linux without EDR) with Sigma/YARA promised to <code>huntresslabs/threat-intel</code>; watchTowr reproduction + ITW reporting; Wiz behavior write-up (the hunt list above)</td></tr>
       <tr><td>WAF / edge</td><td>Cloudflare</td><td><span class="ok">Observing/reporting</span> millions of attempts at the edge; no public managed-rule ID found — inbound filtering helps here (the exploit path is inbound requests), but patching is the fix</td></tr>
-      <tr><td>Exposure</td><td>Censys</td><td><span class="ok">Live advisory</span> with exposure search for internet-facing PHP</td></tr>
-      <tr><td>Vendor impact</td><td>Palo Alto</td><td><span class="ok">Statement</span>: not aware of exploitation against PAN products</td></tr>
-      <tr><td>KEV</td><td>CISA</td><td><span class="bad">No KEV entry found</span> as of Oct 23 — notable given ITW reports; watch for it</td></tr>
+      <tr><td>Exposure</td><td><a href="https://censys.com/advisory/cve-2026-109618-cve-2026-109619/">Censys</a></td><td><span class="ok">Live advisory</span> with exposure search for internet-facing PHP</td></tr>
+      <tr><td>Vendor impact</td><td><a href="https://security.paloaltonetworks.com/CVE-2026-109618">Palo Alto</a></td><td><span class="ok">Statement</span>: not aware of exploitation against PAN products</td></tr>
+      <tr><td>KEV</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA</a></td><td><span class="bad">No KEV entry found</span> as of Oct 23 — notable given ITW reports; watch for it</td></tr>
     </table>
 
     <div class="cols">

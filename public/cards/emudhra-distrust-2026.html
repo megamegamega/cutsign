@@ -131,9 +131,9 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Source</th><th>Status</th></tr>
-      <tr><td>Network IDS</td><td>Cisco Talos</td><td><span class="ok">Snort SIDs 67363–67374</span> published for coverage of the compromised intermediates (tier A)</td></tr>
-      <tr><td>Indicators</td><td>Talos / trackers</td><td><span class="ok">Published</span> — SHA-256 hashes of all eight certificates, on the <a href="/?view=iocs#s-f3e86a49">IoC card</a>; usable for trust-store and inventory sweeps</td></tr>
-      <tr><td>Trust stores</td><td>Chrome / Firefox / Apple / Microsoft / Go</td><td><span class="ok">Enforced</span> — Chrome, Firefox and Apple block the six TLS intermediates; <b>Microsoft blocks the two code-signing intermediates</b>; Chrome root removal lands Oct 27. Go 1.27.3 / 1.26.10 filter chains by the eight <b>SPKI</b> SHA-256 hashes (different values than the cert hashes — see Go release notes)</td></tr>
+      <tr><td>Network IDS</td><td><a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Cisco Talos</a></td><td><span class="ok">Snort SIDs 67363–67374</span> published for coverage of the compromised intermediates (tier A)</td></tr>
+      <tr><td>Indicators</td><td><a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Talos</a> / trackers</td><td><span class="ok">Published</span> — SHA-256 hashes of all eight certificates, on the <a href="/?view=iocs#s-f3e86a49">IoC card</a>; usable for trust-store and inventory sweeps</td></tr>
+      <tr><td>Trust stores</td><td>Chrome / Firefox / Apple / Microsoft / Go (<a href="https://www.emudhra.com/en/post/certificate-security-incident">vendor post</a>)</td><td><span class="ok">Enforced</span> — Chrome, Firefox and Apple block the six TLS intermediates; <b>Microsoft blocks the two code-signing intermediates</b>; Chrome root removal lands Oct 27. Go 1.27.3 / 1.26.10 filter chains by the eight <b>SPKI</b> SHA-256 hashes (different values than the cert hashes — see Go release notes)</td></tr>
       <tr><td>VM scanners</td><td>Qualys / Tenable / Rapid7</td><td><span class="bad">Nothing specific published</span> — the practical check is certificate inventory (CT logs, config management, TLS scans), not a CVE scan</td></tr>
       <tr><td>Hunting</td><td>—</td><td><span class="bad">Nothing to hunt</span> — no abuse observed; escalation triggers below cover the reversal</td></tr>
     </table>
