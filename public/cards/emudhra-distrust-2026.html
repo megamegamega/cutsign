@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>eMudhra CA Distrust — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#2f5e8a; --lane-bg:#e7f0f8; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#7fb0da; --lane-bg:#1a222b; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#7fb0da;--lane-bg:#1a222b;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Prepare lane</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No malicious use observed</span>
+    <span class="tag" style="color:var(--bad);border-color:var(--bad)">Breakage expected Oct 27</span>
+    <span class="asof">as of 2026-10-23</span>
+  </div>
+  <div class="inner">
+    <h1>eMudhra CA distrust</h1>
+    <p class="sub">Eight eMudhra intermediate CA certificates were issued with private keys generated from single- or double-digit values — one key was literally the number 4 — making them trivially recoverable from the public certificates. Browsers and OSes blocked them October 17–20; Chrome removes the <b>emSign ECC Root CA – G3</b> root entirely on the morning of <b>October 27</b> (PT). Go tracks the trust-handling fix as <span class="v">CVE-2026-111943</span>. eMudhra is exiting the global SSL/TLS business.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-10-21#s-4436ad95">brief story 10-21</a>
+      <a href="/?d=2026-10-22#s-f3e86a49">Talos update 10-22</a>
+      <a href="/?view=iocs#s-f3e86a49">IoC card (9 — the cert hashes)</a>
+      <a href="/?q=emudhra">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: not an attack — an operational deadline.</b> No malicious use of the weak keys has been observed (Talos), so the work is certificate inventory and replacement, not hunting. The real event is <b>October 27</b>: when Chrome drops the G3 root, legitimate certificates chaining to it stop working, and clients with independent trust stores (VPNs, proxies, CI/CD tooling, appliances, embedded devices) stay silently trusting the compromised intermediates until someone updates them. Expect PKIX/TLS failures to surface as "mystery outages" — have the answer ready before the tickets arrive.</p>
+
+    <h2>30-second read</h2>
+    <p>The eight intermediates (six TLS, two code signing) were issued in April 2025 with P-384 private keys generated from values below 256 — anyone can recover them and forge trusted certificates or sign code. eMudhra revoked the certificates; Chrome, Firefox, Apple and Microsoft blocked them Oct 17–20; Mozilla removed the root Oct 20; Google removes the root from the Chrome Root Store Oct 27 and is reviewing eMudhra's remaining roots. The attack risk is real but theoretical so far; the availability risk is scheduled.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Any certificate in your estate (or your vendors') chains to emSign ECC Root CA – G3 — it breaks in Chrome Oct 27</li>
+          <li class="bad">Software with its own or embedded trust store, or no revocation checking: VPN clients, proxies, CI/CD, appliances, embedded — still trusts the compromised intermediates</li>
+          <li class="bad">Go builds below <span class="v">1.27.3</span> / <span class="v">1.26.10</span> (crypto/x509 trust handling, CVE-2026-111943)</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Browser/OS platform trust stores — already blocked and updated</li>
+          <li class="ok">Updated bundles: NSS 3.131.1+, current Ubuntu ca-certificates and equivalents</li>
+          <li class="ok">No certificates chaining to eMudhra/emSign roots anywhere in the estate</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Detection coverage — as of Oct 23</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Network IDS</td><td>Cisco Talos</td><td><span class="ok">Snort SIDs 67363–67374</span> published for coverage of the compromised intermediates (tier A)</td></tr>
+      <tr><td>Indicators</td><td>Talos / trackers</td><td><span class="ok">Published</span> — SHA-256 hashes of all eight certificates, on the <a href="/?view=iocs#s-f3e86a49">IoC card</a>; usable for trust-store and inventory sweeps</td></tr>
+      <tr><td>Trust stores</td><td>Chrome / Firefox / Apple / Microsoft / Go</td><td><span class="ok">Enforced</span> — blocks shipped Oct 17–20; Chrome root removal lands Oct 27; Go fixed in 1.27.3 / 1.26.10</td></tr>
+      <tr><td>VM scanners</td><td>Qualys / Tenable / Rapid7</td><td><span class="bad">Nothing specific published</span> — the practical check is certificate inventory (CT logs, config management, TLS scans), not a CVE scan</td></tr>
+      <tr><td>Hunting</td><td>—</td><td><span class="bad">Nothing to hunt</span> — no abuse observed; escalation triggers below cover the reversal</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now (before Oct 27)</h2>
+        <ul>
+          <li>Inventory certificates chaining to emSign/eMudhra roots — servers first, then API clients, CI/CD runners, proxies and appliances</li>
+          <li>Replace affected chains with another trusted CA before the Chrome removal</li>
+          <li>Update independent trust stores: Go toolchains, ca-certificates bundles, NSS, vendor appliances</li>
+          <li>Test critical clients against the disclosure site's test hosts</li>
+          <li>Pre-brief the help desk: Chrome cert errors starting Oct 27 have a known cause — and <b>never</b> "fix" them by disabling certificate verification</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any observed malicious use of the weak-key intermediates (forged TLS or signed code)</li>
+          <li>Forged certificates appearing in CT logs</li>
+          <li>Google distrusting eMudhra's remaining roots (review underway)</li>
+          <li>Oct 27: breakage reports → availability response, not security response</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">Apr 2025</span><span>The eight intermediates issued with trivially recoverable P-384 keys</span></li>
+      <li><span class="d">Oct 17–20</span><span>Chrome blocks the TLS intermediates (~Oct 17); Apple, Microsoft follow; Mozilla removes the root Oct 20; Talos publishes with Snort coverage; Go ships 1.27.3 / 1.26.10</span></li>
+      <li><span class="d">Oct 21–22</span><span>Brief coverage both days; eMudhra announces exit from global SSL/TLS business; no abuse observed</span></li>
+      <li><span class="d">Oct 27</span><span><b>Chrome Root Store removal of emSign ECC Root CA – G3</b> reaches devices (morning, PT) — certificates chaining to it stop working in Chrome</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Cisco Talos — compromised intermediates</a> ·
+      <a href="https://www.bleepingcomputer.com/news/security/mozilla-google-apple-block-compromised-emudhra-ca-certificates/">BleepingComputer — browser blocks</a> ·
+      <a href="https://thehackernews.com/2026/10/emudhra-to-exit-global-ssltls-business.html">The Hacker News — eMudhra exits TLS</a> ·
+      <a href="https://thenextweb.com/news/emudhra-certificates-weak-keys-browsers-block">TNW — "one key was the number 4"</a> ·
+      <a href="https://www.certkit.io/blog/emudhra-internet2-incommon-distrust">CertKit — distrust mechanics</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 10-21 → 10-22 (Talos detail)</span>
+  </div>
+</div>
+
+<script>
+// Live staleness check: anything the pipeline has stored about this topic NEWER than the
+// card's as-of date is listed up top, deep-linked into the day's brief. The verdict text
+// itself is a hand-written snapshot and only changes when the card is re-issued.
+(async () => {
+  const AS_OF = '2026-10-23', QUERY = 'emudhra';
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    const newer = (d.stories || []).filter((s) => s.brief_date && s.brief_date > AS_OF);
+    if (!newer.length) return;
+    const el = document.getElementById('since');
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+</body>
+</html>

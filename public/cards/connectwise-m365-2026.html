@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ConnectWise M365 Compromise — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt / IR lane</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Active campaign</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Storm-0940 (China-aligned)</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE — identity abuse</span>
+    <span class="asof">as of 2026-10-23</span>
+  </div>
+  <div class="inner">
+    <h1>ConnectWise Cloud Backup supply chain compromise</h1>
+    <p class="sub">Stolen vendor app credentials for ConnectWise (ex-SkyKick) multi-tenant M365 applications were used from October 15 to mint Graph tokens across ~2,250 tenants (Microsoft; Huntress counted 300+ successful of ~1,000 observed). Microsoft attributed the campaign to Storm-0940 on October 21, operating the ARTEX agentic-AI framework.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-10-19#s-e0286e2a">brief story 10-19</a>
+      <a href="/?d=2026-10-22#s-049583b9">Storm-0940 attribution 10-22</a>
+      <a href="/?d=2026-10-22&view=ciso#s-049583b9">CISO card</a>
+      <a href="/?view=iocs#s-e0286e2a">IoC cards</a>
+      <a href="/?q=connectwise">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: hunt now if the ConnectWise app IDs ever touched your tenant — including former customers.</b> This is credential abuse of a vendor's multi-tenant apps, not a patchable CVE: there is nothing to scan for, only logs to review. Sophos reports the token sweep reached tenants with <b>no active backup subscription</b>, so past use counts. ConnectWise disabled the seven app identities, but previously issued tokens may remain usable until they expire, and attacker persistence (added credentials, role grants) survives the vendor-side fix.</p>
+
+    <h2>30-second read</h2>
+    <p>Password spraying (151,000+ failures, Oct 10–14) preceded abuse of stolen ConnectWise application credentials from Oct 15: service-principal sign-ins from attacker infrastructure minting Graph tokens in customer tenants. Follow-on activity where sign-ins succeeded: directory reconnaissance, <b>new client secrets planted on other applications</b> (persistence beyond the ConnectWise apps), and privileged role changes including a service principal self-assigning Global Administrator. Conditional Access policies scoped to users often do not evaluate multi-tenant service-principal sign-ins — check yours rather than assuming coverage.</p>
+
+    <h2>The seven application IDs — match on appId, never display name</h2>
+    <table>
+      <tr><th>Application</th><th>appId</th></tr>
+      <tr><td>ConnectWise Cloud Backup</td><td class="num"><span class="v">506e08f9-6e9a-4da4-942b-a099a03644ae</span></td></tr>
+      <tr><td>ConnectWise Cloud Management</td><td class="num"><span class="v">2399d300-6fca-4e6a-a686-399fefe75b83</span></td></tr>
+      <tr><td>Cloud Management — MS Teams</td><td class="num"><span class="v">24205314-2b89-4e07-a2a4-579e898a5640</span></td></tr>
+      <tr><td>Cloud Management — Exchange Online</td><td class="num"><span class="v">b78f6a77-d4e5-46fb-87e5-d1648bd02519</span></td></tr>
+      <tr><td>Cloud Management — MS Graph</td><td class="num"><span class="v">0de14c77-b9b0-4137-9360-34878a929827</span></td></tr>
+      <tr><td>Cloud Management — Partner Center</td><td class="num"><span class="v">412dcf96-176d-4b3a-a1b0-4981ad66971e</span></td></tr>
+      <tr><td>Cloud Management — SharePoint Online</td><td class="num"><span class="v">b2b55f5b-7758-4719-8d8f-88ae172e6bdb</span></td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Any of the seven appIds present or consented in the tenant — now <b>or ever</b> (ex-customers included)</li>
+          <li class="bad">Conditional Access does not evaluate multi-tenant service-principal sign-ins</li>
+          <li class="bad">Service-principal sign-in or Entra audit retention shorter than the Oct 1 → now window</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">None of the seven appIds appear in tenant service principals or consent history (verified by appId)</li>
+        </ul>
+        <p class="src" style="margin-top:8px">ConnectWise notes checklist completion does not guarantee a tenant was unaffected — absence of the apps is the only clean verdict.</p>
+      </div>
+    </div>
+
+    <h2>Infrastructure &amp; discriminators</h2>
+    <ul>
+      <li>Token abuse: <span class="v">144.172.64[.]128</span> · <span class="v">144.172.64[.]99</span> · <span class="v">144.172.64[.]60</span> · <span class="v">144.172.94[.]243</span> (FranTech/PONYNET and related VPS)</li>
+      <li>Password spray: <span class="v">187.15.88-90[.]x</span> range, Oct 10–14</li>
+      <li>Suspicious-leaning user agents: <code>Python-urllib/3.12</code>, <code>python-requests/*</code>, <code>curl/*</code> — expected vendor traffic is <code>kiota-dotnet</code> from Azure private IPv6</li>
+      <li>Raw values: <a href="/?view=iocs#s-e0286e2a">IoC corpus cards</a> (16 + 11 indicators across the two stories)</li>
+    </ul>
+
+    <h2>Detection coverage — as of Oct 23</h2>
+    <table>
+      <tr><th>Source</th><th>Status</th></tr>
+      <tr><td>Microsoft</td><td><span class="ok">Published</span> — Defender XDR alerts ("Application self-assigned Global Administrator role", "Unusual Microsoft Graph activity associated with Compromised ConnectWise Application") plus KQL for <code>OAuthAppInfo</code>, <code>EntraIdSpnSignInEvents</code>, <code>GraphAPIAuditEvents</code> and Sentinel <code>SigninLogs</code> in the Oct 21 Storm-0940 post (tier A)</td></tr>
+      <tr><td>Huntress</td><td><span class="ok">Published</span> — Entra review procedure: SP sign-ins by appId vs non-Azure source IPs, audit events (Add member to role / Update application / Add service principal credentials), secrets added since Oct 13, CA exclusions; disable (do not delete) the apps</td></tr>
+      <tr><td>ConnectWise</td><td><span class="ok">Acted</span> — seven app identities disabled (Trust Center); Cloud Backup / SaaS Security / Cloud Management suspended; investigation + remediation guide published Oct 18. Caveats: previously issued tokens may remain valid until expiry; escalation route <span class="v">SecurityPartnerSupport@ConnectWise.com</span> (tenant/app IDs, UTC timestamps, correlation IDs — no secrets)</td></tr>
+      <tr><td>CISA</td><td><span class="bad">No advisory found</span> as of Oct 23; no KEV entry (no CVE exists)</td></tr>
+      <tr><td>VM scanners / EDR</td><td><span class="bad">Not applicable</span> — nothing to scan; coverage is Entra/Graph log review and the Microsoft/Huntress content above</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Query service-principal sign-ins for all seven appIds back to <b>Oct 1</b> (review window Oct 13 → now at minimum)</li>
+          <li>Entra audit: credential additions, new owners, app-role assignments, consent grants, privileged role changes since Oct 13 — on <b>all</b> apps, not just ConnectWise ones</li>
+          <li>Pull user agents on any SP sign-ins found; Python/curl UAs from non-Azure IPs are the campaign shape</li>
+          <li>Verify tenant presence by Graph lookup per appId; confirm Conditional Access evaluates multi-tenant SPs</li>
+          <li>Former customers: run the same checks — stale consents were swept too</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any successful SP sign-in from the listed IPs or with the Python/curl UAs</li>
+          <li>Service principal self-assigning a directory role, or credentials added to unrelated apps</li>
+          <li>New IoCs or appIds published by ConnectWise / Microsoft</li>
+          <li>CISA advisory or broader MSP-tooling expansion of the campaign</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">Oct 10–14</span><span>Password-spray phase: 151,000+ failures from 187.15.88–90[.]x</span></li>
+      <li><span class="d">Oct 15</span><span>Stolen ConnectWise app credentials used to mint Graph tokens; SP sign-ins from 144.172.64[.]x begin</span></li>
+      <li><span class="d">Oct 17–19</span><span>Huntress publishes; ConnectWise disables the seven app identities and suspends services</span></li>
+      <li><span class="d">Oct 18</span><span>ConnectWise technical investigation &amp; remediation guide (new IPs .99/.60, UA discriminators, appId list)</span></li>
+      <li><span class="d">Oct 21</span><span>Microsoft attributes to Storm-0940 using ARTEX agentic AI; publishes Defender XDR detections and hunting KQL</span></li>
+      <li><span class="d">Oct 22–23</span><span>Sophos: sweep included tenants with no active subscription. No CISA advisory yet</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://www.microsoft.com/en-us/security/blog/2026/10/21/storm-0940-uses-artex-agentic-ai-connectwise-supply-chain-compromise/">Microsoft Security Blog — Storm-0940 / ARTEX, Oct 21</a> ·
+      <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress — vendor credential abuse</a> ·
+      <a href="https://www.bleepingcomputer.com/news/security/hackers-breach-microsoft-365-tenants-via-connectwise-supply-chain-attack/">BleepingComputer</a> ·
+      <a href="https://thehackernews.com/2026/10/china-linked-hackers-use-artex-ai.html">The Hacker News — ARTEX attribution, Oct 22</a> ·
+      <a href="https://brandefense.io/security-news/storm-0940-artex-connectwise-supply-chain-attack/">Brandefense — tenant checks</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 10-19 → 10-22 (Storm-0940 attribution)</span>
+  </div>
+</div>
+<script>
+// Live staleness check: anything the pipeline has stored about this topic NEWER than the
+// card's as-of date is listed up top, deep-linked into the day's brief. The verdict text
+// itself is a hand-written snapshot and only changes when the card is re-issued.
+(async () => {
+  const AS_OF = '2026-10-23', QUERY = 'connectwise';
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    const newer = (d.stories || []).filter((s) => s.brief_date && s.brief_date > AS_OF);
+    if (!newer.length) return;
+    const el = document.getElementById('since');
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+</body>
+</html>
