@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>BeyondTrust RS Zero-Day — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 100px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt / IR + patch</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">KEV — federal deadline passed Oct 19</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Exploited since late August</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">China-nexus: ARMORY CASTLE</span>
+    <span class="asof">as of 2026-10-23</span>
+  </div>
+  <div class="inner">
+    <h1>BeyondTrust Remote Support zero-day</h1>
+    <p class="sub"><span class="v">CVE-2026-102764</span> (BT26-05, CVSS 9.3): improper origin validation / authentication bypass in Remote Support (shared PRA code), exploited as a zero-day since <b>late August 2026</b> by China-nexus espionage actor ARMORY CASTLE (UNC5221 / Warp Panda). Patched October 15; KEV-listed October 16 with a federal remediation deadline of October 19.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-10-16#s-10ee4006">brief stories 10-16</a>
+      <a href="/?d=2026-10-19#s-0534fe69">KEV story 10-19</a>
+      <a href="/?d=2026-10-16&view=ciso#s-10ee4006">CISO card</a>
+      <a href="/?view=iocs#s-10ee4006">IoC cards</a>
+      <a href="/?q=CVE-2026-102764">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: for internet-facing appliances, this is assume-compromise, not patch-and-done.</b> Six-plus weeks of pre-patch zero-day exploitation means patching only closes the door — the hunt reaches back to <b>late August</b>, and because the actor dumped the appliance credential vault (<code>bt-secrets</code>), a confirmed hit means rotating <b>everything the appliance held</b>: stored credentials, Jump Item targets, injected accounts. Remote-access appliances are where espionage actors live; Mandiant's hunt guidance is unusually concrete — use it.</p>
+
+    <h2>30-second read</h2>
+    <p>Post-exploitation chain: SAWFLY PHP webshell (<code>mangoapi.php</code>, staged as <span class="v">app_84304470%2Ephp</span>) → root via a SUID copy of <code>/bin/sh</code> planted at <span class="v">/usr/bin/dbus-authd</span> → vault dump with <code>bt-secrets</code> → persistence via a <code>post_boot.d</code> script (<span class="v">zz-root-persist</span>) editing the sudoers template to survive reboot <b>and patching</b> → Jump Item roles raised to Administrator → BARECLAW SOCKS5/WebSocket tunneler behind a modified <code>haproxy.conf</code> (path <span class="v">/uidchanarge</span>) → logs deleted. Scope note: sources dispute whether one or two vendor-confirmed instances were compromised; treat your own exposure as independent of that count.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Self-hosted Remote Support <span class="v">26.2.3</span> or earlier, internet-facing — exact affected range wording differs between sources; verify against the vendor advisory</li>
+          <li class="bad">Privileged Remote Access sharing the flawed code path</li>
+          <li class="bad">Versions older than <span class="v">24.3.1</span> must upgrade before they can take the patch — still exposed meanwhile</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Patched with BT26-05 <b>and</b> hunted clean back to late August (patching alone does not evict the sudoers persistence)</li>
+          <li class="ok">Cloud-hosted instances patched vendor-side — but review session/audit logs all the same</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Detection coverage — as of Oct 23</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Vendor</td><td><a href="https://www.beyondtrust.com/trust-center/security-advisories">BeyondTrust</a></td><td><span class="ok">Advisory BT26-05</span> (Critical, 9.3, public Oct 15) + blog "<a href="https://www.beyondtrust.com/blog/entry/bt26-05">ARMORY CASTLE and BT26-05: What Security Teams Need to Know</a>"; patches for supported versions (24.3.1+)</td></tr>
+      <tr><td>Threat intel</td><td><a href="https://cloud.google.com/blog/topics/threat-intelligence/armory-castle-exploits-beyondtrust/">Mandiant / Google</a></td><td><span class="ok">Full hunt package</span> — role-change and syslog-gap detections, proxy-path hunting, YARA <span class="v">G_Hunting_Webshell_SAWFLY_1</span> (the published queries render live below)</td></tr>
+      <tr><td>Government</td><td><a href="https://www.cisa.gov/news-events/alerts/2026/10/16/cisa-urges-patching-critical-vulnerability-beyondtrust-remote-support">CISA</a></td><td><span class="ok">KEV Oct 16</span> + dedicated alert with hunt guidance (unrecognized privileged sessions, script files, log gaps, account/policy changes, new MFA registrations)</td></tr>
+      <tr><td rowspan="2">VM scanners</td><td><a href="https://www.tenable.com/cve/CVE-2026-102764">Tenable</a></td><td><span class="ok">Nessus plugin published Oct 20</span> — "RS &le; 26.2.3 Improper Origin Validation (BT26-05)"</td></tr>
+      <tr><td>Qualys / Rapid7</td><td><span class="bad">Nothing found</span> — Rapid7 covered it as news only; verify QID / InsightVM check in console</td></tr>
+      <tr><td>SOC content</td><td><a href="https://www.prophetsecurity.ai/blog/beyondtrust-remote-support-zero-day">Prophet Security</a></td><td><span class="ok">Detection &amp; investigation write-up</span> published</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Patch BT26-05 (upgrade to ≥24.3.1 first where needed); restrict appliance exposure</li>
+          <li>Hunt back to <b>late August</b>: unknown <code>.php</code> POSTs and WebSocket paths at the reverse proxy; <code>user_changed</code> events raising Jump Item/team roles; file-transfer sessions by accounts whose roles changed</li>
+          <li>Host: SUID binaries (<span class="v">/usr/bin/dbus-authd</span>), <code>post_boot.d</code> additions, sudoers-template edits, <code>haproxy.conf</code> ACL changes</li>
+          <li>Treat syslog-forwarding gaps bounded by a single session as tampering evidence</li>
+          <li>Confirmed hit → rotate the vault's entire contents and every injected credential</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any webshell/SUID/persistence artifact → full IR, vault-wide rotation, lateral-movement scoping</li>
+          <li><code>/login</code> success from residential-broadband or commercial-VPN space; off-hours admin logins</li>
+          <li>New ARMORY CASTLE tooling or victims published</li>
+          <li>Exploitation expanding beyond espionage targeting (commodity adoption)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">Mandiant's published queries (live above) come first. Generic translations for environments without appliance syslog in the SIEM:</p>
+    <pre># reverse proxy / WAF in front of the appliance
+request.path not in (known Remote Support path set)
+AND (path endswith .php OR websocket upgrade)
+AND src not in (support staff + managed endpoint ranges)</pre>
+    <pre># appliance syslog continuity (tamper canary)
+no events from appliance for > N minutes, where the gap starts and ends
+inside one admin session window → review that session's account and source</pre>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">late Aug</span><span>Zero-day exploitation begins (ARMORY CASTLE espionage operations)</span></li>
+      <li><span class="d">Oct 15</span><span>BeyondTrust publishes BT26-05 and patches; vendor-side cloud patching</span></li>
+      <li><span class="d">Oct 16</span><span>CISA adds to KEV with Oct 19 federal deadline + dedicated alert; Mandiant publishes the ARMORY CASTLE report; brief deep reads</span></li>
+      <li><span class="d">Oct 19</span><span>Federal remediation deadline; CISA-sourced brief story (KEV)</span></li>
+      <li><span class="d">Oct 20</span><span>Tenable ships the Nessus plugin</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://www.beyondtrust.com/trust-center/security-advisories">BeyondTrust security advisories (vendor)</a> ·
+      <a href="https://www.beyondtrust.com/blog/entry/bt26-05">BeyondTrust — BT26-05 blog</a> ·
+      <a href="https://cloud.google.com/blog/topics/threat-intelligence/armory-castle-exploits-beyondtrust/">Mandiant — ARMORY CASTLE</a> ·
+      <a href="https://www.cisa.gov/news-events/alerts/2026/10/16/cisa-urges-patching-critical-vulnerability-beyondtrust-remote-support">CISA alert</a> ·
+      <a href="https://www.bleepingcomputer.com/news/security/beyondtrust-patches-zero-day-exploited-in-attacks-since-august/">BleepingComputer</a> ·
+      <a href="https://thehackernews.com/2026/10/china-linked-hackers-exploited.html">The Hacker News</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 10-16 (two deep reads) → 10-19 (KEV)</span>
+  </div>
+</div>
+
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-10-23', QUERY = 'CVE-2026-102764';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance — live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching “' + esc(QUERY) + '”. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' · ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' · <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+</body>
+</html>

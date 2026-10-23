@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>LiteLLM Supply Chain Compromise — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 100px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt + rotate</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Confirmed credential abuse</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">2h exposure window</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE — OSV MAL-2026-2144</span>
+    <span class="asof">as of 2026-10-23</span>
+  </div>
+  <div class="inner">
+    <h1>LiteLLM 1.107.0 supply chain compromise</h1>
+    <p class="sub">Attackers hijacked LiteLLM's release workflow (suspected leaked GitHub CLI OAuth token from an exposed internal deployment's logs) and published a backdoored 1.107.0 to PyPI, Docker Hub and GHCR on October 21. A <code>cook.pth</code> hook runs the "privcollect" credential stealer at <b>every Python start on the host, even when litellm is never imported</b>; <code>sitecustomize.py</code> forks an hourly remote-code loader.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-10-22#s-95781545">brief story 10-22</a>
+      <a href="/?d=2026-10-22&view=ciso#s-95781545">CISO card</a>
+      <a href="/?view=iocs#s-95781545">IoC card (11)</a>
+      <a href="/?q=litellm">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: if 1.107.0 was installed, assume compromise — isolate, rebuild, rotate.</b> This is not a patch decision; the exposure window is narrow (about two hours on PyPI, under three on Docker) but anything inside it ran a credential stealer with host-wide reach, and stolen AWS credentials were <b>confirmed abused</b> ~4.5 hours later (STS validation, then Bedrock enumeration — LLMjacking). Rotation scope is everything the host could see: cloud keys, browser-stored credentials, tokens in env vars and config.</p>
+
+    <h2>30-second read</h2>
+    <p>Seven wheels (Linux/macOS/Windows) each install three files into site-packages: <code>cook.pth</code> (loads at interpreter start), <code>cook.py</code> (privcollect — browser, AWS, GCP, Azure credentials; exfil as tar.gz POSTed to <span class="v">litellm[.]dev/healthcheck</span>, a lookalike domain), and <code>sitecustomize.py</code> (Linux/macOS only: forks a daemon holding <span class="v">/tmp/remote_code_loader.lock</span> that hourly fetches a C2 domain from a GitHub dead drop and executes <code>&lt;domain&gt;/codepy</code>). Socket's scanner flagged all seven wheels as malicious about 50 minutes after upload; PyPI pulled the release at 13:23 UTC.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Unpinned <code>pip install litellm</code> between <b>11:39–13:23 UTC, Oct 21</b></li>
+          <li class="bad">Docker/GHCR pull of <span class="v">v1.107.0</span>, <span class="v">latest</span>, <span class="v">main-latest</span>, <span class="v">main-stable</span> between <b>11:46–14:20 UTC, Oct 21</b></li>
+          <li class="bad">Any CI runner, dev laptop or build host that resolved the package in those windows — the stealer runs on every Python start, litellm imported or not</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Pinned to <span class="v">1.106.2</span> (by digest) or anything other than 1.107.0</li>
+          <li class="ok">Installs resolved outside the windows (release was pulled)</li>
+          <li class="ok">Windows hosts escape the hourly loader (<code>sitecustomize.py</code> is Linux/macOS only) — but <b>not</b> the credential stealer</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Detection coverage — as of Oct 23</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Package scanners</td><td><a href="https://www.requesty.ai/blog/litellm-1-107-0-supply-chain-compromise-what-happened">Socket</a> / OSV</td><td><span class="ok">Flagged fast</span> — Socket marked all seven wheels malicious ~50 min after upload; OSV carries malicious-package entry <span class="v">MAL-2026-2144</span>, so <code>osv-scanner</code> / <code>pip-audit</code> flag installed copies. The rare case where <b>SCA is the detection</b> — the opposite of a runtime CVE</td></tr>
+      <tr><td>Vendor</td><td><a href="https://github.com/BerriAI/litellm/issues/47826">BerriAI / LiteLLM</a></td><td><span class="ok">Acted</span> — releases pulled from PyPI/Docker/GHCR; incident issue #47826 with RCA (suspected GitHub CLI OAuth token leak); vendor says assume compromise if 1.107.0 was installed; pin <span class="v">1.106.2</span> by digest</td></tr>
+      <tr><td>Research</td><td><a href="https://www.stepsecurity.io/blog/litellm-1-107-0-compromised-pypi-backdoored-wheels-credential-stealer">StepSecurity</a> / <a href="https://safedep.io/litellm-pypi-compromise-credential-stealer-backdoor/">SafeDep</a> / Wiz</td><td><span class="ok">Published</span> — payload analysis (privcollect naming, file set, dead-drop mechanics), hashes and IoCs</td></tr>
+      <tr><td>Cloud</td><td>CloudTrail</td><td><span class="ok">Huntable</span> — stolen AWS creds validated with <code>sts:GetCallerIdentity</code> then <code>bedrock:ListFoundationModels</code>/IAM enumeration from attacker IPs, Oct 21 16:20–17:01 UTC</td></tr>
+      <tr><td>VM scanners / EDR</td><td>Qualys / Tenable / EDR vendors</td><td><span class="bad">Nothing published</span> — no CVE to scan for; coverage is file-IoC sweeps and the package-scanner lane above</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Inventory: anywhere litellm resolved on Oct 21 — lockfiles, CI caches, image layers, <code>pip list</code> fleet-wide</li>
+          <li>Sweep hosts for <code>cook.pth</code> / <code>cook.py</code> / <code>sitecustomize.py</code> in site-packages and <span class="v">/tmp/remote_code_loader.lock</span></li>
+          <li>Hit = isolate, rebuild from clean base, rotate <b>every</b> credential the host could reach</li>
+          <li>Check egress logs for <span class="v">litellm[.]dev</span> and the GitHub dead drop (<span class="v">letters9813</span>)</li>
+          <li>CloudTrail: the STS → Bedrock pattern from the listed IPs since Oct 21</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any host artifact or egress hit → incident lane, full credential rotation</li>
+          <li>The hourly loader having fetched <b>anything</b> (dead drop was live) → treat as hands-on-keyboard</li>
+          <li>Further releases or other packages tied to the same stolen token</li>
+          <li>Bedrock/LLM usage anomalies on any potentially exposed AWS account</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">Published guidance above covers the artifacts; these are fleet-sweep translations.</p>
+    <pre># host sweep (any config mgmt / EDR file search)
+find <python site-packages roots> -maxdepth 2 -name 'cook.pth' -o -name 'cook.py'
+test -f /tmp/remote_code_loader.lock   # Linux/macOS: loader marker
+# container registries: scan image layers for the three filenames in site-packages</pre>
+    <pre># egress
+dest.domain = litellm.dev OR dest.url contains raw.githubusercontent.com/letters9813
+→ any hit since Oct 21 11:39 UTC is a confirmed infection, not a maybe</pre>
+
+    <h2>Timeline — Oct 21–22 (UTC)</h2>
+    <ul class="tl">
+      <li><span class="d">Oct 21 11:39</span><span>Backdoored 1.107.0 wheels published to PyPI; Docker/GHCR tags follow 11:46</span></li>
+      <li><span class="d">~12:30</span><span>Socket's scanner flags all seven wheels as malicious</span></li>
+      <li><span class="d">13:23</span><span>PyPI release pulled; Docker tags cleaned by 14:20</span></li>
+      <li><span class="d">16:20–17:01</span><span>Stolen AWS role credentials validated (<code>sts:GetCallerIdentity</code>) and Bedrock enumerated — confirmed abuse</span></li>
+      <li><span class="d">Oct 22</span><span>Vendor RCA: suspected GitHub CLI OAuth token leak via exposed internal deployment logs; brief deep read; OSV entry MAL-2026-2144</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://github.com/BerriAI/litellm/issues/47826">LiteLLM incident issue #47826 (vendor)</a> ·
+      <a href="https://thehackernews.com/2026/10/litellm-compromised-in-supply-chain.html">The Hacker News</a> ·
+      <a href="https://thehackernews.com/2026/10/litellm-suspects-github-token-leak-in.html">THN — token-leak RCA</a> ·
+      <a href="https://www.stepsecurity.io/blog/litellm-1-107-0-compromised-pypi-backdoored-wheels-credential-stealer">StepSecurity</a> ·
+      <a href="https://www.requesty.ai/blog/litellm-1-107-0-supply-chain-compromise-what-happened">Requesty — timeline</a> ·
+      <a href="https://safedep.io/litellm-pypi-compromise-credential-stealer-backdoor/">SafeDep</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 10-22 (deep read)</span>
+  </div>
+</div>
+
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-10-23', QUERY = 'litellm';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance — live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching “' + esc(QUERY) + '”. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' · ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' · <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+</body>
+</html>
