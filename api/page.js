@@ -200,8 +200,9 @@ GET /?q=TERM&amp;format=json               search every stored brief (stories + 
     parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
       s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
-      (s.behaviors || []).length ? `<p class="k">Behaviors (${s.behaviors.length})</p>${s.behaviors.map(behaviorLine).join('')}` : '',
-      (s.guidance || []).length ? `<p class="k">Detection guidance (${s.guidance.length})</p>`
+      s.priority_reason ? `<p class="s"><b>Why P${s.priority ?? 3}:</b> ${esc(s.priority_reason)}</p>` : '',
+      (s.behaviors || []).length ? `<p class="k">Behaviors (${s.behaviors.length}) <span class="s">· as of ${esc(d.date)}</span></p>${s.behaviors.map(behaviorLine).join('')}` : '',
+      (s.guidance || []).length ? `<p class="k">Detection guidance (${s.guidance.length}) <span class="s">· as of ${esc(d.date)}</span></p>`
         + s.guidance.map((g) => (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
           + `<pre>${esc(g.raw)}</pre>`).join('') : '',
       iocs.length ? typeBlocks(iocs) : fromWatch.length ? '' : '<p class="s">No IoCs extracted for this story.</p>',
@@ -236,6 +237,7 @@ function agentJson(d, days) {
     stories: d.analyzed.map((s) => ({
       id: s.id,
       updates_story_id: s.updates_story_id || null,
+      brief_date: d.date,
       title: s.title,
       priority: s.priority ?? 3,
       deep_read: !!s.selected,
@@ -439,8 +441,8 @@ export default async function handler(req, res) {
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
           + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
           `<table>${uniq.map((i) => row(i, s.id)).join('')}</table>`,
-          behs.length ? `<details><summary class="s">Behaviors (${behs.length})</summary>${behs.map(behaviorLine).join('')}</details>` : '',
-          guid.length ? `<details><summary class="s">Detection guidance (${guid.length})</summary><ul class="s">${guid.map(gLine).join('')}</ul></details>` : '');
+          behs.length ? `<details><summary class="s">Behaviors (${behs.length})${s.date ? ` · as of ${esc(s.date)}` : ''}</summary>${behs.map(behaviorLine).join('')}</details>` : '',
+          guid.length ? `<details><summary class="s">Detection guidance (${guid.length})${s.date ? ` · as of ${esc(s.date)}` : ''}</summary><ul class="s">${guid.map(gLine).join('')}</ul></details>` : '');
         for (const e of c.watch) {
           parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(String(e.at).slice(0, 10))}</p><table>`
             + e.new_iocs.map((i) => row({ type: i.type, value_norm: i.value, seen_count: 1, first_seen_at: e.at, context: i.context })).join('') + '</table>');
