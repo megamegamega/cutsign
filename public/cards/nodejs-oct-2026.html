@@ -195,6 +195,8 @@ a{color:var(--ink)}
       </div>
     </div>
 
+    <div id="pubguid" hidden></div>
+
     <h2>Inferred detections — while you wait</h2>
     <p class="src">No vendor-published queries exist for this flaw. The logic below is inferred from the exploit shape (crafted Brotli → memory corruption → crash or code execution), not published by anyone — tune to your environment and expect noise. Failed exploitation is loud; success may be quiet.</p>
     <p><b>Node crash canary</b> — on standard builds the public PoC crashes the process, so a burst of Node crashes is the cheapest tripwire:</p>
@@ -238,19 +240,45 @@ AND dest.domain not seen before (e.g. first_seen < 7d)
 </div>
 
 <script>
-// Live staleness check: anything the pipeline has stored about this topic NEWER than the
-// card's as-of date is listed up top, deep-linked into the day's brief. The verdict text
-// itself is a hand-written snapshot and only changes when the card is re-issued.
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
   const AS_OF = '2026-10-23', QUERY = 'CVE-2026-111497';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
   try {
     const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
-    const newer = (d.stories || []).filter((s) => s.brief_date && s.brief_date > AS_OF);
-    if (!newer.length) return;
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
     const el = document.getElementById('since');
-    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
-      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.innerHTML = '<b>Since this card</b> \u2014 verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance \u2014 live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching \u201c' + esc(QUERY) + '\u201d. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' \u00b7 ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' \u00b7 <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
     el.hidden = false;
   } catch {}
 })();
