@@ -357,35 +357,72 @@ export default async function handler(req, res) {
     // and every watch-event IoC (which live only in event assessments). Human view defangs;
     // ?format=json carries raw values for machine use.
     if (view === 'iocs') {
-      const [all, watchIocs] = await Promise.all([store.listAllIocs(), store.listWatchIocEvents()]);
+      const [corpus, watchIocs] = await Promise.all([store.listIocCorpus(), store.listWatchIocEvents()]);
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.iocs', generated: new Date().toISOString(),
           note: 'Cumulative across all briefs and watch events. Values are raw (not defanged). Public OSINT only. Brief IoCs and watch IoCs may overlap.',
-          iocs: all.map((i) => ({ type: i.type, value: i.value_norm, seen_count: i.seen_count, first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null })),
-          watch_iocs: watchIocs.flatMap((e) => e.new_iocs.map((i) => ({ type: i.type, value: i.value, context: i.context || null, watch: e.watch, at: e.at }))),
+          iocs: corpus.map((i) => ({
+            type: i.type, value: i.value_norm, seen_count: i.seen_count,
+            first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null,
+            stories: i.stories.map((s) => ({ id: s.id, title: s.title, brief_date: s.date })),
+          })),
+          watch_iocs: watchIocs.flatMap((e) => e.new_iocs.map((i) => ({ type: i.type, value: i.value, context: i.context || null, watch: e.watch, story_id: e.story_id, at: e.at }))),
         }, null, 1));
       }
-      const byType = new Map();
-      for (const i of all) { if (!byType.has(i.type)) byType.set(i.type, []); byType.get(i.type).push(i); }
-      const nWatch = watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
-      const parts = [`<p class="s">Every indicator Cutsign has stored — daily briefs plus watch events, newest first, defanged for reading. Raw machine version: <code>/?view=iocs&amp;format=json</code>. Per-day, story-attributed streams live on the Agent tab. Brief and watch sections can overlap.</p>`];
-      for (const [type, rows] of byType) {
-        parts.push(`<h3>${esc(type)} (${rows.length})</h3><table>`
-          + rows.map((i) => `<tr><td class="v">${esc(defang(i.type, i.value_norm))}</td><td>${i.seen_count}×</td><td>${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}</td></tr>`).join('')
-          + '</table>');
-      }
-      if (nWatch) {
-        parts.push(`<h3>From watch events (${nWatch})</h3>`);
-        for (const e of watchIocs) {
-          parts.push(`<p class="k">${esc(e.watch)} <span class="s">${esc(String(e.at).slice(0, 10))}</span></p><table>`
-            + e.new_iocs.map((i) => `<tr><td>${esc(i.type)}</td><td class="v">${esc(defang(i.type, i.value))}</td><td class="x">${esc(i.context || '')}</td></tr>`).join('')
-            + '</table>');
+
+      // one card per story (campaign), CISO-style: newest brief first, its indicators inside,
+      // cross-links where an IoC also appears in another card and where a story updates another
+      const sid = (id) => `s-${String(id).slice(0, 8)}`;
+      const cards = new Map(); // story id -> { story, iocs, watch }
+      const orphans = [];
+      for (const i of corpus) {
+        if (!i.stories.length) { orphans.push(i); continue; }
+        for (const s of i.stories) {
+          if (!cards.has(s.id)) cards.set(s.id, { story: s, iocs: [], watch: [] });
+          cards.get(s.id).iocs.push(i);
         }
       }
-      const total = all.length + nWatch;
-      const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${byType.size} types · cumulative across all briefs and watch events</p></div>`;
+      for (const e of watchIocs) { // a watch tracks a story: fold its IoCs into that card
+        const hit = (e.story_id && cards.get(e.story_id))
+          || [...cards.values()].find((c) => e.story_id && c.story.updates_story_id === e.story_id);
+        if (hit) hit.watch.push(e);
+        else if (e.story_id || e.watch) orphans.push(...e.new_iocs.map((i) => ({ type: i.type, value_norm: i.value, seen_count: 1, first_seen_at: e.at, context: `${e.watch}: ${i.context || ''}` })));
+      }
+      const sorted = [...cards.values()].sort((a, b) => String(b.story.date || '').localeCompare(String(a.story.date || ''))
+        || (a.story.priority ?? 3) - (b.story.priority ?? 3));
+
+      const row = (i, selfId) => {
+        const also = (i.stories || []).filter((s) => s.id !== selfId && cards.has(s.id))
+          .map((s) => `<a href="#${sid(s.id)}">also ${esc(s.date || 'brief')}</a>`).join(' ');
+        return `<tr><td>${esc(i.type)}</td><td class="v"><a href="/?q=${encodeURIComponent(i.value_norm)}">${esc(defang(i.type, i.value_norm))}</a></td>`
+          + `<td>${i.seen_count}×</td><td>${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}${also ? ` · ${also}` : ''}</td></tr>`;
+      };
+      const parts = ['<p class="s">Every indicator Cutsign has stored, grouped by the story it belongs to — newest brief first. Values link to search (every story and record containing them); chips link to the day\'s brief and related cards. Raw machine version: <code>/?view=iocs&amp;format=json</code>.</p>'];
+      for (const c of sorted) {
+        const s = c.story;
+        const p = s.priority ?? 3;
+        const parent = s.updates_story_id && cards.has(s.updates_story_id);
+        const children = sorted.filter((x) => x.story.updates_story_id === s.id);
+        const seen = new Set(); const uniq = c.iocs.filter((i) => !seen.has(`${i.type}|${i.value_norm}`) && seen.add(`${i.type}|${i.value_norm}`));
+        parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
+          `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}">brief ${esc(s.date)}</a>` : ''}`
+          + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
+          + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
+          + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
+          `<table>${uniq.map((i) => row(i, s.id)).join('')}</table>`);
+        for (const e of c.watch) {
+          parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(String(e.at).slice(0, 10))}</p><table>`
+            + e.new_iocs.map((i) => row({ type: i.type, value_norm: i.value, seen_count: 1, first_seen_at: e.at, context: i.context })).join('') + '</table>');
+        }
+        parts.push('</div>');
+      }
+      if (orphans.length) {
+        parts.push(`<div class="card"><div class="chead"><span class="pri p3">—</span><h3>Unattributed</h3></div><table>${orphans.map((i) => row(i, null)).join('')}</table></div>`);
+      }
+      const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
+      const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
       const tabsIocs = `<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
