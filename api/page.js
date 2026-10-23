@@ -50,6 +50,11 @@ main{max-width:860px;margin:0 auto;padding:26px 16px 60px}
 .tile.hot .n{color:var(--acc)}
 a.tile{display:block;color:inherit;text-decoration:none}
 a.tile:hover{border-color:var(--acc)}
+/* tile detail strips: hidden until their tile is clicked (:target) */
+.tdetail{display:none;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0 4px;font-size:13px}
+.tdetail:target{display:block}
+.tdetail ul{margin:6px 0 0;padding-left:18px}
+.tdetail .x{float:right;color:var(--mut);text-decoration:none;font-family:var(--mono)}
 /* ---- email body classes, reskinned ---- */
 .w{line-height:1.55;font-size:14.5px}
 h3{font-size:17px;margin:34px 0 6px;padding-top:18px;border-top:1px solid var(--line)}
@@ -267,7 +272,7 @@ GET /cards/&lt;slug&gt;.html                 a verdict card; stories here carry 
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
     const fromWatch = matched.get(s.id) || [];
     const srcByUrl = new Map((s.sources || []).map((x) => [x.url, x]));
-    parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}${cardByStory.has(s.id) ? ` <a class="c" href="/cards/${esc(cardByStory.get(s.id).slug)}.html">Verdict card</a>` : ''}</h3>`,
+    parts.push(`<h3 id="s-${esc(String(s.id).slice(0, 8))}">P${s.priority ?? 3} · ${esc(s.title)}${cardByStory.has(s.id) ? ` <a class="c" href="/cards/${esc(cardByStory.get(s.id).slug)}.html">Verdict card</a>` : ''}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
       s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
       s.priority_reason ? `<p class="s"><b>Why P${s.priority ?? 3}:</b> ${esc(s.priority_reason)}</p>` : '',
@@ -621,10 +626,26 @@ export default async function handler(req, res) {
     // brief's stories that have a hand-written verdict card
     const matWatch = (d.watchEvents || []).filter((e) => e.level === 'HIGH' || e.assessment?.new_iocs?.length || e.assessment?.deep).length;
     const cardsToday = d.analyzed.filter((s) => cardByStory.has(s.id)).length;
+
+    // each counting tile opens an inline strip breaking its number down per story, deep-linked —
+    // a count you cannot decompose is decoration
+    const sid8 = (id) => `s-${String(id).slice(0, 8)}`;
+    const tstrip = (id, title, items) => items.length
+      ? `<div class="tdetail" id="${id}"><a class="x" href="#">× close</a><b>${esc(title)}</b><ul>${items.join('')}</ul></div>` : '';
+    const iocStories = d.analyzed.filter((s) => s.newIocs.length)
+      .map((s) => `<li><a href="/?d=${encodeURIComponent(pick.date)}&view=agent#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· ${s.newIocs.length} new IoC${s.newIocs.length === 1 ? '' : 's'} (raw, agent view)</span></li>`);
+    const behStories = d.analyzed.map((s) => ({ s, n: s.behaviors.filter((b) => b.novel).length })).filter((x) => x.n)
+      .map(({ s, n }) => `<li><a href="/?d=${encodeURIComponent(pick.date)}#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· ${n} novel behavior${n === 1 ? '' : 's'}</span></li>`);
+    const updStories = d.analyzed.filter((s) => s.updateOf)
+      .map((s) => `<li><a href="/?d=${encodeURIComponent(pick.date)}#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· updates ${esc(s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10))}'s story</span></li>`);
+
     const hero = `<div class="hero"><h1>${esc(d.date)}${d.run.dry ? ' <span class="s">(dry run)</span>' : ''}</h1>
       <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p>
       <p class="sub">received ${esc(ts(d.brief.received_at))}${d.run.finished_at ? ` · emailed ${esc(ts(d.run.finished_at))}` : ''}</p></div>
-      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0, `/?d=${encodeURIComponent(pick.date)}&view=agent`)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0, `/?d=${encodeURIComponent(pick.date)}#brief`)}${tile(d.restatedIocCount, 'restated IoCs', false, '/?view=iocs')}${tile(d.updateCount, 'story updates', false, `/?d=${encodeURIComponent(pick.date)}#brief`)}${tile(matWatch, 'watch devs 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'), `/?d=${encodeURIComponent(pick.date)}#watch`)}${cardsToday ? tile(cardsToday, 'verdict cards', true, '/?view=cards') : ''}</div>`;
+      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0, '#t-ioc')}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0, '#t-beh')}${tile(d.updateCount, 'story updates', false, '#t-upd')}${tile(matWatch, 'watch devs 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'), `/?d=${encodeURIComponent(pick.date)}#watch`)}${cardsToday ? tile(cardsToday, 'verdict cards', true, '/?view=cards') : ''}</div>`
+      + tstrip('t-ioc', `New IoCs (${d.newIocCount}) — by story`, iocStories)
+      + tstrip('t-beh', `Novel behaviors (${d.novelBehaviorCount}) — by story`, behStories)
+      + tstrip('t-upd', `Story updates (${d.updateCount}) — developments of earlier briefs' stories`, updStories);
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
     const strip = view !== 'agent' && pick.date === days[0].date ? sinceStrip(d) : '';
