@@ -31,7 +31,7 @@ function world() {
   return w;
 }
 
-const assessment = (over = {}) => ({ material: true, kinds: ['new_iocs'], summary: 'Vendor added a second C2 domain.', new_iocs: [{ type: 'domain', value: 'second-c2[.]net', context: 'new C2' }], ...over });
+const assessment = (over = {}) => ({ relates: true, material: true, kinds: ['new_iocs'], summary: 'Vendor added a second C2 domain.', new_iocs: [{ type: 'domain', value: 'second-c2[.]net', context: 'new C2' }], ...over });
 
 async function setup(llm) {
   const out = captureOutputs();
@@ -96,6 +96,18 @@ test('cosmetic edit → model says not material → no event', async () => {
   const w = world();
   await runWatchTick(store, { fetchImpl: w.fetch });
   w.advisory = w.advisory.replace('</article>', '<p>Related reading: our other excellent blog posts about many topics this month.</p></article>');
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(store._tables.watch_events.length, 0);
+});
+
+test('unrelated new text → relates=false → no event, even when the model calls it material', async () => {
+  // the "blog index gained unrelated posts" case: a model that contradicts itself
+  // (relates=false, material=true) must still produce nothing
+  const llm = { next: () => assessment({ relates: false, material: true, kinds: ['exploitation'], new_iocs: [], summary: 'The page now lists unrelated stories; none concern this campaign.' }) };
+  const { store } = await setup(llm);
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  w.advisory = w.advisory.replace('</article>', '<p>New on our blog: three posts about different threats.</p></article>');
   await runWatchTick(store, { fetchImpl: w.fetch });
   assert.equal(store._tables.watch_events.length, 0);
 });
