@@ -136,6 +136,7 @@ test('changes show in the next morning email, then are marked digested; same cam
   await driveRuns(store, { fetchImpl: w.fetch });
   const html = out.emails.at(-1).html;
   assert.match(html, /Watched stories — what changed \(1\)/);
+  assert.match(html, /<p class="k">/, 'watch groups keep the <p class="k"> shape the web collapse transform keys off');
   assert.match(html, /second-c2\[\.\]net/);
   assert.ok(store._tables.watch_events.every((e) => e.digested_at));
   assert.equal(store._tables.watches.length, 1, 'day-2 story extended the existing watch instead of creating another');

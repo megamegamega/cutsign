@@ -20,6 +20,10 @@
   },
   "crons": [
     {
+      "path": "/api/selfcheck",
+      "schedule": "45 13 * * *"
+    },
+    {
       "path": "/api/cron?tick=early1",
       "schedule": "30 11 * * *"
     },

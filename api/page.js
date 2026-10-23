@@ -235,7 +235,9 @@ function agentBody(d, days) {
     `<h3 style="border:none;padding-top:0">Endpoints</h3><pre>GET /?view=agent&amp;format=json          this brief as JSON (stories, behaviors, exposure, IoCs, watch events)
 GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${days.map((x) => esc(x.date)).join(', ')}
 GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief + watch event, all time
-GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)</pre>`,
+GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)
+GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, lane, cves, story_ids, url)
+GET /cards/&lt;slug&gt;.html                 a verdict card; stories here carry verdict_card when one exists</pre>`,
   ];
 
   // watch-event IoCs join their story's stream when the watch tracks a story in this brief
@@ -259,7 +261,7 @@ GET /?q=TERM&amp;format=json               search every stored brief (stories + 
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
     const fromWatch = matched.get(s.id) || [];
     const srcByUrl = new Map((s.sources || []).map((x) => [x.url, x]));
-    parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
+    parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}${cardByStory.has(s.id) ? ` <a class="c" href="/cards/${esc(cardByStory.get(s.id).slug)}.html">Verdict card</a>` : ''}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
       s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
       s.priority_reason ? `<p class="s"><b>Why P${s.priority ?? 3}:</b> ${esc(s.priority_reason)}</p>` : '',
@@ -425,6 +427,13 @@ export default async function handler(req, res) {
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
     if (req.query.view === 'cards') {
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify({
+          kind: 'cutsign.cards', generated: new Date().toISOString(),
+          cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html` })),
+        }, null, 1));
+      }
       const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
       const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${CARDS.length} card${CARDS.length === 1 ? '' : 's'} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
       const parts = [...CARDS].sort((a, b) => b.date.localeCompare(a.date)).map((c) =>

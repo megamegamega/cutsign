@@ -44,6 +44,7 @@ test('happy path: NetScaler-style story → shell_from_server_process, evidence,
   assert.equal(retailer.selected, false);
   assert.equal(retailer.status, 'extracted');
   assert.match(out.emails[0].html, /Quick reads — nothing huntable found/);
+  assert.match(out.emails[0].html, /<h3 id="s-[0-9a-f]{8}">/, 'story anchors: search deep links and the web jump anchor key off these');
   assert.equal(out.emails.length, 1);
   assert.match(out.emails[0].subject, /^Cutsign — 2026-10-21 — \d+ stories, 2 new IoCs, top: NetScaler/);
   assert.match(out.emails[0].html, /update-check\[\.\]net/, 'IoCs defanged in the email');
