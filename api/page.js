@@ -156,24 +156,49 @@ function agentIocMap(d) {
 }
 
 function agentBody(d, days) {
-  const flat = agentIocMap(d);
-  const cves = [...new Set(d.analyzed.flatMap((s) => s.cves || []))];
-  const actors = [...new Set(d.analyzed.map((s) => s.threat_actor).filter(Boolean))];
-  const malware = [...new Set(d.analyzed.map((s) => s.malware_family).filter(Boolean))];
+  const chips = (arr) => arr.filter(Boolean).map((c) => `<span class="c">${esc(c)}</span>`).join('');
+  // one-per-line <pre> blocks per IoC type, scoped to whatever list is passed in
+  const typeBlocks = (iocs) => {
+    const m = new Map();
+    for (const i of iocs) { if (!i.value) continue; if (!m.has(i.type)) m.set(i.type, new Set()); m.get(i.type).add(String(i.value)); }
+    return [...m].map(([t, set]) => `<p class="k">${esc(t)} (${set.size})</p><pre>${[...set].map(esc).join('\n')}</pre>`).join('');
+  };
   const parts = [
-    '<p class="s">Machine-first view of this brief. IoC values are <b>raw, not defanged</b>, one per line, ready for hunt queries — defang before pasting into chat or email. Everything here is public OSINT; the exposure and behavior detail lives in the JSON.</p>',
+    '<p class="s">Machine-first view of this brief, <b>grouped by story</b> so indicator streams stay attributable. IoC values are <b>raw, not defanged</b>, one per line, ready for hunt queries — defang before pasting into chat or email. Everything here is public OSINT; exposure and behavior detail lives in the JSON (also grouped per story).</p>',
     `<h3 style="border:none;padding-top:0">Endpoints</h3><pre>GET /?view=agent&amp;format=json          this brief as JSON (stories, behaviors, exposure, IoCs, watch events)
 GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${days.map((x) => esc(x.date)).join(', ')}
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)</pre>`,
   ];
-  for (const [type, set] of flat) parts.push(`<h3>${esc(type)} (${set.size})</h3><pre>${[...set].map(esc).join('\n')}</pre>`);
-  if (!flat.size) parts.push('<p class="s">No IoCs in this brief or the last 48 h of watch events.</p>');
-  if (cves.length) parts.push(`<h3>CVEs (${cves.length})</h3><pre>${cves.map(esc).join('\n')}</pre>`);
-  if (actors.length) parts.push(`<h3>Threat actors</h3><pre>${actors.map(esc).join('\n')}</pre>`);
-  if (malware.length) parts.push(`<h3>Malware families</h3><pre>${malware.map(esc).join('\n')}</pre>`);
-  parts.push(`<h3>Stories (${d.analyzed.length})</h3><ul>`
-    + d.analyzed.map((s) => `<li><b>P${s.priority ?? 3}</b> ${esc(s.title)}${(s.cves || []).length ? ` <span class="s">${esc(s.cves.join(' '))}</span>` : ''}</li>`).join('')
-    + '</ul>');
+
+  // per-story streams: title, tags, then this story's values only
+  for (const s of d.analyzed) {
+    const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
+    parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
+      `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
+      iocs.length ? typeBlocks(iocs) : '<p class="s">No IoCs extracted for this story.</p>');
+  }
+
+  // watch-event IoCs keep their own streams too, grouped by the watch they belong to
+  const byWatch = new Map();
+  for (const e of d.watchEvents || []) {
+    for (const i of e.assessment?.new_iocs || []) {
+      if (!byWatch.has(e.watch_title)) byWatch.set(e.watch_title, []);
+      byWatch.get(e.watch_title).push({ type: i.type, value: i.value });
+    }
+  }
+  if (byWatch.size) {
+    parts.push('<h3>Watch streams — new IoCs in the last 48 h</h3>');
+    for (const [title, iocs] of byWatch) parts.push(`<p class="k">${esc(title)}</p>${typeBlocks(iocs)}`);
+  }
+
+  // bulk sweep: everything above combined, collapsed so the attributed streams stay primary
+  const flat = agentIocMap(d);
+  const total = [...flat.values()].reduce((n, s) => n + s.size, 0);
+  if (total) {
+    parts.push(`<details><summary>All values combined, unattributed (${total}) — for one big sweep</summary>`
+      + [...flat].map(([t, set]) => `<p class="k">${esc(t)} (${set.size})</p><pre>${[...set].map(esc).join('\n')}</pre>`).join('')
+      + '</details>');
+  } else parts.push('<p class="s">No IoCs in this brief or the last 48 h of watch events.</p>');
   return parts.join('\n');
 }
 
@@ -245,6 +270,7 @@ function cisoBody(d) {
     parts.push('</ul>');
   }
 
+  parts.push('<span id="cards"></span>');
   for (const s of cards) {
     const p = pri(s);
     parts.push(`<div class="card"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
@@ -334,7 +360,8 @@ export default async function handler(req, res) {
         .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
         .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
         .replace(/<p class="s">[^<]*brief: “[\s\S]*?<\/p>/, '')                         // meta line (hero sub replaces it)
-        .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '');           // email reply footer
+        .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '')            // email reply footer
+        .replace(/<h3>P/, '<h3 id="brief">P');                                          // anchor on first story
     };
 
     const tabLink = (v, label) => view === v
@@ -350,8 +377,10 @@ export default async function handler(req, res) {
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
     const strip = view !== 'agent' && pick.date === days[0].date ? sinceStrip(d) : '';
+    const jump = view === 'ciso' ? '<p class="s" style="margin:10px 0 0"><a href="#cards">↓ Jump to brief cards</a></p>'
+      : view === '' ? '<p class="s" style="margin:10px 0 0"><a href="#brief">↓ Jump to brief</a></p>' : '';
     const body = view === 'ciso' ? cisoBody(d) : view === 'agent' ? agentBody(d, days) : analystBody();
-    const inner = `${hero}${strip}<div class="w">${body}</div>`;
+    const inner = `${hero}${jump}${strip}<div class="w">${body}</div>`;
     const viewTag = view === 'ciso' ? ' — CISO view' : view === 'agent' ? ' — Agent view' : '';
     return res.status(200).send(doc(`Cutsign — ${d.date}${viewTag}`, tabs + searchForm('') + nav, inner, foot));
   } catch (e) {
