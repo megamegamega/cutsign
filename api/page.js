@@ -97,6 +97,14 @@ const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta
 
 const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
 
+// "2026-10-23 11:20Z" when the value carries a real time, else just the date.
+// Midnight UTC reads as date-only: pre-migration published_at values have no time.
+const ts = (v) => {
+  const s = String(v ?? '');
+  if (!s) return '';
+  return /T(?!00:00)\d\d:\d\d/.test(s) ? `${s.slice(0, 10)} ${s.slice(11, 16)}Z` : s.slice(0, 10);
+};
+
 // compact one-line behavior: ATT&CK link, kind, process chain, where to hunt
 const behaviorLine = (b) => `<div class="s">${b.attack_technique
   ? `<a href="https://attack.mitre.org/techniques/${esc(String(b.attack_technique).replace('.', '/'))}/">${esc(b.attack_technique)}</a> · ` : ''}`
@@ -126,7 +134,7 @@ function searchBody(q, stories, iocs) {
     parts.push('<h3>IoCs</h3><table>');
     for (const i of iocs) {
       parts.push(`<tr><td>${esc(i.type)}</td><td class="v">${esc(defang(i.type, i.value_norm))}</td>`
-        + `<td>seen ${i.seen_count}×, first ${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}</td></tr>`);
+        + `<td>seen ${i.seen_count}×, first ${esc(ts(i.first_seen_at))}</td><td class="x">${esc(i.context || '')}</td></tr>`);
     }
     parts.push('</table>');
   }
@@ -206,7 +214,7 @@ GET /?q=TERM&amp;format=json               search every stored brief (stories + 
       (s.guidance || []).length ? `<p class="k">Detection guidance (${s.guidance.length}) <span class="s">· as of ${esc(d.date)}</span></p>`
         + s.guidance.map((g) => {
           const pub = srcByUrl.get(g.url)?.published_at;
-          return (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${pub ? ` · published ${esc(String(pub).slice(0, 10))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
+          return (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${pub ? ` · published ${esc(ts(pub))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
             + `<pre>${esc(g.raw)}</pre>`;
         }).join('') : '',
       iocs.length ? typeBlocks(iocs) : fromWatch.length ? '' : '<p class="s">No IoCs extracted for this story.</p>',
@@ -264,7 +272,7 @@ function agentJson(d, days) {
       })),
       iocs: [...s.newIocs, ...s.repeatIocs].map((i) => ({
         type: i.type, value: i.value_norm, role: i.role || null, new: i.isNew,
-        seen_count: i.seen_count ?? null, first_seen: i.first_seen_at ? String(i.first_seen_at).slice(0, 10) : null,
+        seen_count: i.seen_count ?? null, first_seen: i.first_seen_at || null,
       })),
       sources: (s.sources || []).map((x) => ({ url: x.url, publisher: x.publisher || null, published_at: x.published_at || null, outcome: x.outcome || null })),
     })),
@@ -350,7 +358,7 @@ export default async function handler(req, res) {
           })),
           iocs: iocs.map((i) => ({
             type: i.type, value: i.value_norm, seen_count: i.seen_count,
-            first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null,
+            first_seen: i.first_seen_at, context: i.context || null,
           })),
         }, null, 1));
       }
@@ -388,7 +396,7 @@ export default async function handler(req, res) {
           note: 'Cumulative across all briefs and watch events. Values are raw (not defanged). Public OSINT only. Brief IoCs and watch IoCs may overlap.',
           iocs: corpus.map((i) => ({
             type: i.type, value: i.value_norm, seen_count: i.seen_count,
-            first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null,
+            first_seen: i.first_seen_at, context: i.context || null,
             stories: i.stories.map((s) => ({ id: s.id, title: s.title, brief_date: s.date })),
           })),
           watch_iocs: watchIocs.flatMap((e) => e.new_iocs.map((i) => ({ type: i.type, value: i.value, context: i.context || null, watch: e.watch, story_id: e.story_id, at: e.at }))),
@@ -423,7 +431,7 @@ export default async function handler(req, res) {
       const pubByUrl = new Map((gUrls.length ? await store.getSources(gUrls) : []).map((x) => [x.url, x.published_at]));
       const gLine = (g) => `<li>${esc(String(g.raw || '').split('\n')[0].slice(0, 300))}`
         + `${g.publisher_tier ? ` <span class="c">tier ${esc(String(g.publisher_tier))}</span>` : ''}`
-        + `${pubByUrl.get(g.url) ? ` <span class="s">published ${esc(String(pubByUrl.get(g.url)).slice(0, 10))}</span>` : ''}`
+        + `${pubByUrl.get(g.url) ? ` <span class="s">published ${esc(ts(pubByUrl.get(g.url)))}</span>` : ''}`
         + `${/^https?:\/\//i.test(g.url || '') ? ` <a href="${esc(g.url)}">link</a>` : ''}`
         + `${String(g.raw || '').includes('\n') ? `<pre>${esc(g.raw)}</pre>` : ''}</li>`;
 
@@ -431,7 +439,7 @@ export default async function handler(req, res) {
         const also = (i.stories || []).filter((s) => s.id !== selfId && cards.has(s.id))
           .map((s) => `<a href="#${sid(s.id)}">also ${esc(s.date || 'brief')}</a>`).join(' ');
         return `<tr><td>${esc(i.type)}</td><td class="v"><a href="/?q=${encodeURIComponent(i.value_norm)}">${esc(defang(i.type, i.value_norm))}</a></td>`
-          + `<td>${i.seen_count}×</td><td>${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}${also ? ` · ${also}` : ''}</td></tr>`;
+          + `<td>${i.seen_count}×</td><td>${esc(ts(i.first_seen_at))}</td><td class="x">${esc(i.context || '')}${also ? ` · ${also}` : ''}</td></tr>`;
       };
       const parts = ['<p class="s">Every indicator Cutsign has stored, grouped by the story it belongs to — newest brief first. Values link to search (every story and record containing them); chips link to the day\'s brief and related cards. Raw machine version: <code>/?view=iocs&amp;format=json</code>.</p>'];
       for (const c of sorted) {
@@ -452,7 +460,7 @@ export default async function handler(req, res) {
           behs.length ? `<details><summary class="s">Behaviors (${behs.length})${s.date ? ` · as of ${esc(s.date)}` : ''}</summary>${behs.map(behaviorLine).join('')}</details>` : '',
           guid.length ? `<details><summary class="s">Detection guidance (${guid.length})${s.date ? ` · as of ${esc(s.date)}` : ''}</summary><ul class="s">${guid.map(gLine).join('')}</ul></details>` : '');
         for (const e of c.watch) {
-          parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(String(e.at).slice(0, 10))}</p><table>`
+          parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(ts(e.at))}</p><table>`
             + e.new_iocs.map((i) => row({ type: i.type, value_norm: i.value, seen_count: 1, first_seen_at: e.at, context: i.context })).join('') + '</table>');
         }
         parts.push('</div>');
@@ -500,7 +508,8 @@ export default async function handler(req, res) {
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
     const hero = `<div class="hero"><h1>${esc(d.date)}${d.run.dry ? ' <span class="s">(dry run)</span>' : ''}</h1>
-      <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p></div>
+      <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p>
+      <p class="sub">received ${esc(ts(d.brief.received_at))}${d.run.finished_at ? ` · emailed ${esc(ts(d.run.finished_at))}` : ''}</p></div>
       <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0)}${tile(d.restatedIocCount, 'restated IoCs')}${tile(d.updateCount, 'story updates')}${tile((d.watchEvents || []).length, 'watch events 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'))}</div>`;
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
