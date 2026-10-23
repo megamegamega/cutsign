@@ -146,14 +146,17 @@ a{color:var(--ink)}
     <h2>The ten, briefly</h2>
     <table>
       <tr><th>CVE</th><th>Sev</th><th>What</th></tr>
-      <tr><td class="num"><span class="v">CVE-2026-111497</span></td><td><span class="sev h">High</span></td><td>Brotli decoder OOB write → demonstrated RCE (Node2Shell)</td></tr>
-      <tr><td class="num"><span class="v">CVE-2026-105483</span></td><td><span class="sev h">High</span></td><td>TLS hostname check bypass via unusual IP formats</td></tr>
-      <tr><td class="num"><span class="v">CVE-2026-106069</span></td><td><span class="sev h">High</span></td><td>TLS hostname check bypass via unusual IP formats</td></tr>
-      <tr><td class="num"><span class="v">CVE-2026-105482</span></td><td><span class="sev h">High</span></td><td><code>dns.resolve</code> truncates names containing a NUL character</td></tr>
-      <tr><td class="num"><span class="v">CVE-2026-106072</span></td><td><span class="sev m">Med</span></td><td>Certificate validation wrong for non-canonical IPv4 hostnames</td></tr>
-      <tr><td class="num"><span class="v">CVE-2026-106074</span></td><td><span class="sev m">Med</span></td><td>Entropy cache saved into startup snapshots / SEA binaries — <code>randomUUID</code>/<code>randomInt</code> repeat values</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-111497</span></td><td><span class="sev h">High</span></td><td>Brotli decoder OOB write via <code>node:zlib</code> — invalid block switch treated as "need more input", appending into an 8-byte buffer; crash, memory disclosure or RCE (Node2Shell)</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-105483</span></td><td><span class="sev h">High</span></td><td><code>tls.checkServerIdentity</code> misses fullwidth-digit IPv4 (e.g. <code>１２７.0.0.1</code>) — a cert for <code>DNS:127.0.0.1</code> is accepted. 26.x/24.x only</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106069</span></td><td><span class="sev h">High</span></td><td>Leading-zero IPv4 (<code>0127.0.0.1</code>) read as octal for cert checks but decimal by some OS resolvers — authenticates a different IP than connected</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-105482</span></td><td><span class="sev h">High</span></td><td><code>dns.resolve*/reverse</code> truncate at a NUL — <code>attacker.example\0.trusted.example</code> resolves as the attacker's name</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106072</span></td><td><span class="sev m">Med</span></td><td>Non-canonical IPv4 spellings (<code>0x7f.0.0.1</code>, <code>127.1</code>, decimal int) let a DNS-only SAN authenticate an IP endpoint</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106074</span></td><td><span class="sev m">Med</span></td><td>Entropy cache saved into <code>--build-snapshot</code> snapshots / SEA binaries — <code>randomUUID</code>/<code>randomInt</code> repeat values across every process; rebuild those artifacts on a patched runtime</td></tr>
       <tr><td class="num"><span class="v">CVE-2026-105481</span></td><td><span class="sev m">Med</span></td><td>Keep-alive sockets accept responses written before the request is sent</td></tr>
-      <tr><td colspan="3" class="src">Plus three low-severity fixes. Secondary coverage has printed mismatched CVE IDs for this release — verify against the official <a href="https://nodejs.org/en/blog/vulnerability/october-2026-security-releases">nodejs.org security blog</a> before quoting IDs onward. Release also refreshes bundled OpenSSL, Undici, SQLite, c-ares and the CA store (drops compromised eMudhra certificates).</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106070</span></td><td><span class="sev m" style="color:var(--mut);border-color:var(--mut)">Low</span></td><td><code>zlib.ZipFile</code> returns attacker-controlled bytes after header validation fails (26.x only)</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106071</span></td><td><span class="sev m" style="color:var(--mut);border-color:var(--mut)">Low</span></td><td>Permission Model wildcard over-grant: <code>--allow-fs-read=/etc/passwd.*</code> also grants <code>/etc/passwd</code> (26.x only)</td></tr>
+      <tr><td class="num"><span class="v">CVE-2026-106073</span></td><td><span class="sev m" style="color:var(--mut);border-color:var(--mut)">Low</span></td><td><code>fs.realpathSync</code> skips read-permission checks under <code>--permission</code> — path enumeration outside permitted dirs</td></tr>
+      <tr><td colspan="3" class="src">Verified against the official <a href="https://nodejs.org/en/blog/vulnerability/october-2026-security-releases">nodejs.org advisory</a> (secondary coverage printed mismatched IDs for this release). Release also refreshes bundled OpenSSL, Undici, SQLite, c-ares and the CA store (drops compromised eMudhra certificates).</td></tr>
     </table>
 
     <h2>Detection coverage — as of Oct 23</h2>

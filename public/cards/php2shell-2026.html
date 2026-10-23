@@ -90,7 +90,7 @@ a{color:var(--ink)}
     <span class="tag">Patch now + hunt</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Exploited in the wild</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Mass probing underway</span>
-    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No fix for EOL lines</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">EOL lines: source-only backports</span>
     <span class="asof">as of 2026-10-23</span>
   </div>
   <div class="inner">
@@ -107,7 +107,7 @@ a{color:var(--ink)}
       <a href="/?q=php2shell">news &amp; updates (live)</a>
     </div>
 
-    <p class="verdict"><b>Verdict: patch outside the normal cycle, and hunt while you patch.</b> Unauthenticated RCE in the engine that runs most of the web, with exploitation observed in the wild and mass probing underway — this does not wait for the monthly window. No confirmed successful compromises had been reported as of Oct 23, but PHP 7.4 / 8.0 / 8.1 get <b>no upstream fix</b>: anything EOL needs a distro backport or migration, permanently. Hunting behaviors are published and concrete, which makes this one of the rare patch events that is also immediately huntable.</p>
+    <p class="verdict"><b>Verdict: patch outside the normal cycle, and hunt while you patch.</b> Unauthenticated RCE in the engine that runs most of the web, with exploitation observed in the wild and mass probing underway — this does not wait for the monthly window. No confirmed successful compromises had been reported as of Oct 23. PHP 7.4 / 8.0 / 8.1 get no binary release — official source-backport branches and distro packages are the only routes, and migration is the real fix. The PHP team published <b>official interim mitigations</b> (below) for installations that cannot patch today. Hunting behaviors are published and concrete, which makes this one of the rare patch events that is also immediately huntable.</p>
 
     <h2>30-second read</h2>
     <p>Both flaws are use-after-frees in PHP core (session upload-progress handling and fatal-error paths), reachable without authentication. Observed exploitation recycles PHP workers, leaks memory through <code>PHPSESSID</code> cookies, and abuses session upload-progress handling to run shell commands; the observed exploit targets Apache mod_php, and exploitation is easier where session upload-progress is enabled. Some attempts fetch a Potassium loader from <span class="v">92.118.112[.]100</span>.</p>
@@ -119,8 +119,24 @@ a{color:var(--ink)}
       <tr><td>8.4</td><td><span class="v">8.4.27</span></td></tr>
       <tr><td>8.3</td><td><span class="v">8.3.36</span></td></tr>
       <tr><td>8.2</td><td><span class="v">8.2.35</span></td></tr>
-      <tr><td>8.1 and earlier</td><td><span class="bad">no upstream fix</span></td><td>EOL — distro/vendor backports only (e.g. Plesk shipped one); affected code reaches back to PHP 5.4</td></tr>
+      <tr><td>8.1 / 8.0 / 7.4</td><td><span class="bad">no binary release</span></td><td>EOL — official <b>minimal source-backport branches</b> exist on github.com/php/php-src (<span class="v">PHP-7.4-CVE-2026-109618-109619</span> etc.) for build-from-source; otherwise distro/vendor backports (e.g. Plesk shipped one). Affected code reaches back to PHP 5.4</td></tr>
+      <tr><td colspan="3" class="src">8.2 itself reaches EOL December 31, 2026 — patching to 8.2.35 buys ten weeks, not a destination. Linux distros and LTS vendors received patches in advance; check vendor packages.</td></tr>
     </table>
+
+    <h2>Official mitigations (php.net) — if you cannot patch today</h2>
+    <p class="src">From the PHP team's advisory: these reduce exposure to the confirmed paths but "do not make an installation safe" — patching is the fix.</p>
+    <pre># CVE-2026-109619 (stale global state) — blocks the confirmed session path:
+session.upload_progress.enabled=0     ; php.ini / FPM pool / server config,
+                                      ; NOT ini_set() or .user.ini — then restart every worker
+fatal_error_backtraces=0              ; PHP 8.5 only, blocks the fatal-backtrace path
+
+# CVE-2026-109618 (OOM corruption) — starve the allocation-failure primitive:
+memory_limit=-1                       ; via php_admin_value so apps cannot override
+post_max_size = 8M                    ; (32M if uploads needed); upload_max_filesize below it
+# plus web-server/proxy limits on decoded size, field/part/header counts, nesting —
+# enforced even without a usable Content-Length
+# availability boundary: container/cgroup limit killing only the worker.
+# Do NOT use RLIMIT_AS / RLIMIT_DATA — they can trigger the vulnerable allocation failure.</pre>
 
     <div class="cols">
       <div>
@@ -206,11 +222,14 @@ also: php-fpm "child exited on signal" bursts in syslog (worker churn)</pre>
       <li><span class="d">Oct 20</span><span>Details of both flaws leak ahead of coordinated disclosure; PHP announces emergency release</span></li>
       <li><span class="d">Oct 21</span><span>Emergency release 14:00 UTC (8.5.12 / 8.4.27 / 8.3.36 / 8.2.35); watchTowr reproduces CVE-2026-109618</span></li>
       <li><span class="d">Oct 22</span><span>Patch-focused advisories; exploitation reported for miners and a Linux proxy backdoor</span></li>
-      <li><span class="d">Oct 23</span><span>Mass exploitation attempts (Cloudflare: millions), Potassium botnet delivery attempts; no confirmed successful compromises reported</span></li>
+      <li><span class="d">Oct 23</span><span>Mass exploitation attempts (Cloudflare: millions), Potassium botnet delivery attempts; no confirmed successful compromises reported. PHP issues a follow-up advisory: <span class="v">CVE-2026-115560</span>, another session-upload-progress flaw needing a specific <code>serialize_handler</code> runtime-switch setup — keep <code>session.upload_progress.enabled=0</code> until the next bugfix release</span></li>
     </ul>
 
     <h2>Sources</h2>
     <p class="src">
+      <a href="https://www.php.net/archive/2026.php#2026-10-21-5">PHP — official announcement</a> ·
+      <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">GHSA — CVE-2026-109618</a> ·
+      <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">GHSA — CVE-2026-109619</a> ·
       <a href="https://www.huntress.com/blog/php2shell-leaked-critical-php-vulnerabilities">Huntress — PHP2Shell</a> ·
       <a href="https://watchtowr.com/intelligence/php-remote-code-execution-php2shell/">watchTowr — exploitation</a> ·
       <a href="https://thehackernews.com/2026/10/php2shell-exploit-attempts-hit-millions.html">The Hacker News — mass attempts, Oct 23</a> ·

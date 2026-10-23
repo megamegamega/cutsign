@@ -359,12 +359,12 @@ function cisoBody(d) {
     + '</div>');
 
   if (highByStory.size) {
-    parts.push('<h3 style="border:none;padding-top:0">Developments on tracked stories (48 h)</h3><ul>');
+    parts.push('<h3 style="border:none;padding-top:0">Developments on tracked stories (48 h)</h3>');
     for (const [title, evs] of highByStory) {
-      const latest = evs[evs.length - 1];
-      parts.push(`<li><b>${esc(title)}</b> — ${evs.length === 1 ? '' : `${evs.length} developments; latest: `}${esc(latest.summary)}</li>`);
+      parts.push(`<details><summary><b style="color:var(--text)">${esc(title)}</b> <span class="s">· ${evs.length} development${evs.length === 1 ? '' : 's'}</span></summary><ul>`
+        + evs.map((e) => `<li><span class="s">${esc(ts(e.created_at))}</span> ${esc(e.summary)}${e.url ? ` <a href="${esc(e.url)}">source</a>` : ''}</li>`).join('')
+        + '</ul></details>');
     }
-    parts.push('</ul>');
   }
 
   parts.push('<span id="cards"></span>');
@@ -559,9 +559,20 @@ export default async function handler(req, res) {
 
     // analyst view: full (level 0) email body, minus the email-only chrome; if render.js markup
     // drifts these strips become no-ops and the page just shows a little extra, never breaks
+    // Web-only: each watched story's updates collapse to a clickable title (the email keeps
+    // the flat list); HIGH badge surfaces on the summary line so nothing urgent hides.
+    const collapseWatch = (html) => {
+      const start = html.indexOf('<h3>Watched stories');
+      if (start === -1) return html;
+      const next = html.indexOf('<h3', start + 10);
+      const end = next === -1 ? html.length : next;
+      const region = html.slice(start, end).replace(/<p class="k">([^<]+)<\/p>([\s\S]*?)(?=<p class="k">|$)/g, (m, title, body) =>
+        `<details><summary>${body.includes('class="new"') ? '<span class="new">HIGH</span> ' : ''}<b style="color:var(--text)">${title}</b> <span class="s">· click to expand</span></summary>${body}</details>`);
+      return html.slice(0, start) + region + html.slice(end);
+    };
     const analystBody = () => {
       const full = renderHtml(d, 0);
-      return full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>'))
+      return collapseWatch(full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>')))
         .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
         .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
         .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
