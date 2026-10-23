@@ -77,6 +77,8 @@ footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-s
 .search input{background:var(--panel2);border:1px solid var(--chip-line);border-radius:999px;color:var(--text);font:12px var(--mono);padding:4px 12px;width:160px;outline:none;transition:width .15s,border-color .15s}
 .search input:focus{border-color:var(--acc);width:220px}
 .tzl{border-bottom:1px dotted var(--mut);cursor:help}
+/* deep-link landing: mark the story a search/card link jumped to */
+h3:target,li:target,.card:target{outline:2px solid var(--acc);outline-offset:6px;border-radius:4px;scroll-margin-top:14px}
 .since{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0 4px;font-size:13px}
 .since .t{font-family:var(--mono);color:var(--mut);font-size:11px;margin-right:8px}
 .since ul{margin:4px 0 0;padding-left:18px}
@@ -152,6 +154,7 @@ const searchForm = (q) => `<form class="search" action="/"><input type="search" 
 // and the IoC table (substring on normalized value). Capped at 30 each.
 function searchBody(q, stories, iocs) {
   const chips = (arr) => arr.filter(Boolean).map((c) => `<span class="c">${esc(c)}</span>`).join('');
+  const sid = (id) => `s-${String(id).slice(0, 8)}`;
   const cap = stories.length >= 30 || iocs.length >= 30 ? ' (capped at 30 each — narrow the term for more)' : '';
   const parts = [`<div class="hero"><h1>Search — “${esc(q)}”</h1>
     <p class="sub">${stories.length} stor${stories.length === 1 ? 'y' : 'ies'} · ${iocs.length} IoC${iocs.length === 1 ? '' : 's'}${cap}</p></div>`];
@@ -159,8 +162,11 @@ function searchBody(q, stories, iocs) {
   if (stories.length) {
     parts.push('<h3 style="border:none">Stories</h3>');
     for (const s of stories) {
+      const a = sid(s.id);
       parts.push(`<div class="card"><div class="chead"><span class="pri p${s.priority ?? 3}">P${s.priority ?? '?'}</span><h3>${esc(s.title || '(untitled)')}</h3></div>`,
-        `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}">brief ${esc(s.brief_date)}</a>` : ''}`
+        `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}#${a}">brief ${esc(s.brief_date)}</a>` : ''}`
+        + (s.brief_date && (s.selected || (s.priority ?? 3) <= 2) ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}&view=ciso#${a}">CISO card</a>` : '')
+        + (s.ioc_count ? `<a class="c" href="/?view=iocs#${a}">IoC card (${s.ioc_count})</a>` : '')
         + `${chips([s.selected ? 'deep read' : 'quick read', s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
         `<p style="margin:8px 0 0">${esc(s.summary || '')}</p></div>`);
     }
@@ -168,8 +174,12 @@ function searchBody(q, stories, iocs) {
   if (iocs.length) {
     parts.push('<h3>IoCs</h3><table>');
     for (const i of iocs) {
-      parts.push(`<tr><td>${esc(i.type)}</td><td class="v">${esc(defang(i.type, i.value_norm))}</td>`
-        + `<td>seen ${i.seen_count}×, first ${esc(ts(i.first_seen_at))}</td><td class="x">${esc(i.context || '')}</td></tr>`);
+      const first = (i.stories || [])[0];
+      const card = first ? `/?view=iocs#${sid(first.id)}` : '/?view=iocs#s-unattributed';
+      const links = (i.stories || []).filter((s) => s.date)
+        .map((s) => `<a href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}" title="${esc(s.title || '')}">${esc(s.date)}</a>`).join(' ');
+      parts.push(`<tr><td>${esc(i.type)}</td><td class="v"><a href="${card}" title="IoC corpus card">${esc(defang(i.type, i.value_norm))}</a></td>`
+        + `<td>seen ${i.seen_count}×, first ${esc(ts(i.first_seen_at))}</td><td class="x">${esc(i.context || '')}${links ? ` · ${links}` : ''}</td></tr>`);
     }
     parts.push('</table>');
   }
@@ -387,13 +397,14 @@ export default async function handler(req, res) {
           kind: 'cutsign.search', q: qraw, generated: new Date().toISOString(),
           note: 'Public OSINT only. IoC values are raw (not defanged) for direct query use.',
           stories: stories.map((s) => ({
-            title: s.title, brief_date: s.brief_date || null, priority: s.priority ?? 3, deep_read: !!s.selected,
+            id: s.id, title: s.title, brief_date: s.brief_date || null, priority: s.priority ?? 3, deep_read: !!s.selected,
             severity: s.severity || null, cves: s.cves || [], threat_actor: s.threat_actor || null,
-            malware_family: s.malware_family || null, summary: s.summary || '',
+            malware_family: s.malware_family || null, summary: s.summary || '', ioc_count: s.ioc_count || 0,
           })),
           iocs: iocs.map((i) => ({
             type: i.type, value: i.value_norm, seen_count: i.seen_count,
             first_seen: i.first_seen_at, context: i.context || null,
+            stories: (i.stories || []).map((s) => ({ id: s.id, title: s.title, brief_date: s.date })),
           })),
         }, null, 1));
       }
@@ -486,7 +497,7 @@ export default async function handler(req, res) {
         const behs = behaviors.filter((b) => b.story_id === s.id);
         const guid = evidence.filter((e) => e.story_id === s.id && e.kind === 'guidance');
         parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
-          `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}">brief ${esc(s.date)}</a>` : ''}`
+          `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}">brief ${esc(s.date)}</a>` : ''}`
           + (s.date && ((s.priority ?? 3) <= 2 || s.selected) ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=ciso#${sid(s.id)}">CISO card</a>` : '')
           + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
@@ -501,7 +512,7 @@ export default async function handler(req, res) {
         parts.push('</div>');
       }
       if (orphans.length) {
-        parts.push(`<div class="card"><div class="chead"><span class="pri p3">—</span><h3>Unattributed</h3></div><table>${orphans.map((i) => row(i, null)).join('')}</table></div>`);
+        parts.push(`<div class="card" id="s-unattributed"><div class="chead"><span class="pri p3">—</span><h3>Unattributed</h3></div><table>${orphans.map((i) => row(i, null)).join('')}</table></div>`);
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
@@ -532,7 +543,7 @@ export default async function handler(req, res) {
         .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
         .replace(/<p class="s">[^<]*brief: “[\s\S]*?<\/p>/, '')                         // meta line (hero sub replaces it)
         .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '')            // email reply footer
-        .replace(/<h3>P/, '<h3 id="brief">P');                                          // anchor on first story
+        .replace(/<h3 id="s-/, '<span id="brief"></span><h3 id="s-');                   // jump anchor before first story
     };
 
     const tabLink = (v, label) => view === v
