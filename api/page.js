@@ -76,6 +76,7 @@ footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-s
 .exec{background:var(--panel);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:12px 16px;margin:18px 0;font-size:15px}
 .search input{background:var(--panel2);border:1px solid var(--chip-line);border-radius:999px;color:var(--text);font:12px var(--mono);padding:4px 12px;width:160px;outline:none;transition:width .15s,border-color .15s}
 .search input:focus{border-color:var(--acc);width:220px}
+.tzl{border-bottom:1px dotted var(--mut);cursor:help}
 .since{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0 4px;font-size:13px}
 .since .t{font-family:var(--mono);color:var(--mut);font-size:11px;margin-right:8px}
 .since ul{margin:4px 0 0;padding-left:18px}
@@ -90,10 +91,44 @@ a.c{color:var(--link)}
 .pri.p3{background:var(--chip);color:var(--mut)}
 @media (max-width:600px){.hero h1{font-size:22px}.tile .n{font-size:20px}}`;
 
+// Rewrites every rendered UTC timestamp ("2026-10-23 11:20Z", "2026-10-23T13:05Z", bare "11:20Z")
+// into the viewer's local time WITH an explicit timezone label (e.g. "2026-10-23 07:20 EDT"),
+// keeping the original Zulu time on hover. Skips pre/code so raw query/IoC text is never touched.
+// Date-only values are left alone — without a time they cannot shift zones honestly.
+const TZ_SCRIPT = String.raw`<script>
+(function(){try{
+  var zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+  if(/^(UTC|Etc\/)/.test(zone))return; // already reading in UTC: labels stay Z
+  function fmt(d,withDate){
+    var parts={},f=new Intl.DateTimeFormat([],{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false,timeZoneName:'short'});
+    f.formatToParts(d).forEach(function(p){parts[p.type]=p.value});
+    var t=parts.hour+':'+parts.minute+' '+parts.timeZoneName;
+    return withDate?parts.year+'-'+parts.month+'-'+parts.day+' '+t:t;
+  }
+  var re=/\b(?:(\d{4}-\d{2}-\d{2})[ T])?(\d{2}:\d{2})Z\b/g;
+  var walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+    return n.parentNode.closest('pre,code,script,style')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT}});
+  var nodes=[],n;while((n=walk.nextNode()))if(re.test(n.nodeValue)){nodes.push(n);re.lastIndex=0}
+  nodes.forEach(function(node){
+    var txt=node.nodeValue,frag=document.createDocumentFragment(),last=0,m;re.lastIndex=0;
+    while((m=re.exec(txt))){
+      var day=m[1]||new Date().toISOString().slice(0,10),d=new Date(day+'T'+m[2]+':00Z');
+      if(isNaN(d))continue;
+      frag.appendChild(document.createTextNode(txt.slice(last,m.index)));
+      var s=document.createElement('span');s.className='tzl';s.textContent=fmt(d,!!m[1]);s.title=m[0]+' UTC';
+      frag.appendChild(s);last=m.index+m[0].length;
+    }
+    if(!last)return;
+    frag.appendChild(document.createTextNode(txt.slice(last)));
+    node.parentNode.replaceChild(frag,node);
+  });
+}catch(e){}})();
+</script>`;
+
 const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head>
 <body><header class="top"><div class="in"><span class="brand">CUT<b>SIGN</b><span class="tag">cutting for sign — daily OSINT threat read</span></span><nav class="nav">${headerNav}</nav></div></header>
-<main>${inner}</main><footer>${foot}</footer></body></html>`;
+<main>${inner}</main><footer>${foot}</footer>${TZ_SCRIPT}</body></html>`;
 
 const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
 
