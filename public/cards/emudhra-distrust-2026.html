@@ -94,7 +94,7 @@ a{color:var(--ink)}
   </div>
   <div class="inner">
     <h1>eMudhra CA distrust</h1>
-    <p class="sub">Eight eMudhra intermediate CA certificates were issued with private keys generated from single- or double-digit values — one key was literally the number 4 — making them trivially recoverable from the public certificates. Browsers and OSes blocked them October 17–20; Chrome removes the <b>emSign ECC Root CA – G3</b> root entirely on the morning of <b>October 27</b> (PT). Go tracks the trust-handling fix as <span class="v">CVE-2026-111943</span>. eMudhra is exiting the global SSL/TLS business.</p>
+    <p class="sub">Eight eMudhra intermediate CA certificates were issued with private keys generated from single- or double-digit values — one key was literally the number 4 — making them trivially recoverable from the public certificates. Browsers and OSes blocked them October 17–20; Chrome removes the <b>emSign ECC Root CA – G3</b> root entirely on the morning of <b>October 27</b> (PT). Go tracks the trust-handling fix as <span class="v">CVE-2026-111943</span>. eMudhra announced its exit from the global SSL/TLS business on October 22.</p>
 
     <div class="cl">
       <span>On Cutsign:</span>
@@ -131,6 +131,7 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Vendor</td><td><a href="https://emudhra.com/en/press-release/emudhra-to-exit-global-ssl-tls-certificate-business">eMudhra</a></td><td><span class="ok">Exiting the business</span> — Oct 22 press release: voluntary withdrawal from global SSL/TLS (~1% of revenue). Operationally useful: affected certificates <b>replaced free of cost through partners</b>; revocation/status services run until every issued cert expires or is replaced; G1 RSA roots keep serving during the transition. Vendor's own claims (not independently verified): CAs revoked within 14 hours, no end-entity certs issued from the affected CAs, infrastructure not compromised; full root-cause report promised to browser root programs. Incident detail: <a href="https://www.emudhra.com/en/post/certificate-security-incident">vendor incident post</a></td></tr>
       <tr><td>Network IDS</td><td><a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Cisco Talos</a></td><td><span class="ok">Snort SIDs 67363–67374</span> published for coverage of the compromised intermediates (tier A)</td></tr>
       <tr><td>Indicators</td><td><a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Talos</a> / trackers</td><td><span class="ok">Published</span> — SHA-256 hashes of all eight certificates, on the <a href="/?view=iocs#s-f3e86a49">IoC card</a>; usable for trust-store and inventory sweeps</td></tr>
       <tr><td>Trust stores</td><td>Chrome / Firefox / Apple / Microsoft / Go (<a href="https://www.emudhra.com/en/post/certificate-security-incident">vendor post</a>)</td><td><span class="ok">Enforced</span> — Chrome, Firefox and Apple block the six TLS intermediates; <b>Microsoft blocks the two code-signing intermediates</b>; Chrome root removal lands Oct 27. Go 1.27.3 / 1.26.10 filter chains by the eight <b>SPKI</b> SHA-256 hashes (different values than the cert hashes — see Go release notes)</td></tr>
@@ -143,7 +144,7 @@ a{color:var(--ink)}
         <h2>Do now (before Oct 27)</h2>
         <ul>
           <li>Inventory certificates chaining to emSign/eMudhra roots — servers first, then API clients, CI/CD runners, proxies and appliances</li>
-          <li>Replace affected chains with another trusted CA before the Chrome removal</li>
+          <li>Replace affected chains with another trusted CA before the Chrome removal — eMudhra replaces affected certs free via partners, but with their TLS business ending, migrate to a different CA rather than re-issuing under a sunsetting root</li>
           <li>Update independent trust stores: Go toolchains, ca-certificates bundles, NSS, vendor appliances</li>
           <li>Test critical clients against the disclosure site's test hosts</li>
           <li>Pre-brief the help desk: Chrome cert errors starting Oct 27 have a known cause — and <b>never</b> "fix" them by disabling certificate verification</li>
@@ -182,13 +183,14 @@ hashes (on the IoC card) in proxy/Zeek logs and local trust stores
     <ul class="tl">
       <li><span class="d">Apr 2025</span><span>The eight intermediates issued with trivially recoverable P-384 keys</span></li>
       <li><span class="d">Oct 17–20</span><span>Chrome blocks the TLS intermediates (~Oct 17); Apple, Microsoft follow; Mozilla removes the root Oct 20; Talos publishes with Snort coverage; Go ships 1.27.3 / 1.26.10</span></li>
-      <li><span class="d">Oct 21–22</span><span>Brief coverage both days; eMudhra announces exit from global SSL/TLS business; no abuse observed</span></li>
+      <li><span class="d">Oct 21–22</span><span>Brief coverage both days; no abuse observed. Oct 22: eMudhra press release — exiting the global SSL/TLS business; free cert replacement via partners; revocation services run until all certs expire or are replaced</span></li>
       <li><span class="d">Oct 27</span><span><b>Chrome Root Store removal of emSign ECC Root CA – G3</b> reaches devices (morning, PT) — certificates chaining to it stop working in Chrome</span></li>
     </ul>
 
     <h2>Sources</h2>
     <p class="src">
       <a href="https://www.emudhra.com/en/post/certificate-security-incident">eMudhra — incident post (vendor)</a> ·
+      <a href="https://emudhra.com/en/press-release/emudhra-to-exit-global-ssl-tls-certificate-business">eMudhra — exit press release, Oct 22 (vendor)</a> ·
       <a href="https://blog.talosintelligence.com/compromised-intermediate-certificates/">Cisco Talos — compromised intermediates</a> ·
       <a href="https://www.bleepingcomputer.com/news/security/mozilla-google-apple-block-compromised-emudhra-ca-certificates/">BleepingComputer — browser blocks</a> ·
       <a href="https://thehackernews.com/2026/10/emudhra-to-exit-global-ssltls-business.html">The Hacker News — eMudhra exits TLS</a> ·
