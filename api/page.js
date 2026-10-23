@@ -385,7 +385,7 @@ function cisoBody(d) {
     }
   }
 
-  parts.push('<span id="cards"></span>');
+  parts.push(`<h3 id="cards" style="border:none">From the brief — ${cards.length} verdict-shaped card${cards.length === 1 ? '' : 's'}</h3>`);
   for (const s of cards) {
     const p = pri(s);
     parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
@@ -595,7 +595,7 @@ export default async function handler(req, res) {
     // Web-only: each watched story's updates collapse to a clickable title (the email keeps
     // the flat list); HIGH badge surfaces on the summary line so nothing urgent hides.
     const collapseWatch = (html) => {
-      const start = html.indexOf('<h3>Watched stories');
+      const start = html.indexOf('<h3>Developments on tracked stories');
       if (start === -1) return html;
       const next = html.indexOf('<h3', start + 10);
       const end = next === -1 ? html.length : next;
@@ -606,13 +606,12 @@ export default async function handler(req, res) {
     const analystBody = () => {
       const full = renderHtml(d, 0);
       return collapseWatch(full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>')))
-        .replace('<h3>Watched stories', '<h3 id="watch">Watched stories')                 // tile deep-link target
+        .replace('<h3>Developments on tracked stories', '<h3 id="watch">Developments on tracked stories') // tile deep-link target
         .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
         .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
         .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
         .replace(/<p class="s">[^<]*brief: “[\s\S]*?<\/p>/, '')                         // meta line (hero sub replaces it)
         .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '')            // email reply footer
-        .replace(/<h3 id="s-/, '<span id="brief"></span><h3 id="s-');                   // jump anchor before first story
     };
 
     const tabLink = (v, label) => view === v

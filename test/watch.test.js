@@ -147,7 +147,7 @@ test('changes show in the next morning email, then are marked digested; same cam
   await intake(store, { messages: [withHeaders('netscaler-style.eml', { 'Message-ID': '<d2@x>', Subject: '[PIPELINE] Cyber Threat Brief - 2026-10-22' })] });
   await driveRuns(store, { fetchImpl: w.fetch });
   const html = out.emails.at(-1).html;
-  assert.match(html, /Watched stories — what changed \(1\)/);
+  assert.match(html, /Developments on tracked stories \(1\)/);
   assert.match(html, /<p class="k">/, 'watch groups keep the <p class="k"> shape the web collapse transform keys off');
   assert.match(html, /second-c2\[\.\]net/);
   assert.ok(store._tables.watch_events.every((e) => e.digested_at));
