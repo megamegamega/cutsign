@@ -197,14 +197,18 @@ GET /?q=TERM&amp;format=json               search every stored brief (stories + 
   for (const s of d.analyzed) {
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
     const fromWatch = matched.get(s.id) || [];
+    const srcByUrl = new Map((s.sources || []).map((x) => [x.url, x]));
     parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
       s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
       s.priority_reason ? `<p class="s"><b>Why P${s.priority ?? 3}:</b> ${esc(s.priority_reason)}</p>` : '',
       (s.behaviors || []).length ? `<p class="k">Behaviors (${s.behaviors.length}) <span class="s">· as of ${esc(d.date)}</span></p>${s.behaviors.map(behaviorLine).join('')}` : '',
       (s.guidance || []).length ? `<p class="k">Detection guidance (${s.guidance.length}) <span class="s">· as of ${esc(d.date)}</span></p>`
-        + s.guidance.map((g) => (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
-          + `<pre>${esc(g.raw)}</pre>`).join('') : '',
+        + s.guidance.map((g) => {
+          const pub = srcByUrl.get(g.url)?.published_at;
+          return (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${pub ? ` · published ${esc(String(pub).slice(0, 10))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
+            + `<pre>${esc(g.raw)}</pre>`;
+        }).join('') : '',
       iocs.length ? typeBlocks(iocs) : fromWatch.length ? '' : '<p class="s">No IoCs extracted for this story.</p>',
       fromWatch.length ? `<p class="s">From this story's watch (last 48 h):</p>${typeBlocks(fromWatch)}` : '');
   }
@@ -256,12 +260,13 @@ function agentJson(d, days) {
       })),
       detection_guidance: (s.guidance || []).map((g) => ({
         text: g.raw, url: g.url || null, publisher_tier: g.publisher_tier ?? null, log_source: g.log_source || null,
+        source_published: (s.sources || []).find((x) => x.url === g.url)?.published_at || null,
       })),
       iocs: [...s.newIocs, ...s.repeatIocs].map((i) => ({
         type: i.type, value: i.value_norm, role: i.role || null, new: i.isNew,
         seen_count: i.seen_count ?? null, first_seen: i.first_seen_at ? String(i.first_seen_at).slice(0, 10) : null,
       })),
-      sources: s.source_urls || [],
+      sources: (s.sources || []).map((x) => ({ url: x.url, publisher: x.publisher || null, published_at: x.published_at || null, outcome: x.outcome || null })),
     })),
     watch_events_48h: (d.watchEvents || []).map((e) => ({
       at: e.created_at, level: e.level, kind: e.kind, watch: e.watch_title,
@@ -414,8 +419,11 @@ export default async function handler(req, res) {
       // behaviors + published detection guidance for every carded story
       const storyIds = [...cards.keys()];
       const [behaviors, evidence] = await Promise.all([store.listBehaviors(storyIds), store.listEvidence(storyIds)]);
+      const gUrls = [...new Set(evidence.filter((e) => e.kind === 'guidance' && e.url).map((e) => e.url))];
+      const pubByUrl = new Map((gUrls.length ? await store.getSources(gUrls) : []).map((x) => [x.url, x.published_at]));
       const gLine = (g) => `<li>${esc(String(g.raw || '').split('\n')[0].slice(0, 300))}`
         + `${g.publisher_tier ? ` <span class="c">tier ${esc(String(g.publisher_tier))}</span>` : ''}`
+        + `${pubByUrl.get(g.url) ? ` <span class="s">published ${esc(String(pubByUrl.get(g.url)).slice(0, 10))}</span>` : ''}`
         + `${/^https?:\/\//i.test(g.url || '') ? ` <a href="${esc(g.url)}">link</a>` : ''}`
         + `${String(g.raw || '').includes('\n') ? `<pre>${esc(g.raw)}</pre>` : ''}</li>`;
 
