@@ -152,7 +152,7 @@ const ts = (v) => {
 // compact one-line behavior: ATT&CK link, kind, process chain, where to hunt
 const behaviorLine = (b) => `<div class="s">${b.attack_technique
   ? `<a href="https://attack.mitre.org/techniques/${esc(String(b.attack_technique).replace('.', '/'))}/">${esc(b.attack_technique)}</a> · ` : ''}`
-  + `${esc(b.pattern_kind)}: <code>${esc(b.parent || '?')}</code>${b.children?.length ? ' → ' + b.children.map(esc).join(', ') : ''}`
+  + `${esc(b.pattern_kind)}${b.parent || b.children?.length ? `: ${b.parent ? `<code>${esc(b.parent)}</code>` : ''}${b.parent && b.children?.length ? ' → ' : ''}${(b.children || []).map(esc).join(', ')}` : ''}`
   + `${b.log_source ? ` · hunt in: ${esc(b.log_source)}` : ''}</div>`;
 
 const searchForm = (q) => `<form class="search" action="/"><input type="search" name="q" placeholder="search stories & IoCs" value="${esc(q)}" maxlength="80"></form>`;
