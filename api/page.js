@@ -48,6 +48,8 @@ main{max-width:860px;margin:0 auto;padding:26px 16px 60px}
 .tile .n{font-size:24px;font-weight:700;font-family:var(--mono)}
 .tile .l{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-top:2px}
 .tile.hot .n{color:var(--acc)}
+a.tile{display:block;color:inherit;text-decoration:none}
+a.tile:hover{border-color:var(--acc)}
 /* ---- email body classes, reskinned ---- */
 .w{line-height:1.55;font-size:14.5px}
 h3{font-size:17px;margin:34px 0 6px;padding-top:18px;border-top:1px solid var(--line)}
@@ -139,7 +141,10 @@ const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta
 <body><header class="top"><div class="in"><span class="brand">CUT<b>SIGN</b><span class="tag">cutting for sign — daily OSINT threat read</span></span><nav class="nav">${headerNav}</nav></div></header>
 <main>${inner}</main><footer>${foot}</footer>${TZ_SCRIPT}</body></html>`;
 
-const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
+// A tile with an href is the navigation to its detail (raw IoCs, corpus, watch section, cards)
+const tile = (n, label, hot, href) => href
+  ? `<a class="tile${hot ? ' hot' : ''}" href="${esc(href)}"><div class="n">${n}</div><div class="l">${esc(label)}</div></a>`
+  : `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
 
 // "2026-10-23 11:20Z" when the value carries a real time, else just the date.
 // Midnight UTC reads as date-only: pre-migration published_at values have no time.
@@ -442,14 +447,22 @@ export default async function handler(req, res) {
       }
       const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
       const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${CARDS.length} card${CARDS.length === 1 ? '' : 's'} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
-      const parts = [...CARDS].sort((a, b) => b.date.localeCompare(a.date)).map((c) =>
-        `<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
-        + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
-        + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
-        + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
-        + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`).join('\n');
+      // newest day first; within a day, urgency order (hunt/IR, patch-now, patch, prepare)
+      const laneRank = (l) => /hunt|ir/i.test(l) && !/patch/i.test(l) ? 0 : /now/i.test(l) ? 1 : /patch/i.test(l) ? 2 : 3;
+      const sorted = [...CARDS].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
+      const parts = [];
+      let day = '';
+      for (const c of sorted) {
+        if (c.date !== day) { day = c.date; parts.push(`<h3 style="border:none">${esc(day)}</h3>`); }
+        parts.push(`<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
+          + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
+          + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
+          + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
+          + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`);
+      }
+      const partsHtml = parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
-        `${hero}<div class="w">${parts}</div>`, 'Cutsign · verdict cards · public OSINT only'));
+        `${hero}<div class="w">${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }
 
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first
@@ -588,6 +601,7 @@ export default async function handler(req, res) {
     const analystBody = () => {
       const full = renderHtml(d, 0);
       return collapseWatch(full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>')))
+        .replace('<h3>Watched stories', '<h3 id="watch">Watched stories')                 // tile deep-link target
         .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
         .replace(/<h2 style="[^"]*">Cutsign — [\s\S]*?<\/h2>/, '')                      // email heading (hero replaces it)
         .replace(/<p class="dl">[\s\S]*?<\/p>/, '')                                     // delta line (tiles replace it)
@@ -603,10 +617,14 @@ export default async function handler(req, res) {
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
+    // tiles count what matters: watch developments above the low-signal bar, and this
+    // brief's stories that have a hand-written verdict card
+    const matWatch = (d.watchEvents || []).filter((e) => e.level === 'HIGH' || e.assessment?.new_iocs?.length || e.assessment?.deep).length;
+    const cardsToday = d.analyzed.filter((s) => cardByStory.has(s.id)).length;
     const hero = `<div class="hero"><h1>${esc(d.date)}${d.run.dry ? ' <span class="s">(dry run)</span>' : ''}</h1>
       <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p>
       <p class="sub">received ${esc(ts(d.brief.received_at))}${d.run.finished_at ? ` · emailed ${esc(ts(d.run.finished_at))}` : ''}</p></div>
-      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0)}${tile(d.restatedIocCount, 'restated IoCs')}${tile(d.updateCount, 'story updates')}${tile((d.watchEvents || []).length, 'watch events 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'))}</div>`;
+      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0, `/?d=${encodeURIComponent(pick.date)}&view=agent`)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0, `/?d=${encodeURIComponent(pick.date)}#brief`)}${tile(d.restatedIocCount, 'restated IoCs', false, '/?view=iocs')}${tile(d.updateCount, 'story updates', false, `/?d=${encodeURIComponent(pick.date)}#brief`)}${tile(matWatch, 'watch devs 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'), `/?d=${encodeURIComponent(pick.date)}#watch`)}${cardsToday ? tile(cardsToday, 'verdict cards', true, '/?view=cards') : ''}</div>`;
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
     const strip = view !== 'agent' && pick.date === days[0].date ? sinceStrip(d) : '';
