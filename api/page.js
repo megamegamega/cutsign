@@ -76,6 +76,9 @@ footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-s
 .exec{background:var(--panel);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:12px 16px;margin:18px 0;font-size:15px}
 .search input{background:var(--panel2);border:1px solid var(--chip-line);border-radius:999px;color:var(--text);font:12px var(--mono);padding:4px 12px;width:160px;outline:none;transition:width .15s,border-color .15s}
 .search input:focus{border-color:var(--acc);width:220px}
+.since{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0 4px;font-size:13px}
+.since .t{font-family:var(--mono);color:var(--mut);font-size:11px;margin-right:8px}
+.since ul{margin:4px 0 0;padding-left:18px}
 a.c{color:var(--link)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:14px 0}
 .card h3{margin:0;border:none;padding:0;font-size:17px;display:inline}
@@ -122,6 +125,95 @@ function searchBody(q, stories, iocs) {
     parts.push('</table>');
   }
   return parts.join('\n');
+}
+
+// "Since this brief": watch events newer than the displayed run's send time — the same updates
+// the HIGH alert emails/Discord already carried, surfaced at the top of the page instead of
+// waiting to be found in the watch section. Only rendered on the newest day.
+function sinceStrip(d) {
+  const sentAt = new Date(d.run.finished_at || d.run.started_at).getTime();
+  const evs = (d.watchEvents || []).filter((e) => new Date(e.created_at).getTime() > sentAt)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  if (!evs.length) return '';
+  const isNoise = (e) => e.kind === 'poc_repo' && e.level !== 'HIGH';
+  const noise = evs.filter(isNoise).length;
+  const shown = evs.filter((e) => !isNoise(e)).slice(0, 10);
+  const hhmm = (iso) => String(iso).slice(11, 16);
+  const lines = shown.map((e) => `<li><span class="t">${esc(hhmm(e.created_at))}Z</span>${e.level === 'HIGH' ? '<span class="new">HIGH</span> ' : ''}<b>${esc(e.watch_title)}</b> — ${esc(e.summary)}${e.url ? ` <a href="${esc(e.url)}">source</a>` : ''}</li>`);
+  if (noise) lines.push(`<li class="s">+ ${noise} low-traction repo mention${noise === 1 ? '' : 's'} (folded)</li>`);
+  return `<div class="since"><b>Since this brief</b> <span class="s">· watch updates newer than this run; HIGH ones were already alerted</span><ul>${lines.join('')}</ul></div>`;
+}
+
+// Machine-first view (?view=agent): raw IoC values grouped one-per-line for direct paste into
+// hunt queries, plus the JSON contract carrying the same data with behaviors and exposure.
+// Raw means NOT defanged — that is the point of this view; defang before quoting elsewhere.
+function agentIocMap(d) {
+  const flat = new Map(); // type -> Set(raw value)
+  const add = (type, v) => { if (!type || !v) return; if (!flat.has(type)) flat.set(type, new Set()); flat.get(type).add(String(v)); };
+  for (const s of d.analyzed) for (const i of [...s.newIocs, ...s.repeatIocs]) add(i.type, i.value_norm);
+  for (const e of d.watchEvents || []) for (const i of e.assessment?.new_iocs || []) add(i.type, i.value);
+  return flat;
+}
+
+function agentBody(d, days) {
+  const flat = agentIocMap(d);
+  const cves = [...new Set(d.analyzed.flatMap((s) => s.cves || []))];
+  const actors = [...new Set(d.analyzed.map((s) => s.threat_actor).filter(Boolean))];
+  const malware = [...new Set(d.analyzed.map((s) => s.malware_family).filter(Boolean))];
+  const parts = [
+    '<p class="s">Machine-first view of this brief. IoC values are <b>raw, not defanged</b>, one per line, ready for hunt queries — defang before pasting into chat or email. Everything here is public OSINT; the exposure and behavior detail lives in the JSON.</p>',
+    `<h3 style="border:none;padding-top:0">Endpoints</h3><pre>GET /?view=agent&amp;format=json          this brief as JSON (stories, behaviors, exposure, IoCs, watch events)
+GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${days.map((x) => esc(x.date)).join(', ')}
+GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)</pre>`,
+  ];
+  for (const [type, set] of flat) parts.push(`<h3>${esc(type)} (${set.size})</h3><pre>${[...set].map(esc).join('\n')}</pre>`);
+  if (!flat.size) parts.push('<p class="s">No IoCs in this brief or the last 48 h of watch events.</p>');
+  if (cves.length) parts.push(`<h3>CVEs (${cves.length})</h3><pre>${cves.map(esc).join('\n')}</pre>`);
+  if (actors.length) parts.push(`<h3>Threat actors</h3><pre>${actors.map(esc).join('\n')}</pre>`);
+  if (malware.length) parts.push(`<h3>Malware families</h3><pre>${malware.map(esc).join('\n')}</pre>`);
+  parts.push(`<h3>Stories (${d.analyzed.length})</h3><ul>`
+    + d.analyzed.map((s) => `<li><b>P${s.priority ?? 3}</b> ${esc(s.title)}${(s.cves || []).length ? ` <span class="s">${esc(s.cves.join(' '))}</span>` : ''}</li>`).join('')
+    + '</ul>');
+  return parts.join('\n');
+}
+
+function agentJson(d, days) {
+  return {
+    kind: 'cutsign.brief',
+    date: d.date,
+    run: String(d.run.id),
+    generated: new Date().toISOString(),
+    note: 'Public OSINT only. IoC values are raw (not defanged) for direct query use.',
+    days: days.map((x) => x.date),
+    endpoints: { brief: '/?view=agent&format=json&d=YYYY-MM-DD', search: '/?q=TERM&format=json' },
+    stories: d.analyzed.map((s) => ({
+      title: s.title,
+      priority: s.priority ?? 3,
+      deep_read: !!s.selected,
+      severity: s.severity || null,
+      cves: s.cves || [],
+      threat_actor: s.threat_actor || null,
+      malware_family: s.malware_family || null,
+      summary: s.summary || '',
+      priority_reason: s.priority_reason || null,
+      exposure: s.raw_iocs?.exposure || null,
+      update_of: s.updateOf ? (s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)) : null,
+      behaviors: (s.behaviors || []).map((b) => ({
+        attack_technique: b.attack_technique || null, kind: b.pattern_kind, parent: b.parent || null,
+        children: b.children || [], log_source: b.log_source || null, time_window: b.time_window || null,
+        vendor_stated: !!b.vendor_stated, novel: !!b.novel,
+      })),
+      iocs: [...s.newIocs, ...s.repeatIocs].map((i) => ({
+        type: i.type, value: i.value_norm, role: i.role || null, new: i.isNew,
+        seen_count: i.seen_count ?? null, first_seen: i.first_seen_at ? String(i.first_seen_at).slice(0, 10) : null,
+      })),
+      sources: s.source_urls || [],
+    })),
+    watch_events_48h: (d.watchEvents || []).map((e) => ({
+      at: e.created_at, level: e.level, kind: e.kind, watch: e.watch_title,
+      summary: e.summary, url: e.url || null, new_iocs: e.assessment?.new_iocs || [],
+    })),
+  };
 }
 
 // Executive view: verdict-shaped cards for the stories that matter (deep reads and P1/P2),
@@ -179,9 +271,27 @@ export default async function handler(req, res) {
   try {
     const store = supabaseStore();
 
+    const json = req.query.format === 'json';
+
     const qraw = String(req.query.q || '').trim().slice(0, 80);
     if (qraw) {
       const [stories, iocs] = await Promise.all([store.searchStories(qraw), store.searchIocs(qraw)]);
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify({
+          kind: 'cutsign.search', q: qraw, generated: new Date().toISOString(),
+          note: 'Public OSINT only. IoC values are raw (not defanged) for direct query use.',
+          stories: stories.map((s) => ({
+            title: s.title, brief_date: s.brief_date || null, priority: s.priority ?? 3, deep_read: !!s.selected,
+            severity: s.severity || null, cves: s.cves || [], threat_actor: s.threat_actor || null,
+            malware_family: s.malware_family || null, summary: s.summary || '',
+          })),
+          iocs: iocs.map((i) => ({
+            type: i.type, value: i.value_norm, seen_count: i.seen_count,
+            first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null,
+          })),
+        }, null, 1));
+      }
       return res.status(200).send(doc(`Cutsign — search “${qraw}”`,
         searchForm(qraw) + '<nav class="tabs"><a href="/">← latest brief</a></nav>',
         `<div class="w">${searchBody(qraw, stories, iocs)}</div>`,
@@ -201,14 +311,19 @@ export default async function handler(req, res) {
     const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
     const want = String(req.query.d || '').slice(0, 10);
     const pick = days.find((x) => x.date === want) || days[0];
-    const ciso = req.query.view === 'ciso';
-    const q = (date) => `/?d=${encodeURIComponent(date)}${ciso ? '&view=ciso' : ''}`;
+    const view = ['ciso', 'agent'].includes(req.query.view) ? req.query.view : '';
+    const q = (date) => `/?d=${encodeURIComponent(date)}${view ? `&view=${view}` : ''}`;
 
     const d = await buildDigestData(store, pick.run);
     try { // web view: recent watch events regardless of digested/notified state
       const cutoff = Date.now() - 48 * 3600 * 1000;
       d.watchEvents = (await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff);
     } catch { /* watches table absent — keep whatever buildDigestData found */ }
+
+    if (view === 'agent' && json) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.status(200).send(JSON.stringify(agentJson(d, days), null, 1));
+    }
 
     // analyst view: full (level 0) email body, minus the email-only chrome; if render.js markup
     // drifts these strips become no-ops and the page just shows a little extra, never breaks
@@ -222,9 +337,10 @@ export default async function handler(req, res) {
         .replace(/<hr>\s*<p class="s">Reply with freeform[\s\S]*?<\/p>/, '');           // email reply footer
     };
 
-    const tabs = `<nav class="tabs">${ciso
-      ? `<a href="/?d=${encodeURIComponent(pick.date)}">Analyst</a><span>CISO</span>`
-      : `<span>Analyst</span><a href="/?d=${encodeURIComponent(pick.date)}&view=ciso">CISO</a>`}</nav>`;
+    const tabLink = (v, label) => view === v
+      ? `<span>${label}</span>`
+      : `<a href="/?d=${encodeURIComponent(pick.date)}${v ? `&view=${v}` : ''}">${label}</a>`;
+    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}</nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
@@ -233,8 +349,11 @@ export default async function handler(req, res) {
       <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0)}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0)}${tile(d.restatedIocCount, 'restated IoCs')}${tile(d.updateCount, 'story updates')}${tile((d.watchEvents || []).length, 'watch events 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'))}</div>`;
 
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
-    const inner = `${hero}<div class="w">${ciso ? cisoBody(d) : analystBody()}</div>`;
-    return res.status(200).send(doc(`Cutsign — ${d.date}${ciso ? ' — CISO view' : ''}`, tabs + searchForm('') + nav, inner, foot));
+    const strip = view !== 'agent' && pick.date === days[0].date ? sinceStrip(d) : '';
+    const body = view === 'ciso' ? cisoBody(d) : view === 'agent' ? agentBody(d, days) : analystBody();
+    const inner = `${hero}${strip}<div class="w">${body}</div>`;
+    const viewTag = view === 'ciso' ? ' — CISO view' : view === 'agent' ? ' — Agent view' : '';
+    return res.status(200).send(doc(`Cutsign — ${d.date}${viewTag}`, tabs + searchForm('') + nav, inner, foot));
   } catch (e) {
     return res.status(500).send(doc('Cutsign', '', `<p class="bad">Error rendering page: ${esc(e.message)}</p>`, 'Cutsign'));
   }
