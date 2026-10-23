@@ -139,7 +139,7 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
-      <tr><td>Vendor rules</td><td><a href="https://docs.gitlab.com/releases/19/">GitLab</a></td><td><span class="ok">Published</span> — two Sigma detections against GitLab application logs: <b>"Onigmo native worker crash"</b> and <b>"Org mode render error burst"</b>; run both over logs back to Oct 20</td></tr>
+      <tr><td>Vendor</td><td><a href="https://docs.gitlab.com/releases/19/">GitLab</a></td><td><span class="ok">Patched + rules published</span> — fixes across seven version lines Oct 21; <b>no workaround and preconditions undisclosed</b>; two Sigma detections against GitLab application logs: <b>"Onigmo native worker crash"</b> and <b>"Org mode render error burst"</b> — run both back to Oct 20. Release post moved in their docs reorg; patch feed: <span class="v">docs.gitlab.com/releases/patch-releases.xml</span></td></tr>
       <tr><td>VM scanners</td><td>Qualys / Tenable / Rapid7</td><td><span class="bad">Nothing published</span> found for this CVE as of Oct 23 — version checks will come; verify in each console before relying on scan results</td></tr>
       <tr><td>SIEM content</td><td><a href="https://socprime.com/blog/cve-2026-110264-analysis/">SOC Prime</a></td><td><span class="ok">Analysis published</span>; rule content behind their platform</td></tr>
       <tr><td>Community</td><td>GitHub / Nuclei</td><td><span class="bad">PoC public</span> (OppositDeer repo and mirrors — unverified, treat as hostile); no Nuclei template found yet</td></tr>

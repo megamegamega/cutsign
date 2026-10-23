@@ -162,6 +162,7 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
+      <tr><td>Vendor</td><td><a href="https://nodejs.org/en/blog/vulnerability/october-2026-security-releases">Node.js project</a></td><td><span class="ok">Fixed releases Oct 21</span> (22.23.4 / 24.22.1 / 26.12.1) — <b>no workarounds published for any of the ten</b>; EOL lines get nothing (commercial support only via OpenJS Ecosystem Sustainability partners); snapshot/SEA artifacts need rebuilding on a patched runtime; official per-host checker <a href="https://github.com/nodejs/is-my-node-vulnerable"><code>is-my-node-vulnerable</code></a></td></tr>
       <tr><td rowspan="3">VM scanners</td><td><a href="https://blog.qualys.com/product-tech/2026/10/23/node-js-patches-brotli-remote-code-execution-flaw-find-vulnerable-runtimes-before-attackers-do">Qualys</a></td><td><span class="ok">QID <span class="v">389117</span></span> — covers CVE-2026-105481 / -105482 / -106069 / -106072 / -106073 / -106074 / -111497; flags builds below 22.23.4 / 24.22.1 / 26.12.1</td></tr>
       <tr><td><a href="https://www.tenable.com/cve/CVE-2026-111497">Tenable</a></td><td><span class="bad">No Nessus plugin yet</span> for the October release — newest Node.js plugin still covers July 2026. CVE page is live (9.8 CVSS v3.1)</td></tr>
       <tr><td>Rapid7</td><td><span class="bad">Nothing published</span> — check InsightVM content release notes</td></tr>

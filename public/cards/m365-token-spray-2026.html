@@ -131,8 +131,8 @@ a{color:var(--ink)}
     <h2>Detection coverage — as of Oct 23</h2>
     <table>
       <tr><th>Category</th><th>Source</th><th>Status</th></tr>
-      <tr><td>Primary research</td><td><a href="https://www.huntress.com/blog/token-replay-spray">Huntress</a></td><td><span class="ok">Full hunt package</span> — six published behavior hunts (sign-in shape, device naming, MFA churn, inbox rules, error-code triage) rendering live below; response guidance: revoke sessions, reset passwords, audit devices/MFA/rules</td></tr>
       <tr><td>Platform</td><td>Microsoft Entra</td><td><span class="ok">Partial</span> — Entra ID Protection "verified threat actor IP" detections flagged campaign IPs; no dedicated Microsoft advisory found. CA enforcement is the platform-native block</td></tr>
+      <tr><td>Primary research</td><td><a href="https://www.huntress.com/blog/token-replay-spray">Huntress</a></td><td><span class="ok">Full hunt package</span> — six published behavior hunts (sign-in shape, device naming, MFA churn, inbox rules, error-code triage) rendering live below; response guidance: revoke sessions, reset passwords, audit devices/MFA/rules</td></tr>
       <tr><td>Precedent</td><td><a href="https://support.huntress.io/hc/en-us/articles/52930010910867-June-2026-LSHIY-LLC-Token-Spray-Campaign">Huntress — June campaign</a></td><td><span class="ok">Pattern recurs</span> — near-identical June 2026 campaign from LSHIY LLC infrastructure; detections keyed to the /24 alone will miss the next wave</td></tr>
       <tr><td>VM / EDR</td><td>—</td><td><span class="bad">Not applicable</span> — no vulnerability; identity-log hunting and CA policy are the whole game</td></tr>
     </table>
