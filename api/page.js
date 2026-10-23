@@ -202,12 +202,13 @@ function sinceStrip(d) {
   const evs = (d.watchEvents || []).filter((e) => new Date(e.created_at).getTime() > sentAt)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   if (!evs.length) return '';
-  const isNoise = (e) => e.kind === 'poc_repo' && e.level !== 'HIGH';
+  // same materiality bar as the watch section: below HIGH with no actionable artifact = noise
+  const isNoise = (e) => e.level !== 'HIGH' && !e.assessment?.new_iocs?.length && !e.assessment?.deep;
   const noise = evs.filter(isNoise).length;
   const shown = evs.filter((e) => !isNoise(e)).slice(0, 10);
   const hhmm = (iso) => String(iso).slice(11, 16);
   const lines = shown.map((e) => `<li><span class="t">${esc(hhmm(e.created_at))}Z</span>${e.level === 'HIGH' ? '<span class="new">HIGH</span> ' : ''}<b>${esc(e.watch_title)}</b> — ${esc(e.summary)}${e.url ? ` <a href="${esc(e.url)}">source</a>` : ''}</li>`);
-  if (noise) lines.push(`<li class="s">+ ${noise} low-traction repo mention${noise === 1 ? '' : 's'} (folded)</li>`);
+  if (noise) lines.push(`<li class="s">+ ${noise} low-signal update${noise === 1 ? '' : 's'} (folded)</li>`);
   return `<div class="since"><b>Since this brief</b> <span class="s">· watch updates newer than this run; HIGH ones were already alerted</span><ul>${lines.join('')}</ul></div>`;
 }
 
@@ -346,7 +347,11 @@ function cisoBody(d) {
   const pri = (s) => s.priority ?? 3;
   const cards = d.analyzed.filter((s) => s.selected || pri(s) <= 2);
   const rest = d.analyzed.filter((s) => !cards.includes(s));
-  const highs = (d.watchEvents || []).filter((e) => e.level === 'HIGH');
+  // HIGH only, and HIGH that stands on substance: a model-assessed material change, a KEV
+  // listing, or a high-traction PoC repo. A stray HIGH with no assessed substance stays off
+  // the executive view ("a watched blog changed" is never a development worth their click).
+  const highs = (d.watchEvents || []).filter((e) => e.level === 'HIGH'
+    && (e.assessment?.material || e.kind === 'kev_added' || e.kind === 'poc_repo'));
   const highByStory = new Map(); // watch_title -> events, newest last
   for (const e of highs) { if (!highByStory.has(e.watch_title)) highByStory.set(e.watch_title, []); highByStory.get(e.watch_title).push(e); }
   const p1 = cards.filter((s) => pri(s) === 1).length;

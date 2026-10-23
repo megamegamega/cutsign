@@ -57,10 +57,10 @@ export default async function handler(req, res) {
     catch { failures.push('iocs json: not parseable'); }
 
     // cards: index lists every manifest slug; each card page serves with its live hooks intact
-    const index = await get('/?view=cards');
-    check(index.status === 200, 'cards view -> ' + index.status);
+    const cardsPage = await get('/?view=cards');
+    check(cardsPage.status === 200, 'cards view -> ' + cardsPage.status);
     for (const c of CARDS) {
-      check(index.text.includes(`/cards/${c.slug}.html`), `cards view missing ${c.slug}`);
+      check(cardsPage.text.includes(`/cards/${c.slug}.html`), `cards view missing ${c.slug}`);
       const page = await get(`/cards/${c.slug}.html`);
       check(page.status === 200, `card ${c.slug} -> ${page.status}`);
       check(page.text.includes('id="pubguid"') && page.text.includes('id="since"'),
