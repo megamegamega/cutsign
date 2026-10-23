@@ -167,25 +167,35 @@ function agentBody(d, days) {
     '<p class="s">Machine-first view of this brief, <b>grouped by story</b> so indicator streams stay attributable. IoC values are <b>raw, not defanged</b>, one per line, ready for hunt queries — defang before pasting into chat or email. Everything here is public OSINT; exposure and behavior detail lives in the JSON (also grouped per story).</p>',
     `<h3 style="border:none;padding-top:0">Endpoints</h3><pre>GET /?view=agent&amp;format=json          this brief as JSON (stories, behaviors, exposure, IoCs, watch events)
 GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${days.map((x) => esc(x.date)).join(', ')}
+GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief + watch event, all time
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)</pre>`,
   ];
+
+  // watch-event IoCs join their story's stream when the watch tracks a story in this brief
+  // (directly, or via the brief story being an update of the watched one); the rest keep
+  // their own watch-titled streams below
+  const matched = new Map(); // story id -> [{type,value}]
+  const byWatch = new Map(); // watch title -> [{type,value}] (unmatched)
+  for (const e of d.watchEvents || []) {
+    const s = e.watch_story_id && d.analyzed.find((x) => x.id === e.watch_story_id || x.updates_story_id === e.watch_story_id);
+    for (const i of e.assessment?.new_iocs || []) {
+      const key = s ? s.id : e.watch_title;
+      const m = s ? matched : byWatch;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push({ type: i.type, value: i.value });
+    }
+  }
 
   // per-story streams: title, tags, then this story's values only
   for (const s of d.analyzed) {
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
+    const fromWatch = matched.get(s.id) || [];
     parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
-      iocs.length ? typeBlocks(iocs) : '<p class="s">No IoCs extracted for this story.</p>');
+      iocs.length ? typeBlocks(iocs) : fromWatch.length ? '' : '<p class="s">No IoCs extracted for this story.</p>',
+      fromWatch.length ? `<p class="s">From this story's watch (last 48 h):</p>${typeBlocks(fromWatch)}` : '');
   }
 
-  // watch-event IoCs keep their own streams too, grouped by the watch they belong to
-  const byWatch = new Map();
-  for (const e of d.watchEvents || []) {
-    for (const i of e.assessment?.new_iocs || []) {
-      if (!byWatch.has(e.watch_title)) byWatch.set(e.watch_title, []);
-      byWatch.get(e.watch_title).push({ type: i.type, value: i.value });
-    }
-  }
   if (byWatch.size) {
     parts.push('<h3>Watch streams — new IoCs in the last 48 h</h3>');
     for (const [title, iocs] of byWatch) parts.push(`<p class="k">${esc(title)}</p>${typeBlocks(iocs)}`);
@@ -212,6 +222,8 @@ function agentJson(d, days) {
     days: days.map((x) => x.date),
     endpoints: { brief: '/?view=agent&format=json&d=YYYY-MM-DD', search: '/?q=TERM&format=json' },
     stories: d.analyzed.map((s) => ({
+      id: s.id,
+      updates_story_id: s.updates_story_id || null,
       title: s.title,
       priority: s.priority ?? 3,
       deep_read: !!s.selected,
@@ -236,6 +248,7 @@ function agentJson(d, days) {
     })),
     watch_events_48h: (d.watchEvents || []).map((e) => ({
       at: e.created_at, level: e.level, kind: e.kind, watch: e.watch_title,
+      story_id: e.watch_story_id || null,
       summary: e.summary, url: e.url || null, new_iocs: e.assessment?.new_iocs || [],
     })),
   };
@@ -337,8 +350,47 @@ export default async function handler(req, res) {
     const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
     const want = String(req.query.d || '').slice(0, 10);
     const pick = days.find((x) => x.date === want) || days[0];
-    const view = ['ciso', 'agent'].includes(req.query.view) ? req.query.view : '';
+    const view = ['ciso', 'agent', 'iocs'].includes(req.query.view) ? req.query.view : '';
     const q = (date) => `/?d=${encodeURIComponent(date)}${view ? `&view=${view}` : ''}`;
+
+    // Cumulative IoC corpus: day-independent union of every stored indicator (iocs table)
+    // and every watch-event IoC (which live only in event assessments). Human view defangs;
+    // ?format=json carries raw values for machine use.
+    if (view === 'iocs') {
+      const [all, watchIocs] = await Promise.all([store.listAllIocs(), store.listWatchIocEvents()]);
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify({
+          kind: 'cutsign.iocs', generated: new Date().toISOString(),
+          note: 'Cumulative across all briefs and watch events. Values are raw (not defanged). Public OSINT only. Brief IoCs and watch IoCs may overlap.',
+          iocs: all.map((i) => ({ type: i.type, value: i.value_norm, seen_count: i.seen_count, first_seen: String(i.first_seen_at).slice(0, 10), context: i.context || null })),
+          watch_iocs: watchIocs.flatMap((e) => e.new_iocs.map((i) => ({ type: i.type, value: i.value, context: i.context || null, watch: e.watch, at: e.at }))),
+        }, null, 1));
+      }
+      const byType = new Map();
+      for (const i of all) { if (!byType.has(i.type)) byType.set(i.type, []); byType.get(i.type).push(i); }
+      const nWatch = watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
+      const parts = [`<p class="s">Every indicator Cutsign has stored — daily briefs plus watch events, newest first, defanged for reading. Raw machine version: <code>/?view=iocs&amp;format=json</code>. Per-day, story-attributed streams live on the Agent tab. Brief and watch sections can overlap.</p>`];
+      for (const [type, rows] of byType) {
+        parts.push(`<h3>${esc(type)} (${rows.length})</h3><table>`
+          + rows.map((i) => `<tr><td class="v">${esc(defang(i.type, i.value_norm))}</td><td>${i.seen_count}×</td><td>${esc(String(i.first_seen_at).slice(0, 10))}</td><td class="x">${esc(i.context || '')}</td></tr>`).join('')
+          + '</table>');
+      }
+      if (nWatch) {
+        parts.push(`<h3>From watch events (${nWatch})</h3>`);
+        for (const e of watchIocs) {
+          parts.push(`<p class="k">${esc(e.watch)} <span class="s">${esc(String(e.at).slice(0, 10))}</span></p><table>`
+            + e.new_iocs.map((i) => `<tr><td>${esc(i.type)}</td><td class="v">${esc(defang(i.type, i.value))}</td><td class="x">${esc(i.context || '')}</td></tr>`).join('')
+            + '</table>');
+        }
+      }
+      const total = all.length + nWatch;
+      const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${byType.size} types · cumulative across all briefs and watch events</p></div>`;
+      const tabsIocs = `<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span></nav>`;
+      return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
+        `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
+        'Cutsign · public OSINT digest · cumulative IoC corpus'));
+    }
 
     const d = await buildDigestData(store, pick.run);
     try { // web view: recent watch events regardless of digested/notified state
@@ -367,7 +419,7 @@ export default async function handler(req, res) {
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
       : `<a href="/?d=${encodeURIComponent(pick.date)}${v ? `&view=${v}` : ''}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}</nav>`;
+    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
