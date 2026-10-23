@@ -48,6 +48,7 @@ li{margin:5px 0}
 .ok{color:var(--ok);font-weight:600}
 .bad{color:var(--bad);font-weight:600}
 code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
 th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
@@ -69,7 +70,7 @@ a{color:var(--ink)}
   .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   a{text-decoration:none;color:inherit}
-  tr,li{break-inside:avoid}
+  tr,li,pre{break-inside:avoid}
   h2{break-after:avoid}
 }
 </style>
@@ -164,6 +165,23 @@ a{color:var(--ink)}
         </ul>
       </div>
     </div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">GitLab named two Sigma rules but the rule text is not in public sources, and scanners have nothing. The logic below reconstructs what those rules must look for, inferred from the flaw's shape (crafted regex → Onigmo crash during compile) — tune before trusting. These catch <b>failed</b> attempts; a clean exploit may leave neither.</p>
+    <p><b>Worker-crash canary</b> — regex engine overflows crash Ruby workers before they succeed:</p>
+    <pre># host telemetry on GitLab servers
+process.name IN (ruby, puma, sidekiq, gitlab-workhorse)
+termination.signal = SIGSEGV
+→ any occurrence on a GitLab host since Oct 20 is worth a look</pre>
+    <p><b>Render-endpoint error bursts</b> — the demonstrated path is a crafted Org-mode file render ("Org mode render error burst"):</p>
+    <pre># GitLab production_json.log / LB logs
+status = 500 AND (path contains preview_markdown OR render OR blob
+  OR requested file extension = .org)
+| bucket 10m, count by src_ip → alert on bursts from a single source</pre>
+    <p><b>Pre-patch inventory sweep</b> — find the instances nobody registered:</p>
+    <pre># network / asset data
+HTTP responses with header X-GitLab-* OR title "GitLab" on internal ranges
+→ cross-check each against the fixed-version table above</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

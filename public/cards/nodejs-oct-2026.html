@@ -48,6 +48,7 @@ li{margin:5px 0}
 .ok{color:var(--ok);font-weight:600}
 .bad{color:var(--bad);font-weight:600}
 code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
 th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
@@ -72,7 +73,7 @@ a{color:var(--ink)}
   .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   a{text-decoration:none;color:inherit}
-  tr,li{break-inside:avoid}
+  tr,li,pre{break-inside:avoid}
   h2{break-after:avoid}
 }
 </style>
@@ -193,6 +194,24 @@ a{color:var(--ink)}
         </ul>
       </div>
     </div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">No vendor-published queries exist for this flaw. The logic below is inferred from the exploit shape (crafted Brotli → memory corruption → crash or code execution), not published by anyone — tune to your environment and expect noise. Failed exploitation is loud; success may be quiet.</p>
+    <p><b>Node crash canary</b> — on standard builds the public PoC crashes the process, so a burst of Node crashes is the cheapest tripwire:</p>
+    <pre># EDR / syslog / crash telemetry
+process.name = node (or your bundled runtime names)
+termination.signal IN (SIGSEGV, SIGABRT, SIGBUS)
+→ alert when count per host > baseline over 1h; triage what it was fetching</pre>
+    <p><b>Node spawning shells</b> — generic post-exploitation shape for any runtime RCE:</p>
+    <pre># EDR process lineage
+parent.name IN (node, nodejs)
+child.name IN (sh, bash, dash, curl, wget, python*, perl)
+exclude: build/CI hosts where this is routine</pre>
+    <p><b>Response-side exposure</b> — the riskier path is your servers fetching Brotli from outside; proxy logs can show which services actually do:</p>
+    <pre># egress proxy / NetFlow with HTTP metadata
+src IN (server subnets) AND response.content_encoding = br
+AND dest.domain not seen before (e.g. first_seen < 7d)
+→ inventory which apps decode untrusted Brotli at all; those patch first</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

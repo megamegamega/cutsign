@@ -48,6 +48,7 @@ li{margin:5px 0}
 .ok{color:var(--ok);font-weight:600}
 .bad{color:var(--bad);font-weight:600}
 code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
 th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
@@ -69,7 +70,7 @@ a{color:var(--ink)}
   .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   a{text-decoration:none;color:inherit}
-  tr,li{break-inside:avoid}
+  tr,li,pre{break-inside:avoid}
   h2{break-after:avoid}
 }
 </style>
@@ -179,6 +180,24 @@ a{color:var(--ink)}
         </ul>
       </div>
     </div>
+
+    <h2>Inferred detections — no Sentinel? same hunt, generic</h2>
+    <p class="src">Microsoft's KQL assumes Defender XDR / Sentinel tables. The same hunt translated to generic logic over exported Entra logs, for any SIEM or even a spreadsheet:</p>
+    <p><b>Service-principal sign-ins</b> — the core question, tool-agnostic:</p>
+    <pre># exported Entra SP sign-in logs, Oct 1 → now
+appId IN (the seven appIds above)
+AND NOT (source = Azure private IPv6 AND user_agent = kiota-dotnet)
+→ review every remaining row; Python/curl UAs from VPS space is the campaign</pre>
+    <p><b>Persistence audit</b> — a service principal doing admin things is the tell:</p>
+    <pre># Entra audit log, Oct 13 → now
+operation IN ("Add service principal credentials", "Add member to role",
+  "Update application", "Consent to application")
+AND initiated_by is a service principal (not a user)
+→ every hit gets a human review; self-role-assignment = incident</pre>
+    <p><b>Network fallback</b> — if Entra retention fails you, the infrastructure is still checkable:</p>
+    <pre># firewall / proxy / flow logs
+dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
+→ any match from identity infrastructure or egress since Oct 1</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

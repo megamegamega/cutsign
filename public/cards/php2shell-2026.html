@@ -48,6 +48,7 @@ li{margin:5px 0}
 .ok{color:var(--ok);font-weight:600}
 .bad{color:var(--bad);font-weight:600}
 code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
 th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
@@ -69,7 +70,7 @@ a{color:var(--ink)}
   .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   a{text-decoration:none;color:inherit}
-  tr,li{break-inside:avoid}
+  tr,li,pre{break-inside:avoid}
   h2{break-after:avoid}
 }
 </style>
@@ -180,6 +181,23 @@ a{color:var(--ink)}
         </ul>
       </div>
     </div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">The behaviors above are published (Wiz, Huntress) but no vendor has shipped ready-made queries. These translate the published behaviors into generic query logic — tune thresholds to your traffic.</p>
+    <p><b>Exploit attempt shape</b> — multipart request then memory error, from the same source:</p>
+    <pre># web / LB logs
+multipart POST (content-type contains multipart/form-data)
+followed within 60s by status 500 from same src_ip
+| count by src_ip over 10m → investigate bursts; mass probing will be loud</pre>
+    <p><b>Memory-leak primitive</b> — the PHPSESSID leak is visible in responses:</p>
+    <pre># proxy / web logs with response headers
+response Set-Cookie contains PHPSESSID AND cookie length > 1KB
+→ near-zero false positives; any hit is an exploitation attempt that got traction</pre>
+    <p><b>Post-exploitation lineage</b> — the published Huntress behavior as a query:</p>
+    <pre># EDR process lineage
+parent.name IN (php-fpm, php-cgi, apache2, httpd)
+child.name IN (sh, bash, curl, wget, perl, python*)
+also: php-fpm "child exited on signal" bursts in syslog (worker churn)</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">
