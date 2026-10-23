@@ -97,6 +97,12 @@ const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta
 
 const tile = (n, label, hot) => `<div class="tile${hot ? ' hot' : ''}"><div class="n">${n}</div><div class="l">${esc(label)}</div></div>`;
 
+// compact one-line behavior: ATT&CK link, kind, process chain, where to hunt
+const behaviorLine = (b) => `<div class="s">${b.attack_technique
+  ? `<a href="https://attack.mitre.org/techniques/${esc(String(b.attack_technique).replace('.', '/'))}/">${esc(b.attack_technique)}</a> · ` : ''}`
+  + `${esc(b.pattern_kind)}: <code>${esc(b.parent || '?')}</code>${b.children?.length ? ' → ' + b.children.map(esc).join(', ') : ''}`
+  + `${b.log_source ? ` · hunt in: ${esc(b.log_source)}` : ''}</div>`;
+
 const searchForm = (q) => `<form class="search" action="/"><input type="search" name="q" placeholder="search stories & IoCs" value="${esc(q)}" maxlength="80"></form>`;
 
 // Search results across every stored brief: extracted stories (title/summary/actor/malware/CVE)
@@ -186,12 +192,18 @@ GET /?q=TERM&amp;format=json               search every stored brief (stories + 
     }
   }
 
-  // per-story streams: title, tags, then this story's values only
+  // per-story streams: title, tags, one-line context, behaviors + detection guidance, then
+  // this story's values only
   for (const s of d.analyzed) {
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
     const fromWatch = matched.get(s.id) || [];
     parts.push(`<h3>P${s.priority ?? 3} · ${esc(s.title)}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
+      s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
+      (s.behaviors || []).length ? `<p class="k">Behaviors (${s.behaviors.length})</p>${s.behaviors.map(behaviorLine).join('')}` : '',
+      (s.guidance || []).length ? `<p class="k">Detection guidance (${s.guidance.length})</p>`
+        + s.guidance.map((g) => (/^https?:\/\//i.test(g.url || '') ? `<p class="s"><a href="${esc(g.url)}">source</a>${g.publisher_tier ? ` · tier ${esc(String(g.publisher_tier))}` : ''}${g.log_source ? ` · ${esc(g.log_source)}` : ''}</p>` : '')
+          + `<pre>${esc(g.raw)}</pre>`).join('') : '',
       iocs.length ? typeBlocks(iocs) : fromWatch.length ? '' : '<p class="s">No IoCs extracted for this story.</p>',
       fromWatch.length ? `<p class="s">From this story's watch (last 48 h):</p>${typeBlocks(fromWatch)}` : '');
   }
@@ -239,6 +251,9 @@ function agentJson(d, days) {
         attack_technique: b.attack_technique || null, kind: b.pattern_kind, parent: b.parent || null,
         children: b.children || [], log_source: b.log_source || null, time_window: b.time_window || null,
         vendor_stated: !!b.vendor_stated, novel: !!b.novel,
+      })),
+      detection_guidance: (s.guidance || []).map((g) => ({
+        text: g.raw, url: g.url || null, publisher_tier: g.publisher_tier ?? null, log_source: g.log_source || null,
       })),
       iocs: [...s.newIocs, ...s.repeatIocs].map((i) => ({
         type: i.type, value: i.value_norm, role: i.role || null, new: i.isNew,
@@ -288,7 +303,8 @@ function cisoBody(d) {
     const p = pri(s);
     parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`,
-        ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}</div>`,
+        ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}`
+      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + '</div>',
       `<p style="margin:8px 0">${esc(s.summary)}</p>`,
       exposureBox(s.raw_iocs?.exposure),
       `<p class="s"><b>Why it matters:</b> ${esc(s.priority_reason || '')}</p></div>`);
@@ -396,10 +412,6 @@ export default async function handler(req, res) {
       // behaviors + published detection guidance for every carded story
       const storyIds = [...cards.keys()];
       const [behaviors, evidence] = await Promise.all([store.listBehaviors(storyIds), store.listEvidence(storyIds)]);
-      const bLine = (b) => `<div class="s">${b.attack_technique
-        ? `<a href="https://attack.mitre.org/techniques/${esc(String(b.attack_technique).replace('.', '/'))}/">${esc(b.attack_technique)}</a> · ` : ''}`
-        + `${esc(b.pattern_kind)}: <code>${esc(b.parent || '?')}</code>${b.children?.length ? ' → ' + b.children.map(esc).join(', ') : ''}`
-        + `${b.log_source ? ` · hunt in: ${esc(b.log_source)}` : ''}</div>`;
       const gLine = (g) => `<li>${esc(String(g.raw || '').split('\n')[0].slice(0, 300))}`
         + `${g.publisher_tier ? ` <span class="c">tier ${esc(String(g.publisher_tier))}</span>` : ''}`
         + `${/^https?:\/\//i.test(g.url || '') ? ` <a href="${esc(g.url)}">link</a>` : ''}`
@@ -427,7 +439,7 @@ export default async function handler(req, res) {
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
           + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
           `<table>${uniq.map((i) => row(i, s.id)).join('')}</table>`,
-          behs.length ? `<details><summary class="s">Behaviors (${behs.length})</summary>${behs.map(bLine).join('')}</details>` : '',
+          behs.length ? `<details><summary class="s">Behaviors (${behs.length})</summary>${behs.map(behaviorLine).join('')}</details>` : '',
           guid.length ? `<details><summary class="s">Detection guidance (${guid.length})</summary><ul class="s">${guid.map(gLine).join('')}</ul></details>` : '');
         for (const e of c.watch) {
           parts.push(`<p class="s" style="margin:8px 0 2px">via watch · ${esc(String(e.at).slice(0, 10))}</p><table>`
