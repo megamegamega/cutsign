@@ -8,6 +8,7 @@
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
 import { CARDS, cardByStory } from '../lib/cards.js';
+import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 
 // "Verdict card" chip for a story that has a hand-written card in public/cards/
 const verdictChip = (storyId) => {
@@ -248,7 +249,11 @@ GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${da
 GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief + watch event, all time
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)
 GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, lane, cves, story_ids, url)
-GET /cards/&lt;slug&gt;.html                 a verdict card; stories here carry verdict_card when one exists</pre>`,
+GET /cards/&lt;slug&gt;.html                 a verdict card; stories here carry verdict_card when one exists
+
+Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
+(see vocab.log_source_keys) for mapping to your own data. evidence_samples are the exact strings the
+sources printed (replay targets). exposure is null when the sources stated nothing.</pre>`,
   ];
 
   // watch-event IoCs join their story's stream when the watch tracks a story in this brief
@@ -312,6 +317,7 @@ function agentJson(d, days) {
     note: 'Public OSINT only. IoC values are raw (not defanged) for direct query use.',
     days: days.map((x) => x.date),
     endpoints: { brief: '/?view=agent&format=json&d=YYYY-MM-DD', search: '/?q=TERM&format=json' },
+    vocab: { log_source_keys: LOG_SOURCE_KEYS },
     stories: d.analyzed.map((s) => ({
       id: s.id,
       updates_story_id: s.updates_story_id || null,
@@ -330,12 +336,17 @@ function agentJson(d, days) {
       update_of: s.updateOf ? (s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)) : null,
       behaviors: (s.behaviors || []).map((b) => ({
         attack_technique: b.attack_technique || null, kind: b.pattern_kind, parent: b.parent || null,
-        children: b.children || [], log_source: b.log_source || null, time_window: b.time_window || null,
-        vendor_stated: !!b.vendor_stated, novel: !!b.novel,
+        children: b.children || [], log_source: b.log_source || null, log_source_keys: logSourceKeys(b.log_source),
+        time_window: b.time_window || null, vendor_stated: !!b.vendor_stated, novel: !!b.novel,
       })),
       detection_guidance: (s.guidance || []).map((g) => ({
-        text: g.raw, url: g.url || null, publisher_tier: g.publisher_tier ?? null, log_source: g.log_source || null,
+        text: g.raw, url: g.url || null, publisher_tier: g.publisher_tier ?? null,
+        log_source: g.log_source || null, log_source_keys: logSourceKeys(g.log_source),
         source_published: (s.sources || []).find((x) => x.url === g.url)?.published_at || null,
+      })),
+      evidence_samples: (s.samples || []).map((e) => ({
+        kind: e.kind, raw: e.raw, log_source: e.log_source || null, log_source_keys: logSourceKeys(e.log_source),
+        attack_technique: e.attack_technique || null,
       })),
       iocs: [...s.newIocs, ...s.repeatIocs].map((i) => ({
         type: i.type, value: i.value_norm, role: i.role || null, new: i.isNew,
