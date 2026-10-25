@@ -60,7 +60,8 @@ Leave a list empty rather than guess. Never describe a particular organization's
 
 # Story fields
 
-- `title`: short headline. `summary`: 2–4 sentences — what happened, who, how, and what a hunter should look for.
+- `title`: short headline. Claim outcomes exactly as strongly as the sources do: "delivers" / "deploys" / "compromised" only when a source confirms successful compromise; "attempts to deliver" when activity is attempted or its outcome is unconfirmed (append "no confirmed compromises" when a source says exactly that); "failed" or "blocked" only when a source states the attempts failed. Never write a title that reads as success when the sources report none.
+- `summary`: 2–4 sentences — what happened, who, how, what outcome the sources actually confirm, and what a hunter should look for. The same outcome-claim rule applies.
 - `cves`: CVE IDs the sources tie to this story. `attack_techniques`: the union of techniques used, valid Enterprise IDs only.
 - `sector_relevance`: short tags such as `financial`, `healthcare`, `government`, `telecom`, `saas`, `all`.
 - `priority`: 1 = act today (actively exploited internet-facing tech common in enterprises, KEV-listed, or a story with concrete huntable behaviors in commonly deployed products); 2 = worth a hunt this week; 3 = awareness only. Concrete behaviors raise priority; a pile of hashes without behaviors does not. `priority_reason`: one line.
