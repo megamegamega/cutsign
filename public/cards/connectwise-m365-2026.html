@@ -91,7 +91,7 @@ a{color:var(--ink)}
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Active campaign</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Storm-0940 (China-aligned)</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE — identity abuse</span>
-    <span class="asof">as of 2026-10-23</span>
+    <span class="asof">as of 2026-10-25</span>
   </div>
   <div class="inner">
     <h1>ConnectWise Cloud Backup supply chain compromise</h1>
@@ -147,14 +147,16 @@ a{color:var(--ink)}
       <li>Password spray: <span class="v">187.15.88-90[.]x</span> range, Oct 10–14</li>
       <li>Suspicious-leaning user agents: <code>Python-urllib/3.12</code>, <code>python-requests/*</code>, <code>curl/*</code> — expected vendor traffic is <code>kiota-dotnet</code> from Azure private IPv6</li>
       <li>Raw values: <a href="/?view=iocs#s-e0286e2a">IoC corpus cards</a> (16 + 11 indicators across the two stories)</li>
+      <li><b>All-zeros ServicePrincipalId</b> (<code>00000000-0000-0000-0000-000000000000</code>) on SP sign-ins for the seven appIds: per Chorus Cyber, this is what the campaign's token requests look like in a tenant that <b>never consented</b> the app — the sign-in is logged, the app holds no permissions there, so the entry alone does not mean access. Chorus's own queries exclude these rows. Read it the other way too: an all-zeros sign-in <i>followed by</i> successful Graph activity for the same appId would contradict that assumption and is a finding (inferred test below)</li>
     </ul>
 
-    <h2>Detection coverage — as of Oct 23</h2>
+    <h2>Detection coverage — as of Oct 25</h2>
     <table>
       <tr><th>Source</th><th>Status</th></tr>
       <tr><td><a href="https://www.connectwise.com/company/trust/advisories">ConnectWise</a></td><td><span class="ok">Acted + guide published</span> — seven app identities disabled 07:00 UTC Oct 17 (Trust Center); Cloud Backup / SaaS Security / Cloud Management suspended. The Oct 18 <b>technical investigation &amp; remediation guide</b> is the vendor playbook: per-tenant checklist covering SP sign-in review (window Oct 13 → now, extend to Oct 1), Entra audit, Conditional Access review, <b>federated credentials on locally registered apps</b>, and Exchange/Purview audit — run it in every tenant including dormant connections; it covers resold/managed tenants too (reviewing your own tenant does not review the customer's). Live help exists: <b>technical webinars every two hours since Oct 20 18:00 UTC</b> (walkthrough of Entra sign-in/audit logs, app registrations, credentials, permissions — <a href="https://www.connectwise.com/webinars/cloud-backup-technical-investigation-and-remediation">register and pick a session</a>; share the invite with customer admins), plus a video walkthrough of guide steps. The <a href="https://www.connectwise.com/company/trust/advisories">Trust Center advisory</a> updates several times daily (20 updates Oct 16–23). Caveats: completing the checklist does not establish a tenant was unaffected; previously issued tokens may remain valid until expiry; escalation route <span class="v">SecurityPartnerSupport@ConnectWise.com</span> (tenant/app IDs, UTC timestamps, correlation IDs — no secrets)</td></tr>
       <tr><td><a href="https://www.microsoft.com/en-us/security/blog/2026/10/21/storm-0940-uses-artex-agentic-ai-connectwise-supply-chain-compromise/">Microsoft</a></td><td><span class="ok">Published</span> — Defender XDR alerts ("Application self-assigned Global Administrator role", "Unusual Microsoft Graph activity associated with Compromised ConnectWise Application") plus KQL for <code>OAuthAppInfo</code>, <code>EntraIdSpnSignInEvents</code>, <code>GraphAPIAuditEvents</code> and Sentinel <code>SigninLogs</code> in the Oct 21 Storm-0940 post (tier A)</td></tr>
       <tr><td><a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress</a></td><td><span class="ok">Published</span> — Entra review procedure: SP sign-ins by appId vs non-Azure source IPs, audit events (Add member to role / Update application / Add service principal credentials), secrets added since Oct 13, CA exclusions; disable (do not delete) the apps</td></tr>
+      <tr><td><a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber</a></td><td><span class="ok">Published (MSSP advisory, Oct 19, tier B)</span> — sign-in interpretation: a successful sign-in for the Cloud Backup app from the attacker IP can appear even where the product was never used; entries carry an <b>all-zeros ServicePrincipalId</b> and their queries exclude them, because an unconsented app has no permissions in the tenant. Artefacts to review beyond sign-ins: new secrets or certificates on enterprise applications and app registrations, directory roles held by ConnectWise/SkyKick apps, Conditional Access exclusions for those apps. Activity from Oct 13; credential use from Oct 15. Caveats: no queries printed ("our detection rule identifies this activity"); the IOC table is an image, not machine-readable; the seven appIds are referenced but not listed</td></tr>
       <tr><td><a href="https://www.cisa.gov/news-events/cybersecurity-advisories">CISA</a></td><td><span class="bad">No advisory found</span> as of Oct 23; no KEV entry (no CVE exists)</td></tr>
       <tr><td>VM scanners / EDR</td><td><span class="bad">Not applicable</span> — nothing to scan; coverage is Entra/Graph log review and the Microsoft/Huntress content above</td></tr>
     </table>
@@ -197,6 +199,13 @@ operation IN ("Add service principal credentials", "Add member to role",
   "Update application", "Consent to application")
 AND initiated_by is a service principal (not a user)
 → every hit gets a human review; self-role-assignment = incident</pre>
+    <p><b>Issuance-then-use</b> — tests the "no consent, no access" assumption instead of inheriting it (inferred; derived from the Chorus note above):</p>
+<pre># stage 1: exported Entra SP sign-in logs, Oct 1 → now
+service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
+→ set of appIds that obtained a token under an unresolved service principal
+# stage 2: Graph activity logs, same window
+appId IN (stage 1) AND response_status 200–299
+→ any row = the app acted despite "no permissions"; review requestUri per appId</pre>
     <p><b>Network fallback</b> — if Entra retention fails you, the infrastructure is still checkable:</p>
     <pre># firewall / proxy / flow logs
 dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
@@ -208,6 +217,7 @@ dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
       <li><span class="d">Oct 15</span><span>Stolen ConnectWise app credentials used to mint Graph tokens; SP sign-ins from 144.172.64[.]x begin</span></li>
       <li><span class="d">Oct 16–17</span><span>ConnectWise discloses; disables the seven app identities 07:00 UTC Oct 17 and suspends services; Huntress publishes</span></li>
       <li><span class="d">Oct 18</span><span>ConnectWise technical investigation &amp; remediation guide (new IPs .99/.60, UA discriminators, appId list)</span></li>
+      <li><span class="d">Oct 19</span><span>Chorus Cyber MSSP advisory: all-zeros ServicePrincipalId semantics for unconsented tenants; secrets/certificates, directory roles and CA exclusions as review artefacts</span></li>
       <li><span class="d">Oct 20</span><span>ConnectWise technical webinars begin — every two hours from 18:00 UTC; video walkthrough of guide steps posted Oct 19</span></li>
       <li><span class="d">Oct 21</span><span>Microsoft attributes to Storm-0940 using ARTEX agentic AI; publishes Defender XDR detections and hunting KQL</span></li>
       <li><span class="d">Oct 22–23</span><span>Sophos: sweep included tenants with no active subscription. No CISA advisory yet. Status (Oct 23 14:00 UTC): restoration testing expected complete by end of the weekend, backup-restore access early next week, phased re-enrollment after — keep affected connections disabled until vendor instructions</span></li>
@@ -220,6 +230,7 @@ dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
       <a href="https://www.bleepingcomputer.com/news/security/hackers-breach-microsoft-365-tenants-via-connectwise-supply-chain-attack/">BleepingComputer</a> ·
       <a href="https://thehackernews.com/2026/10/china-linked-hackers-use-artex-ai.html">The Hacker News — ARTEX attribution, Oct 22</a> ·
       <a href="https://brandefense.io/security-news/storm-0940-artex-connectwise-supply-chain-attack/">Brandefense — tenant checks</a> ·
+      <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber — advisory, Oct 19</a> ·
       <a href="https://www.connectwise.com/company/trust/advisories">ConnectWise Trust Center — live advisory</a>
     </p>
   </div>
@@ -234,7 +245,7 @@ dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-10-23', QUERY = 'connectwise';
+  const AS_OF = '2026-10-25', QUERY = 'connectwise';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
