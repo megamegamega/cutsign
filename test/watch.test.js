@@ -31,7 +31,7 @@ function world() {
   return w;
 }
 
-const assessment = (over = {}) => ({ relates: true, material: true, kinds: ['new_iocs'], summary: 'Vendor added a second C2 domain.', new_iocs: [{ type: 'domain', value: 'second-c2[.]net', context: 'new C2' }], ...over });
+const assessment = (over = {}) => ({ relates: true, material: true, kinds: ['new_iocs'], summary: 'Vendor added a second C2 domain.', new_iocs: [{ type: 'domain', value: 'second-c2[.]net', context: 'new C2' }], title_outdated: false, revised_title: null, ...over });
 
 async function setup(llm) {
   const out = captureOutputs();
@@ -110,6 +110,35 @@ test('unrelated new text → relates=false → no event, even when the model cal
   w.advisory = w.advisory.replace('</article>', '<p>New on our blog: three posts about different threats.</p></article>');
   await runWatchTick(store, { fetchImpl: w.fetch });
   assert.equal(store._tables.watch_events.length, 0);
+});
+
+test('a development that falsifies the title\'s outcome claim retitles story and watch in place', async () => {
+  const revised = 'NetScaler CVE-2026-88779 exploited in the wild — confirmed compromises reported';
+  const llm = { next: () => assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'A government entity was compromised via the flaw.', title_outdated: true, revised_title: revised }) };
+  const { store } = await setup(llm);
+  const t = store._tables;
+  const before = t.watches[0].title;
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  w.advisory = w.advisory.replace('</article>', '<p>Update: a government entity in Europe was compromised through this flaw.</p></article>');
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.notEqual(before, revised);
+  assert.equal(t.watches[0].title, revised);
+  assert.equal(t.stories.find((s) => s.id === t.watches[0].story_id).title, revised);
+  const ev = t.watch_events[0];
+  assert.deepEqual(ev.assessment.retitled, { from: before, to: revised });
+  assert.match(ev.summary, /Title revised/);
+});
+
+test('new IoCs alone never retitle, even if the model says so', async () => {
+  const llm = { next: () => assessment({ title_outdated: false, revised_title: 'Should be ignored' }) };
+  const { store } = await setup(llm);
+  const before = store._tables.watches[0].title;
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  w.advisory = w.advisory.replace('No file hashes were recovered.', 'Update: second-c2[.]net observed.');
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(store._tables.watches[0].title, before);
 });
 
 test('KEV listing and a new write-up naming the CVE are caught', async () => {
