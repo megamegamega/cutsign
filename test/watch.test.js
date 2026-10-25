@@ -36,7 +36,9 @@ const assessment = (over = {}) => ({ relates: true, material: true, kinds: ['new
 async function setup(llm) {
   const out = captureOutputs();
   const store = memoryStore();
-  const calls = installFakeLLM((u, n, req) => (req.schemaName === 'watch_assessment' ? llm.next(u) : defaultResponder(u)));
+  const calls = installFakeLLM((u, n, req) => (req.schemaName === 'watch_assessment' ? llm.next(u)
+    : req.schemaName === 'title_check' ? (llm.title ? llm.title(u) : { title_outdated: false, revised_title: null })
+      : defaultResponder(u)));
   await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
   await driveRuns(store, { fetchImpl: fakeFetch() });
   return { out, store, calls };
@@ -128,6 +130,28 @@ test('a development that falsifies the title\'s outcome claim retitles story and
   const ev = t.watch_events[0];
   assert.deepEqual(ev.assessment.retitled, { from: before, to: revised });
   assert.match(ev.summary, /Title revised/);
+});
+
+test('reconciliation retitles from developments that never passed through text assessment (KEV listing)', async () => {
+  const revised = 'NetScaler CVE-2026-88779 now in CISA KEV — exploitation confirmed';
+  let asked = 0;
+  const llm = { next: () => assessment({ material: false, kinds: [], new_iocs: [], summary: 'Recap.' }),
+    title: (u) => { asked++; assert.match(u, /kev_added/); return { title_outdated: true, revised_title: revised }; } };
+  const { store, out } = await setup(llm);
+  const t = store._tables;
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(asked, 0, 'nothing material yet → no title check');
+  w.kev = ['CVE-2026-88779'];
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(asked, 1);
+  assert.equal(t.watches[0].title, revised);
+  assert.equal(t.stories.find((s) => s.id === t.watches[0].story_id).title, revised);
+  assert.equal(t.watches[0].state.title_history.length, 1);
+  assert.ok(t.watches[0].state.title_checked_at);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ✎ retitled')));
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(asked, 1, 'already-checked developments are not re-asked');
 });
 
 test('new IoCs alone never retitle, even if the model says so', async () => {
