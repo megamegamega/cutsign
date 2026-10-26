@@ -155,7 +155,7 @@ a{color:var(--ink)}
       <tr><th>Source</th><th>Status</th></tr>
       <tr><td><a href="https://www.connectwise.com/company/trust/advisories">ConnectWise</a></td><td><span class="ok">Acted + guide published</span> — seven app identities disabled 07:00 UTC Oct 17 (Trust Center); Cloud Backup / SaaS Security / Cloud Management suspended. The Oct 18 <b>technical investigation &amp; remediation guide</b> is the vendor playbook: per-tenant checklist covering SP sign-in review (window Oct 13 → now, extend to Oct 1), Entra audit, Conditional Access review, <b>federated credentials on locally registered apps</b>, and Exchange/Purview audit — run it in every tenant including dormant connections; it covers resold/managed tenants too (reviewing your own tenant does not review the customer's). Live help exists: <b>technical webinars every two hours since Oct 20 18:00 UTC</b> (walkthrough of Entra sign-in/audit logs, app registrations, credentials, permissions — <a href="https://www.connectwise.com/webinars/cloud-backup-technical-investigation-and-remediation">register and pick a session</a>; share the invite with customer admins), plus a video walkthrough of guide steps. The <a href="https://www.connectwise.com/company/trust/advisories">Trust Center advisory</a> updates several times daily (20 updates Oct 16–23). Caveats: completing the checklist does not establish a tenant was unaffected; previously issued tokens may remain valid until expiry; escalation route <span class="v">SecurityPartnerSupport@ConnectWise.com</span> (tenant/app IDs, UTC timestamps, correlation IDs — no secrets)</td></tr>
       <tr><td><a href="https://www.microsoft.com/en-us/security/blog/2026/10/21/storm-0940-uses-artex-agentic-ai-connectwise-supply-chain-compromise/">Microsoft</a></td><td><span class="ok">Published</span> — Defender XDR alerts ("Application self-assigned Global Administrator role", "Unusual Microsoft Graph activity associated with Compromised ConnectWise Application") plus KQL for <code>OAuthAppInfo</code>, <code>EntraIdSpnSignInEvents</code>, <code>GraphAPIAuditEvents</code> and Sentinel <code>SigninLogs</code> in the Oct 21 Storm-0940 post (tier A)</td></tr>
-      <tr><td><a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Microsoft — Entra platform docs</a></td><td><span class="ok">Published (platform semantics, tier A)</span> — the all-zeros ServicePrincipalId is documented SP-less authentication; admin-center procedure: Sign-in logs → <b>Service principal sign-ins</b> tab → filter Service principal ID = <code>00000000-0000-0000-0000-000000000000</code> → read the Application ID per entry. <b>Documented blocking control:</b> "create a service principal for the app, and then disable the service principal. Disabling the app's service principal will block all future sign-in and authentication attempts by that app in your tenant" — applicable per appId in tenants that never consented Cloud Backup, and it makes the app targetable by Conditional Access. Retirement timeline per the <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog</a>: most resource apps frozen April 2025; traffic seen Feb 11–Mar 11 2025 allowed until March 31, 2026; low-volume clients notified with a month to register. No published list of exempt third-party apps; first-party Microsoft apps are exempt (<a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">verify via AppOwnerOrganizationId</a> f8cdef31-a31e-4b4a-93e4-5f571e91255a / 72f988bf-86f1-41af-91ab-2d7cd011db47). Caveat: a volunteer-moderator <a href="https://learn.microsoft.com/en-us/answers/questions/5580963/why-the-service-principal-ids-are-all-zero-in-the">Q&amp;A answer</a> (Oct 2025) notes an app can appear under Enterprise Applications yet still log zeros when not properly provisioned/consented — presence in the app list is not proof of a service principal</td></tr>
+      <tr><td><a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Microsoft — Entra platform docs</a></td><td><span class="ok">Published (platform semantics, tier A)</span> — the all-zeros ServicePrincipalId is documented SP-less authentication; admin-center procedure: Sign-in logs → <b>Service principal sign-ins</b> tab → filter Service principal ID = <code>00000000-0000-0000-0000-000000000000</code> → read the Application ID per entry. <b>Documented blocking control:</b> "create a service principal for the app, and then disable the service principal. Disabling the app's service principal will block all future sign-in and authentication attempts by that app in your tenant" — applicable per appId in tenants that never consented Cloud Backup, and it makes the app targetable by Conditional Access. Retirement timeline per the <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog</a>: most resource apps frozen April 2025; traffic seen Feb 11–Mar 11 2025 allowed until March 31, 2026; low-volume clients notified with a month to register. No published list of exempt third-party apps; first-party Microsoft apps are exempt (<a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">verify via AppOwnerOrganizationId</a>: <code>f8cdef31-a31e-4b4a-93e4-5f571e91255a</code> = the "Microsoft Services" tenant, <code>72f988bf-86f1-41af-91ab-2d7cd011db47</code> = Microsoft's corporate microsoft.com tenant). Caveat: a volunteer-moderator <a href="https://learn.microsoft.com/en-us/answers/questions/5580963/why-the-service-principal-ids-are-all-zero-in-the">Q&amp;A answer</a> (Oct 2025) notes an app can appear under Enterprise Applications yet still log zeros when not properly provisioned/consented — presence in the app list is not proof of a service principal</td></tr>
       <tr><td><a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress</a></td><td><span class="ok">Published</span> — Entra review procedure: SP sign-ins by appId vs non-Azure source IPs, audit events (Add member to role / Update application / Add service principal credentials), secrets added since Oct 13, CA exclusions; disable (do not delete) the apps</td></tr>
       <tr><td><a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber</a></td><td><span class="ok">Published (MSSP advisory, Oct 19, tier B)</span> — sign-in interpretation: a successful sign-in for the Cloud Backup app from the attacker IP can appear even where the product was never used; entries carry an <b>all-zeros ServicePrincipalId</b> and their queries exclude them, because an unconsented app has no permissions in the tenant. Artefacts to review beyond sign-ins: new secrets or certificates on enterprise applications and app registrations, directory roles held by ConnectWise/SkyKick apps, Conditional Access exclusions for those apps. Activity from Oct 13; credential use from Oct 15. Caveats: no queries printed ("our detection rule identifies this activity"); the IOC table is an image, not machine-readable; the seven appIds are referenced but not listed</td></tr>
       <tr><td><a href="https://www.cisa.gov/news-events/cybersecurity-advisories">CISA</a></td><td><span class="bad">No advisory found</span> as of Oct 23; no KEV entry (no CVE exists)</td></tr>
@@ -200,7 +200,19 @@ AND NOT (source = Azure private IPv6 AND user_agent = kiota-dotnet)
 operation IN ("Add service principal credentials", "Add member to role",
   "Update application", "Consent to application")
 AND initiated_by is a service principal (not a user)
-→ every hit gets a human review; self-role-assignment = incident</pre>
+→ every hit gets a human review; self-role-assignment = incident
+
+# Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
+# names to your add-on)
+index=* category=AuditLogs earliest=-30d@d
+    operationName IN ("Add service principal credentials", "Add member to role",
+      "Update application", "Consent to application")
+    properties.initiatedBy.app.servicePrincipalId=*
+| rename properties.initiatedBy.app.displayName as actor_app,
+    properties.initiatedBy.app.servicePrincipalId as actor_sp,
+    properties.targetResources{}.displayName as target
+| stats count values(target) as targets min(_time) as first max(_time) as last
+    by actor_app actor_sp operationName</pre>
     <p><b>Issuance-then-use</b> — tests the "no consent, no access" assumption instead of inheriting it (inferred; derived from the Chorus note above):</p>
 <pre># stage 1: exported Entra SP sign-in logs, Oct 1 → now
 service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
@@ -209,8 +221,29 @@ service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
 appId IN (stage 1) AND response_status 200–299
 → any row = the app acted despite "no permissions"; review requestUri per appId
 # noise: run stage 1 on service-principal (app-only) sign-ins ONLY — Microsoft first-party
-# apps authenticate SP-less by design and surface in USER sign-in logs; exclude publisher
-# tenants f8cdef31-a31e-4b4a-93e4-5f571e91255a and 72f988bf-86f1-41af-91ab-2d7cd011db47</pre>
+# apps authenticate SP-less by design and surface in USER sign-in logs. Exclude apps whose
+# publisher (AppOwnerOrganizationId / appOwnerTenantId) is a Microsoft tenant:
+#   f8cdef31-a31e-4b4a-93e4-5f571e91255a  = "Microsoft Services" tenant (first-party apps
+#                                            such as Edge Sync, Office 365 Exchange Microservices)
+#   72f988bf-86f1-41af-91ab-2d7cd011db47  = Microsoft corporate (microsoft.com) tenant
+#                                            (Graph Explorer, Graph Command Line Tools)
+
+# Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
+# names to your add-on)
+index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
+    [ search index=* category=ServicePrincipalSignInLogs resultType=0
+        properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
+        earliest=-30d@d latest=now
+      | stats count by properties.appId
+      | fields properties.appId ]
+| rename properties.appId as appId, properties.responseStatusCode as code,
+    properties.requestUri as uri, properties.appOwnerTenantId as publisher
+| where tonumber(code)&gt;=200 AND tonumber(code)&lt;300
+| where NOT publisher IN ("f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+    "72f988bf-86f1-41af-91ab-2d7cd011db47")
+| stats count as ok2xx values(uri) as uris min(_time) as first max(_time) as last by appId
+# if your Graph activity records lack a publisher field, resolve appId → publisher once via
+# Get-MgServicePrincipal (AppOwnerOrganizationId) and keep the two Microsoft tenants out</pre>
     <p><b>Network fallback</b> — if Entra retention fails you, the infrastructure is still checkable:</p>
     <pre># firewall / proxy / flow logs
 dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
