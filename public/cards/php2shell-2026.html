@@ -91,11 +91,11 @@ a{color:var(--ink)}
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Exploited in the wild</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Mass probing underway</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">EOL lines: source-only backports</span>
-    <span class="asof">as of 2026-10-23</span>
+    <span class="asof">as of 2026-10-26</span>
   </div>
   <div class="inner">
     <h1>PHP2Shell emergency release</h1>
-    <p class="sub">Two unauthenticated RCE flaws in the PHP engine — <span class="v">CVE-2026-109618</span> / <span class="v">CVE-2026-109619</span>, CVSS 4.0 9.2 — leaked ahead of coordinated disclosure, patched in an emergency release October 21. Cloudflare has observed millions of exploitation attempts, some delivering the Mirai-derived <b>Potassium</b> botnet; watchTowr has observed in-the-wild exploitation of both CVEs.</p>
+    <p class="sub">Two unauthenticated RCE flaws in the PHP engine — <span class="v">CVE-2026-109618</span> / <span class="v">CVE-2026-109619</span>, CVSS 4.0 9.2 — leaked ahead of coordinated disclosure, patched in an emergency release October 21. Cloudflare has observed millions of exploitation attempts, some delivering the Mirai-derived <b>Potassium</b> botnet; watchTowr has observed in-the-wild exploitation of both CVEs. <b>As of Oct 26 exploitation is confirmed working, not just scanning:</b> researchers took over an Apache mod_php honeypot, a European government entity was compromised with agentic-AI post-exploitation, and Mirai operators plus ASLR-bypass exploits have joined.</p>
 
     <div class="cl">
       <span>On Cutsign:</span>
@@ -107,7 +107,7 @@ a{color:var(--ink)}
       <a href="/?q=php2shell">news &amp; updates (live)</a>
     </div>
 
-    <p class="verdict"><b>Verdict: patch outside the normal cycle, and hunt while you patch.</b> Unauthenticated RCE in the engine that runs most of the web, with exploitation observed in the wild and mass probing underway — this does not wait for the monthly window. No confirmed successful compromises had been reported as of Oct 23. PHP 7.4 / 8.0 / 8.1 get no binary release — official source-backport branches and distro packages are the only routes, and migration is the real fix. The PHP team published <b>official interim mitigations</b> (below) for installations that cannot patch today. Hunting behaviors are published and concrete, which makes this one of the rare patch events that is also immediately huntable.</p>
+    <p class="verdict"><b>Verdict: patch outside the normal cycle, and hunt while you patch.</b> Unauthenticated RCE in the engine that runs most of the web, with exploitation observed in the wild and mass probing underway — this does not wait for the monthly window. Successful compromises are now confirmed (Oct 24–26) — treat unpatched internet-facing PHP as presumed targeted, and hunt back to Oct 20 when the details leaked. PHP 7.4 / 8.0 / 8.1 get no binary release — official source-backport branches and distro packages are the only routes, and migration is the real fix. The PHP team published <b>official interim mitigations</b> (below) for installations that cannot patch today. Hunting behaviors are published and concrete, which makes this one of the rare patch events that is also immediately huntable.</p>
 
     <h2>30-second read</h2>
     <p>Both flaws are use-after-frees in PHP core (session upload-progress handling and fatal-error paths), reachable without authentication. Observed exploitation recycles PHP workers, leaks memory through <code>PHPSESSID</code> cookies, and abuses session upload-progress handling to run shell commands; the observed exploit targets Apache mod_php, and exploitation is easier where session upload-progress is enabled. Some attempts fetch a Potassium loader from <span class="v">92.118.112[.]100</span>.</p>
@@ -165,7 +165,7 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
       <li>Outbound fetches to <span class="v">92.118.112[.]100</span> and the campaign infrastructure — raw values on the <a href="/?view=iocs#s-d3d16df5">IoC card</a> (20 indicators)</li>
     </ul>
 
-    <h2>Detection coverage — as of Oct 23</h2>
+    <h2>Detection coverage — as of Oct 26</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
       <tr><td>Vendor</td><td><a href="https://www.php.net/archive/2026.php#2026-10-21-5">PHP project</a></td><td><span class="ok">Emergency release + mitigations</span> — fixed versions Oct 21 14:00 UTC; <b>official interim mitigations published</b> (section below); minimal source-backport branches for EOL 7.4/8.0/8.1; distros and LTS vendors received patches in advance; GHSA advisories for <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">-109618</a> / <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">-109619</a>; follow-up advisory CVE-2026-115560 issued Oct 23</td></tr>
@@ -194,7 +194,7 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
         <h2>Escalation triggers</h2>
         <ul>
           <li>Any hit on the hunt behaviors or campaign infrastructure → incident lane immediately</li>
-          <li>Confirmed successful compromises reported (so far: attempts only)</li>
+          <li>Confirmed successful compromises — <b>triggered Oct 24–26</b> (honeypot takeover, European government entity); unpatched internet-facing PHP is now a presumed-targeted asset, not a patch-cycle item</li>
           <li>CISA KEV listing for either CVE</li>
           <li>Potassium botnet capability reports beyond Mirai-standard DDoS</li>
         </ul>
@@ -247,6 +247,7 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
       <li><span class="d">Oct 21</span><span>Emergency release 14:00 UTC (8.5.12 / 8.4.27 / 8.3.36 / 8.2.35); watchTowr reproduces CVE-2026-109618</span></li>
       <li><span class="d">Oct 22</span><span>Patch-focused advisories; exploitation reported for miners and a Linux proxy backdoor</span></li>
       <li><span class="d">Oct 23</span><span>Mass exploitation attempts (Cloudflare: millions), Potassium botnet delivery attempts; no confirmed successful compromises reported. PHP issues a follow-up advisory: <span class="v">CVE-2026-115560</span>, another session-upload-progress flaw needing a specific <code>serialize_handler</code> runtime-switch setup — keep <code>session.upload_progress.enabled=0</code> until the next bugfix release</span></li>
+      <li><span class="d">Oct 24–26</span><span><b>Exploitation confirmed working:</b> researchers compromise an Apache mod_php honeypot; a European government entity is reported compromised via PHP2Shell with agentic-AI post-exploitation; Mirai botnet operators join and ASLR-bypass exploits emerge (SecurityWeek, BleepingComputer, The Hacker News). CVE-2026-115560 remains unpatched — the <code>session.upload_progress.enabled=0</code> mitigation stands</span></li>
     </ul>
 
     <h2>Sources</h2>
@@ -273,7 +274,7 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-10-23', QUERY = 'php2shell';
+  const AS_OF = '2026-10-26', QUERY = 'php2shell';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
