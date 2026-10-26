@@ -173,6 +173,31 @@ MFA method deleted AND new method added for same user within 10 minutes</pre>
 inbox rule name matches /^.{1,3}$/ or punctuation-only
 AND (moves to 'RSS Feeds'/'RSS Subscriptions'/'Conversation History'
      OR conditions contain payroll/banking terms)</pre>
+    <p><b>Splunk (<code>index=*</code>)</b> — Azure Monitor diagnostic export shape (<code>category</code> / <code>properties.*</code>) for Entra, UAL shape for Exchange; tune to your add-on:</p>
+    <pre># replayed sessions: successful sign-ins with the campaign's client shape, Jul 14 → now
+index=* category=SignInLogs earliest=-110d@d properties.status.errorCode=0
+    (properties.userAgent IN ("node","Mozilla/5.0") OR properties.authenticationProtocol IN ("deviceCode"))
+| rename properties.userPrincipalName as user, properties.ipAddress as src, properties.userAgent as ua,
+    properties.autonomousSystemNumber as asn, properties.appDisplayName as app
+| eval campaign_net=if(cidrmatch("193.26.115.0/24", src), "1337 Services /24", null())
+| stats count values(ua) as uas values(asn) as asns values(app) as apps values(campaign_net) as net min(_time) as first by user src
+# rogue device registrations from hosting space
+index=* category=AuditLogs earliest=-110d@d operationName="Register device"
+| rename properties.initiatedBy.user.userPrincipalName as user, properties.initiatedBy.user.ipAddress as src
+| regex properties.targetResources{}.displayName="^(DESKTOP-|Device-|Work Pc)[0-9A-F]{8}$"
+| stats count values(properties.targetResources{}.displayName) as devices by user src
+# MFA wipe-and-replace inside 10 minutes
+index=* category=AuditLogs earliest=-110d@d operationName IN ("User deleted security info","User registered security info")
+| rename properties.targetResources{}.userPrincipalName as user
+| transaction user maxspan=10m | where eventcount&gt;=2 AND searchmatch("deleted") AND searchmatch("registered")
+| table _time user duration
+# hidden inbox rules (Exchange / UAL)
+index=* earliest=-110d@d Operation IN ("New-InboxRule","Set-InboxRule")
+| spath Parameters{} output=p | mvexpand p
+| rex field=p "\"Name\":\"(?&lt;pname&gt;[^\"]+)\",\"Value\":\"(?&lt;pval&gt;[^\"]*)\""
+| eval rule_name=if(pname="Name", pval, null()), folder=if(pname="MoveToFolder", pval, null())
+| stats values(rule_name) as names values(folder) as folders by UserId ClientIP
+| where match(names, "^.{1,3}$") OR match(names, "^[[:punct:]]+$") OR match(folders, "RSS|Conversation History")</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

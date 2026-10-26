@@ -184,6 +184,19 @@ status = 500 AND (path contains preview_markdown OR render OR blob
     <pre># network / asset data
 HTTP responses with header X-GitLab-* OR title "GitLab" on internal ranges
 → cross-check each against the fixed-version table above</pre>
+    <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Web field names; GitLab's own JSON logs carry <code>status</code> and <code>path</code>; tune to your add-on:</p>
+    <pre># worker-crash canary on GitLab hosts
+index=* earliest=-30d@d (process_name IN ("ruby","puma","sidekiq","gitlab-workhorse") OR "puma" OR "sidekiq") ("SIGSEGV" OR signal="SIGSEGV" OR "segfault")
+| stats count min(_time) as first max(_time) as last by host process_name
+# render-endpoint error bursts (production_json.log or the load balancer)
+index=* earliest=-30d@d status=500 (path="*preview_markdown*" OR uri_path="*preview_markdown*" OR path="*/render*" OR path="*/blob/*" OR path="*.org" OR uri_path="*.org")
+| eval src=coalesce(remote_ip, src)
+| bin _time span=10m
+| stats count by _time src
+| where count&gt;10
+# pre-patch inventory: GitLab instances answering on internal ranges
+index=* earliest=-7d@d ("X-Gitlab-Feature-Category" OR "X-GitLab-Meta" OR server="nginx" "GitLab")
+| stats dc(dest) as instances values(dest) as hosts</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

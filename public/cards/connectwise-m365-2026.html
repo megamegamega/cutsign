@@ -227,6 +227,12 @@ appId IN (stage 1) AND response_status 200–299
 #                                            such as Edge Sync, Office 365 Exchange Microservices)
 #   72f988bf-86f1-41af-91ab-2d7cd011db47  = Microsoft corporate (microsoft.com) tenant
 #                                            (Graph Explorer, Graph Command Line Tools)
+# These two are the documented ones; Microsoft operates more publisher tenants, so do not
+# treat the pair as complete. Build the exclusion from data, not a list: for every appId in
+# stage 1, resolve its service principal's appOwnerOrganizationId, then name that tenant with
+#   GET /tenantRelationships/findTenantInformationByTenantId(tenantId='&lt;id&gt;')
+# and exclude any whose displayName/defaultDomainName is Microsoft's. The daily-updated
+# community list at github.com/merill/microsoft-info (MicrosoftApps.json) is the cross-check.
 
 # Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
 # names to your add-on)
