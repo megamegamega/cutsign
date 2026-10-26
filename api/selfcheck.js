@@ -8,7 +8,8 @@
 
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
-import { CARDS } from '../lib/cards.js';
+import { CARDS, archiveCandidates } from '../lib/cards.js';
+import { supabaseStore } from '../lib/db.js';
 
 const BASE = process.env.SELFCHECK_BASE || 'https://cutsign.vercel.app';
 
@@ -72,5 +73,16 @@ export default async function handler(req, res) {
   }
 
   if (failures.length) await postDiscord(`Cutsign selfcheck ✖ ${failures.length} failure${failures.length === 1 ? '' : 's'}:\n` + failures.map((f) => '• ' + f).join('\n'));
-  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures });
+
+  // Mondays: nominate quiet cards for archiving (a human decides; nothing changes here)
+  let candidates = [];
+  if (new Date().getUTCDay() === 1) {
+    try {
+      const active = CARDS.filter((c) => c.status === 'active');
+      const rows = await supabaseStore().watchFacts(active.flatMap((c) => c.story_ids));
+      candidates = archiveCandidates(active, rows);
+      if (candidates.length) await postDiscord(`Cutsign ▣ ${candidates.length} card${candidates.length === 1 ? '' : 's'} eligible to archive (set status in lib/cards.js):\n` + candidates.map((c) => `• ${c.slug} — ${c.reason}`).join('\n'));
+    } catch (e) { failures.push('archive check crashed: ' + String(e?.message || e).slice(0, 200)); }
+  }
+  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates });
 }

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, cardByStory } from '../lib/cards.js';
+import { CARDS, STATUSES, cardByStory, activeCards, archiveCandidates } from '../lib/cards.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -40,8 +40,37 @@ test('every card page keeps the blocks the live scripts and format depend on', (
       ['print-color-adjust:exact', 'dark PDF'],
       ['Public OSINT only', 'OSINT footer'],
       ['/?view=cards', 'back link to cards index'],
+      ['/cards/lifecycle.js', 'lifecycle banner script'],
     ]) assert.ok(t.includes(needle), `${c.slug}: missing ${why} (${needle})`);
     // the live script needs the as-of date to match the manifest date
     assert.ok(t.includes(`AS_OF = '${c.date}'`), `${c.slug}: AS_OF differs from manifest date`);
   }
+});
+
+test('lifecycle fields are consistent', () => {
+  const slugs = new Set(CARDS.map((c) => c.slug));
+  for (const c of CARDS) {
+    assert.ok(STATUSES.includes(c.status), `${c.slug}: bad status ${c.status}`);
+    if (c.status !== 'active') assert.match(String(c.archived_on), /^\d{4}-\d{2}-\d{2}$/, `${c.slug}: archived cards need archived_on`);
+    if (c.superseded_by) { assert.equal(c.status, 'superseded'); assert.ok(slugs.has(c.superseded_by), `${c.slug}: superseded_by unknown slug`); }
+  }
+  assert.ok(activeCards().length >= 1);
+});
+
+test('archive candidates: quiet, watch-expired, 30+ day old cards only', () => {
+  const now = Date.parse('2026-12-01T00:00:00Z');
+  const cards = [
+    { slug: 'old-quiet', status: 'active', date: '2026-10-01', story_ids: ['a'] },
+    { slug: 'old-watched', status: 'active', date: '2026-10-01', story_ids: ['b'] },
+    { slug: 'old-recent-dev', status: 'active', date: '2026-10-01', story_ids: ['c'] },
+    { slug: 'fresh', status: 'active', date: '2026-11-20', story_ids: ['d'] },
+    { slug: 'done', status: 'archived', date: '2026-09-01', story_ids: ['e'] },
+  ];
+  const rows = [
+    { story_id: 'a', status: 'expired', last_change_at: '2026-10-05T00:00:00Z' },
+    { story_id: 'b', status: 'active', last_change_at: '2026-10-05T00:00:00Z' },
+    { story_id: 'c', status: 'expired', last_change_at: '2026-11-25T00:00:00Z' },
+  ];
+  assert.deepEqual(archiveCandidates(cards, rows, now).map((c) => c.slug), ['old-quiet']);
+  assert.match(archiveCandidates(cards, rows, now)[0].reason, /all watches expired/);
 });

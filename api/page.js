@@ -462,19 +462,27 @@ export default async function handler(req, res) {
         }, null, 1));
       }
       const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
-      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${CARDS.length} card${CARDS.length === 1 ? '' : 's'} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
+      const active = CARDS.filter((c) => c.status === 'active');
+      const retired = CARDS.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
+      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${retired.length ? ` · ${retired.length} archived` : ''} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
       // newest day first; within a day, urgency order (hunt/IR, patch-now, patch, prepare)
       const laneRank = (l) => /hunt|ir/i.test(l) && !/patch/i.test(l) ? 0 : /now/i.test(l) ? 1 : /patch/i.test(l) ? 2 : 3;
-      const sorted = [...CARDS].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
+      const sorted = [...active].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
+      const cardHtml = (c) => `<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
+        + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
+        + (c.status !== 'active' ? `<span class="c">${esc(c.status)}${c.archived_on ? ` ${esc(c.archived_on)}` : ''}</span>` : '')
+        + (c.superseded_by ? `<a class="c" href="/cards/${esc(c.superseded_by)}.html">↳ superseded by ${esc(c.superseded_by)}</a>` : '')
+        + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
+        + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
+        + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`;
       const parts = [];
       let day = '';
       for (const c of sorted) {
         if (c.date !== day) { day = c.date; parts.push(`<h3 style="border:none">${esc(day)}</h3>`); }
-        parts.push(`<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
-          + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
-          + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
-          + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
-          + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`);
+        parts.push(cardHtml(c));
+      }
+      if (retired.length) {
+        parts.push(`<details><summary class="s">Archived (${retired.length}) — no longer tracked; pages stay at their URLs</summary>${retired.map(cardHtml).join('\n')}</details>`);
       }
       const partsHtml = parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
