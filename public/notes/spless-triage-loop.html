@@ -93,7 +93,7 @@
 <main>
   <header>
     <h1>SP-less Triage Loop</h1>
-    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b style="color:var(--sc)">Scoping</b> finds each new app and assigns a lane. <b style="color:var(--ba)">Baselining</b> records what the app normally looks like. <b style="color:var(--al)">Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a known vendor whose stolen credential was used from new infrastructure. <b style="color:var(--inv)">Investigating</b> is where anything that fails a review goes: nothing is written to the kept list until it comes back benign. Public sources only; describes no particular tenant.</p>
+    <p class="sub">Four jobs over service-principal sign-ins whose service principal ID is all zeros. <b style="color:var(--sc)">Scoping</b> finds each new app and assigns a lane. <b style="color:var(--ba)">Baselining</b> records what the app normally looks like. <b style="color:var(--al)">Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a known vendor whose stolen credential was used from new infrastructure. <b style="color:var(--inv)">Investigating</b> is where anything that fails a review goes: nothing is written to the kept list until it comes back benign. Public sources only; describes no particular tenant.</p>
   </header>
 
   <figure>
@@ -267,7 +267,7 @@
         <text x="425" y="416">Sets: keyIds · resources · ASNs</text>
         <text x="425" y="431" font-size="10.5" style="fill:var(--mute)">plus first seen</text>
         <text x="635" y="416">Day one: review the sets</text>
-        <text x="635" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may already be in them</text>
+        <text x="635" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may be in them</text>
         <text x="635" y="384" font-size="9.5" style="fill:var(--ba)">human</text>
         <text x="800" y="424">clean?</text>
         <text x="955" y="416">Append one row</text>
@@ -291,15 +291,15 @@
         <!-- investigating -->
         <text x="62" y="809" font-size="11" font-weight="600" style="fill:var(--inv)">I</text>
         <text x="200" y="801">Issuance-then-use</text>
-        <text x="200" y="816" font-size="10.5" style="fill:var(--mute)">zeros → 2xx Graph activity, same appId</text>
+        <text x="200" y="816" font-size="10.5" style="fill:var(--mute)">zeros → 2xx Graph, same appId</text>
         <text x="425" y="801">Persistence audit</text>
-        <text x="425" y="816" font-size="10.5" style="fill:var(--mute)">roles, credentials, add→remove→add churn</text>
+        <text x="425" y="816" font-size="10.5" style="fill:var(--mute)">role and credential churn</text>
         <text x="635" y="801">Blast radius</text>
-        <text x="635" y="816" font-size="10.5" style="fill:var(--mute)">resources, mailboxes, siblings touched</text>
+        <text x="635" y="816" font-size="10.5" style="fill:var(--mute)">what else it touched</text>
         <text x="805" y="809">malicious?</text>
         <text x="860" y="778" font-size="9.5" style="fill:var(--inv)">human</text>
         <text x="960" y="801">Benign</text>
-        <text x="960" y="816" font-size="10.5" style="fill:var(--mute)">write the row or append the value</text>
+        <text x="960" y="816" font-size="10.5" style="fill:var(--mute)">write row or append value</text>
         <text x="805" y="875" font-weight="600" style="fill:var(--l3)">IR case · contain</text>
         <text x="805" y="889" font-size="10.5" style="fill:var(--mute)">row marked compromised, never appended</text>
       </g>
