@@ -16,13 +16,13 @@ async function twoDays({ fetchDay2 = fakeFetch(), responderDay2 = defaultRespond
   const calls = installFakeLLM((u, n, req) => responder(u, n, req));
   await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
   await driveRuns(store, { fetchImpl: fakeFetch() });
-  const deepDay1 = calls.filter((c) => c.tier === 'deep').length;
+  const deepDay1 = calls.filter((c) => c.tier === 'deep' && c.schemaName === 'extraction').length;
   responder = responderDay2;
   // a day passes: yesterday's fetches are older than the 12 h page cache
   for (const src of store._tables.sources) src.fetched_at = new Date(Date.now() - 24 * 3600000).toISOString();
   await intake(store, { messages: [day2()] });
   await driveRuns(store, { fetchImpl: fetchDay2 });
-  const deepDay2 = calls.filter((c) => c.tier === 'deep').length - deepDay1;
+  const deepDay2 = calls.filter((c) => c.tier === 'deep' && c.schemaName === 'extraction').length - deepDay1;
   const ns2 = store._tables.stories.find((s) => s.run_id === store._tables.runs[1].id && /NetScaler/.test(s.title));
   return { store, out, deepDay1, deepDay2, ns2, run2: store._tables.runs[1] };
 }

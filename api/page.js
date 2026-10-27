@@ -20,6 +20,9 @@ const verdictChip = (s, d) => {
   const c = cardOf(s, d);
   return c ? `<a class="c" href="/cards/${esc(c.slug)}.html">Verdict card</a>` : '';
 };
+// surfaced AI draft for a story (its thread includes the story or the row it updates)
+const draftOf = (s, d) => (d?.drafts || []).find((x) => (x.thread_ids || []).some((id) => id === s.id || id === s.updates_story_id)) || null;
+const draftChip = (s, d) => { const x = draftOf(s, d); return x ? `<a class="c" href="/?view=draft&id=${esc(x.id)}">AI draft v${esc(String(x.version || 1))}</a>` : ''; };
 // "update to <date>" chip links to the earlier story in its own brief (CISO view when it was
 // an executive story that day, the analyst view otherwise, which anchors every story)
 const updateChip = (s) => {
@@ -338,6 +341,7 @@ function agentJson(d, days) {
       updates_story_id: s.updates_story_id || null,
       brief_date: d.date,
       verdict_card: cardOf(s, d) ? `/cards/${cardOf(s, d).slug}.html` : null,
+      ai_draft: draftOf(s, d) ? `/?view=draft&id=${draftOf(s, d).id}` : null,
       title: s.title,
       priority: s.priority ?? 3,
       deep_read: !!s.selected,
@@ -416,7 +420,7 @@ function cisoBody(d) {
     const p = pri(s);
     parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...s.cves])}${updateChip(s)}`
-      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + verdictChip(s, d) + '</div>',
+      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + verdictChip(s, d) + draftChip(s, d) + '</div>',
       `<p style="margin:8px 0">${esc(s.summary)}</p>`,
       exposureBox(s.raw_iocs?.exposure),
       `<p class="s"><b>Why it matters:</b> ${esc(s.priority_reason || '')}</p></div>`);
@@ -466,7 +470,7 @@ export default async function handler(req, res) {
         'Cutsign · public OSINT digest · search across all stored briefs'));
     }
 
-    // Machine card draft (lib/hype.js → lib/carddraft.js): private by uuid, banner, never in the manifest
+    // AI-generated card draft (lib/hype.js → lib/carddraft.js): uuid URL, banner, never in the manifest
     if (req.query.view === 'draft') {
       const id = String(req.query.id || '');
       let row = null;
@@ -474,27 +478,27 @@ export default async function handler(req, res) {
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
       const tabsDraft = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
-        `<div class="w">${draftBody(row)}</div>`, 'Cutsign · machine draft, unreviewed · public OSINT only'));
+        `<div class="w">${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
     }
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
     if (req.query.view === 'cards') {
-      // machine drafts awaiting a human (table may not exist before migration 0004)
+      // AI drafts awaiting a human, surfaced ones first (table may not exist before migration 0004)
       let drafts = [];
-      try { drafts = await store.listCardDrafts({ status: 'draft', limit: 10 }); } catch { drafts = []; }
+      try { drafts = (await store.listCardDrafts({ status: 'draft', limit: 10 })).sort((a, b) => (b.surfaced_at ? 1 : 0) - (a.surfaced_at ? 1 : 0)); } catch { drafts = []; }
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.cards', generated: new Date().toISOString(),
           cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html` })),
-          candidates: drafts.map((x) => ({ id: x.id, title: x.title, score: x.score, reasons: x.reasons, created_at: x.created_at, url: `/?view=draft&id=${x.id}` })),
+          candidates: drafts.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
       const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
-      const candidates = drafts.length ? `<h3 style="border:none">Candidates — machine drafts awaiting review (${drafts.length})</h3>`
+      const candidates = drafts.length ? `<h3 style="border:none">AI drafts awaiting review (${drafts.length})</h3>`
         + drafts.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
-          + `<div><span class="c">score ${esc(String(x.score))}</span><span class="c">drafted ${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
-          + `<p class="s" style="margin:8px 0 0">Unreviewed. ${esc(x.draft?.verdict || '')}</p></div>`).join('\n') : '';
+          + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready for review</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
+          + `<p class="s" style="margin:8px 0 0">AI-generated, unreviewed. ${esc(x.draft?.verdict || '')}</p></div>`).join('\n') : '';
       const active = CARDS.filter((c) => c.status === 'active');
       const retired = CARDS.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
       const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${retired.length ? ` · ${retired.length} archived` : ''} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
@@ -632,6 +636,9 @@ export default async function handler(req, res) {
     }
 
     const d = await buildDigestData(store, pick.run);
+    // AI drafts (lib/hype.js) that crossed the surface bar: a chip on their story in the CISO view
+    // and an ai_draft link in the agent JSON; the table may not exist before migration 0004
+    try { d.drafts = (await store.listCardDrafts({ status: 'draft', limit: 30 })).filter((x) => x.surfaced_at); } catch { d.drafts = []; }
     try { // web view: recent watch events regardless of digested/notified state
       const cutoff = Date.now() - 48 * 3600 * 1000;
       d.watchEvents = (await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff);

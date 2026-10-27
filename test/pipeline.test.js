@@ -143,7 +143,7 @@ test('invalid ATT&CK ID: one corrective retry; still-invalid IDs are dropped', a
   assert.ok(!ns.attack_techniques.includes('T9999.123'));
   assert.ok(ns.attack_techniques.includes('T1059.004'));
   assert.equal(store._tables.behaviors.find((b) => b.story_id === ns.id && b.pattern_kind === 'shell_from_server_process').attack_technique, null);
-  const nsCalls = calls.filter((c) => c.tier === 'deep' && /nsppe/.test(c.messages[0].content));
+  const nsCalls = calls.filter((c) => c.tier === 'deep' && c.schemaName === 'extraction' && /nsppe/.test(c.messages[0].content));
   assert.equal(nsCalls.length, 2, 'exactly one retry');
   assert.match(nsCalls[1].messages.at(-1).content, /T9999\.123/);
 });

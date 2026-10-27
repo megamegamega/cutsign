@@ -72,17 +72,24 @@ its watch in place. HIGH events alert immediately; everything appears in the nex
 `active → archived → superseded`. Every card ends with inferred, tool-neutral detections and a
 runnable Splunk block over `index=*`; every bare identifier printed is labeled.
 
-**Card candidates** (`lib/hype.js`, `lib/carddraft.js`): after each brief is sent, and again from the
-hourly watch tick when something developed, every story thread is scored on what the pipeline
-already knows — priority, deep read, a CISA KEV listing within three days, how many briefs the story
-has run, distinct publishers, a primary source, stated internet-facing exposure, a named actor, and
-48 h of watch developments. Over one bar (`HYPE_NOMINATE`, 6) the thread is nominated to Discord
-with the signals that fired; over a higher bar (`HYPE_DRAFT`, 7) one Opus call drafts a verdict card
-from the stored story, guidance, evidence and IoCs. Drafts live in `card_drafts` (migration 0004),
-render at `/?view=draft&id=…` behind an "unreviewed" banner, are listed as candidates on the Cards
-tab and in `/?view=cards&format=json`, and are emailed. A draft never claims product coverage and is
-scrubbed with the repo's hygiene rules; publishing one is a human edit to `public/cards/` and the
-manifest. Threads that already have a card are skipped.
+**AI drafts, the card loop** (`lib/hype.js`, `lib/carddraft.js`): after each brief is sent, and
+again from the hourly watch tick when something developed, every story thread is scored on what the
+pipeline already knows — priority, deep read, a CISA KEV listing within three days, how many briefs
+the story has run, distinct publishers, a primary source, stated internet-facing exposure, a named
+actor, and 48 h of watch developments. Over `HYPE_NOMINATE` (6) the thread is nominated to Discord
+with the signals that fired. A nominated thread with something actionable (published guidance, a
+vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs) gets an
+AI-generated draft from one Opus call, shaped on the DAIR model (Detect, Verify and Triage, the
+Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic Incident Response*).
+Each draft records the evidence fingerprint it was built from; when the evidence changes, the draft
+is revised from the prior version as a new row with a change list, the old one marked superseded.
+Over `HYPE_SURFACE` (9) a draft is surfaced: an "AI draft" chip on its story in the CISO view, an
+`ai_draft` link in the agent JSON, first place on the Cards tab, and a "ready for review" email.
+Drafts live in `card_drafts` (migrations 0004, 0005), render at `/?view=draft&id=…` behind an
+"AI-generated, unreviewed" banner, never claim product coverage, and are scrubbed with the repo's
+hygiene rules. Publishing one is a human edit to `public/cards/` and the manifest, where the analyst
+fills the coverage table; a dismissed or promoted draft stops the loop for its thread, and threads
+that already have a card are skipped.
 
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
 `/?view=cards&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
