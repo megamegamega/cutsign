@@ -280,7 +280,7 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
 | stats count as ok2xx values(uri) as uris min(_time) as first max(_time) as last by appId
 # if your Graph activity records lack a publisher field, resolve appId → publisher once via
 # Get-MgServicePrincipal (AppOwnerOrganizationId) and keep the two Microsoft tenants out</pre>
-    <p><b>SP-less inventory</b> — the class this incident belongs to, scoped so it stays finite (one pass, then diff daily):</p>
+    <p><b>SP-less inventory</b> — the class this incident belongs to, scoped so it stays finite (one pass, then diff daily). Three lanes: <b>Microsoft publisher → ignore.</b> <b>Known vendor → watch</b> for breach news, hunt zeros → 2xx Graph activity (issuance-then-use above) and the role/credential changes they make (persistence audit above). <b>Unknown vendor → diff daily</b> for new appIds; look each up, then file it under "known" or block it (create the service principal, then disable it). "Lateral movement" here is identity-side — roles, credentials on other apps, mailbox and Graph access — not host-to-host.</p>
 <pre># service-principal (app-only) sign-ins ONLY — user-log zeros are first-party apps refreshing
 # tokens for users and carry the user's device IP; ignore them
 index=* category=ServicePrincipalSignInLogs earliest=-90d@d
