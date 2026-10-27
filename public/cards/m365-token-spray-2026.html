@@ -181,17 +181,23 @@ index=* category=SignInLogs earliest=-110d@d properties.status.errorCode=0
     properties.autonomousSystemNumber as asn, properties.appDisplayName as app
 | eval campaign_net=if(cidrmatch("193.26.115.0/24", src), "1337 Services /24", null())
 | stats count values(ua) as uas values(asn) as asns values(app) as apps values(campaign_net) as net min(_time) as first by user src
+
 # rogue device registrations from hosting space
+
 index=* category=AuditLogs earliest=-110d@d operationName="Register device"
 | rename properties.initiatedBy.user.userPrincipalName as user, properties.initiatedBy.user.ipAddress as src
 | regex properties.targetResources{}.displayName="^(DESKTOP-|Device-|Work Pc)[0-9A-F]{8}$"
 | stats count values(properties.targetResources{}.displayName) as devices by user src
+
 # MFA wipe-and-replace inside 10 minutes
+
 index=* category=AuditLogs earliest=-110d@d operationName IN ("User deleted security info","User registered security info")
 | rename properties.targetResources{}.userPrincipalName as user
 | transaction user maxspan=10m | where eventcount&gt;=2 AND searchmatch("deleted") AND searchmatch("registered")
 | table _time user duration
+
 # hidden inbox rules (Exchange / UAL)
+
 index=* earliest=-110d@d Operation IN ("New-InboxRule","Set-InboxRule")
 | spath Parameters{} output=p | mvexpand p
 | rex field=p "\"Name\":\"(?&lt;pname&gt;[^\"]+)\",\"Value\":\"(?&lt;pval&gt;[^\"]*)\""

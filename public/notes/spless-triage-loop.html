@@ -55,9 +55,33 @@
   .lane { font-weight: 600; }
   .l1 { color: var(--l1); } .hold { color: var(--hold); } .l2 { color: var(--l2); } .l3 { color: var(--l3); }
   ul { margin: 0; padding-left: 22px; max-width: 76ch; } ul li { margin: 5px 0; }
+  .top { max-width: 940px; margin: 0 auto 14px; display: flex; align-items: center; gap: 16px; font: 600 12px var(--mono); }
+  .top a { color: var(--mute); text-decoration: none; } .top a:hover { color: var(--fg); }
+  .top .pdf { margin-left: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--fg); font: 600 12px var(--mono); padding: 6px 12px; cursor: pointer; }
+  .top .pdf:hover { border-color: var(--accent); }
+  @media print {
+    /* PDFs are always dark, like the cards; print-color-adjust keeps the backgrounds. */
+    :root { --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
+      --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; }
+    html, body { background: var(--bg) !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    body { padding: 0; font-size: 12.5px; }
+    .top { display: none; }
+    a { text-decoration: none; color: inherit; }
+    tr, li, pre, figure { break-inside: avoid; }
+    h2 { break-after: avoid; }
+    svg { min-width: 0; }
+  }
 </style>
 </head>
 <body>
+
+<div class="top">
+  <a href="/cards/connectwise-m365-2026.html">← ConnectWise card</a>
+  <a href="/?view=cards">Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
 
 <main>
   <header>

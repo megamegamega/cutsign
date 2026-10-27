@@ -224,16 +224,22 @@ index=* earliest=-30d@d (process_name="node" OR Image="*/node" OR "node[") (sign
 | bin _time span=1h
 | stats count by _time host
 | where count&gt;3
+
 # node spawning shells (exclude build/CI hosts where this is routine)
+
 index=* earliest=-30d@d ParentImage IN ("*/node","*/nodejs") Image IN ("*/sh","*/bash","*/dash","*/curl","*/wget","*/python*","*/perl")
 | where NOT cidrmatch("&lt;build/CI subnets&gt;", src_ip)
 | stats count values(CommandLine) as cmds by host ParentImage Image
+
 # response-side exposure: servers fetching Brotli from new destinations
+
 index=* earliest=-7d@d (response_content_encoding="br" OR "content-encoding: br")
 | where cidrmatch("&lt;server subnets&gt;", src)
 | stats min(_time) as first_seen count by src dest
 | where first_seen &gt; relative_time(now(), "-7d@d")
+
 # version inventory (software-inventory or process events carrying a version string)
+
 index=* earliest=-7d@d (process_name="node" OR "node.exe") version=*
 | eval fixed=case(match(version,"^26\."), "26.12.1", match(version,"^24\."), "24.22.1", match(version,"^22\."), "22.23.4", true(), "EOL line")
 | stats dc(host) as hosts values(host) as sample by version fixed</pre>

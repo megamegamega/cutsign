@@ -214,6 +214,7 @@ AND initiated_by is a service principal (not a user)
 # Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
 # names to your add-on). Includes the REMOVE and DELETE operations: Huntress's Oct 26
 # telemetry shows the persistence as churn and cleanup, not just additions.
+
 index=* category=AuditLogs earliest=-30d@d
     operationName IN ("Add service principal credentials", "Remove service principal credentials",
       "Update application – Certificates and secrets management",
@@ -229,6 +230,7 @@ index=* category=AuditLogs earliest=-30d@d
     by actor_app actor_sp operationName
 
 # churn: the same target gets an add AND a remove of credentials or roles inside 60 min
+
 index=* category=AuditLogs earliest=-30d@d
     operationName IN ("Add service principal credentials", "Remove service principal credentials",
       "Add member to role", "Remove member from role")
@@ -241,6 +243,7 @@ index=* category=AuditLogs earliest=-30d@d
   a successful one within a minute is the same tell
 
 # sibling-principal grant + cleanup: role granted to one principal, then another principal deleted
+
 index=* category=AuditLogs earliest=-30d@d
     operationName IN ("Add member to role", "Remove service principal", "Delete application")
 | rename properties.initiatedBy.app.displayName as actor_app
@@ -249,11 +252,15 @@ index=* category=AuditLogs earliest=-30d@d
 | table _time duration actor_app operationName</pre>
     <p><b>Issuance-then-use</b> — tests the "no consent, no access" assumption instead of inheriting it (inferred; derived from the Chorus note above):</p>
 <pre># stage 1: exported Entra SP sign-in logs, Oct 1 → now
+
 service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
 → set of appIds that obtained a token under an unresolved service principal
+
 # stage 2: Graph activity logs, same window
+
 appId IN (stage 1) AND response_status 200–299
 → any row = the app acted despite "no permissions"; review requestUri per appId
+
 # prerequisite: Microsoft Graph activity logs must be ENABLED (diagnostic setting) — Huntress
 # could not see them in affected tenants. If yours are off, stage 2 is a coverage gap, not a clean result
 # noise: run stage 1 on service-principal (app-only) sign-ins ONLY — Microsoft first-party
@@ -282,6 +289,7 @@ appId IN (stage 1) AND response_status 200–299
 
 # Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
 # names to your add-on). Publisher filter lives in the sign-in subsearch, not in stage 2.
+
 index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
     [ search index=* category=ServicePrincipalSignInLogs resultType=0
         properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
@@ -303,6 +311,7 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
     <p class="src">"Lateral movement" in this class is identity-side — role grants, credentials added to other apps, mailbox and Graph access — not host-to-host. The list is finite: Microsoft announced a block on SP-less auth for non-Microsoft multitenant apps for March 31, 2026, and its FAQ still lists "a few Microsoft and non-Microsoft applications" as exceptions; anything still doing it is one of those, so a non-Microsoft owner here is rare and high-prior. Scope: a vendor app you <i>consented</i> to has a real service principal and never appears in the zeros view; only the per-appId re-check sees its stolen credential used from new infrastructure.</p>
 <pre># service-principal (app-only) sign-ins ONLY — user-log zeros are first-party apps refreshing
 # tokens for users and carry the user's device IP; ignore them
+
 index=* category=ServicePrincipalSignInLogs earliest=-90d@d
     properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
 | rename properties.appOwnerTenantId as owner_tenant, properties.appId as app_id,
@@ -315,6 +324,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 | stats count min(_time) as first max(_time) as last values(properties.resourceDisplayName) as resources
     by bucket owner_tenant app_id app_name
 | sort bucket
+
 # fillnull matters: stats "by" silently drops rows where any by-field is null, so without it the
 #   no-owner rows never appear
 # bucket "microsoft" = documented Microsoft owner: expected, file as lane 1 (cross-check a few by
@@ -328,6 +338,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 # Microsoft's own inventory call (reports FAQ, beta required; v1.0 returns no SP sign-ins):
 #   GET /beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal')
 #       and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'
+
 → three jobs. SCOPING (daily): this query; a NEW (owner_tenant, appId) gets a lane. BASELINING (once per
   laned appId): baseline 90 days of ALL its sign-ins, zeros or real SP — credential keyIds, resources,
   ASNs, first seen — into the kept list. ALERTING (daily): every baselined appId against its row; new

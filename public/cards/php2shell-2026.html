@@ -131,8 +131,10 @@ session.upload_progress.enabled=0     ; php.ini / FPM pool / server config,
 fatal_error_backtraces=0              ; PHP 8.5 only, blocks the fatal-backtrace path
 
 # CVE-2026-109618 (OOM corruption) — starve the allocation-failure primitive:
+
 memory_limit=-1                       ; via php_admin_value so apps cannot override
 post_max_size = 8M                    ; (32M if uploads needed); upload_max_filesize below it
+
 # plus web-server/proxy limits on decoded size, field/part/header counts, nesting —
 # enforced even without a usable Content-Length
 # availability boundary: container/cgroup limit killing only the worker.
@@ -226,18 +228,26 @@ index=* earliest=-30d@d ((http_method=POST http_content_type="multipart/form-dat
 | search http_method=POST status=500
 | stats count as pairs min(_time) as first max(_time) as last values(uri_path) as paths by src
 | sort - pairs
+
 # memory-leak primitive: oversized PHPSESSID in responses
+
 index=* earliest=-30d@d "Set-Cookie" "PHPSESSID"
 | regex _raw="PHPSESSID=[^;\s]{1024,}"
 | stats count by src dest uri_path
+
 # post-exploitation lineage (Sysmon EID 1 / EDR)
+
 index=* earliest=-30d@d ParentImage IN ("*/php-fpm*","*/php-cgi*","*/apache2","*/httpd")
     Image IN ("*/sh","*/bash","*/dash","*/curl","*/wget","*/perl","*/python*")
 | stats count values(CommandLine) as cmds min(_time) as first by host ParentImage Image
+
 # worker churn (syslog)
+
 index=* earliest=-30d@d "php-fpm" "child" "exited on signal"
 | timechart span=10m count by host
+
 # campaign infrastructure (Potassium loader)
+
 index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.118.112.100*")
 | stats count min(_time) as first by host src dest</pre>
 

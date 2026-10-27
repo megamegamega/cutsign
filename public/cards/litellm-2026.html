@@ -168,6 +168,7 @@ a{color:var(--ink)}
     <pre># host sweep (any config mgmt / EDR file search)
 find <python site-packages roots> -maxdepth 2 -name 'cook.pth' -o -name 'cook.py'
 test -f /tmp/remote_code_loader.lock   # Linux/macOS: loader marker
+
 # container registries: scan image layers for the three filenames in site-packages</pre>
     <pre># egress
 dest.domain = litellm.dev OR dest.url contains raw.githubusercontent.com/letters9813
@@ -177,10 +178,14 @@ dest.domain = litellm.dev OR dest.url contains raw.githubusercontent.com/letters
 index=* earliest=-30d@d (file_name IN ("cook.pth","cook.py","sitecustomize.py") OR file_path="/tmp/remote_code_loader.lock")
 | where file_path="*site-packages*" OR file_path="/tmp/remote_code_loader.lock"
 | stats count values(file_path) as paths min(_time) as first by host
+
 # egress: exfil domain and the GitHub dead drop
+
 index=* earliest=-30d@d (query="litellm.dev" OR query="*.litellm.dev" OR dest="litellm.dev" OR url="*raw.githubusercontent.com/letters9813*")
 | stats count min(_time) as first max(_time) as last by src host
+
 # package install evidence (CI / build logs, pip caches)
+
 index=* earliest=-30d@d ("litellm==1.107.0" OR "litellm-1.107.0" OR "litellm:1.107.0")
 | stats count by host source</pre>
 
