@@ -37,7 +37,7 @@ if (opt('--eml')) {
   messages = [{ getRaw: async () => raw }];
 } else if (args.includes('--gmail')) {
   const { listBriefMessages } = await import('../lib/gmail.js');
-  const q = 'from:(brief@example.test OR briefs@example.test) subject:"Threat Brief" -subject:TEST newer_than:7d';
+  const q = process.env.GMAIL_QUERY || 'subject:"Threat Brief" -subject:TEST newer_than:7d';
   messages = (await listBriefMessages(q)).slice(0, 1);
   if (args.includes('--save-fixture') && messages[0]) {
     const raw = await messages[0].getRaw();

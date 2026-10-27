@@ -145,7 +145,7 @@ const TZ_SCRIPT = String.raw`<script>
 const doc = (title, headerNav, inner, foot) => `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head>
 <body><header class="top"><div class="in"><span class="brand">CUT<b>SIGN</b><span class="tag">cutting for sign — daily OSINT threat read</span></span><nav class="nav">${headerNav}</nav></div></header>
-<main>${inner}</main><footer>${foot}</footer>${TZ_SCRIPT}</body></html>`;
+<main>${inner}</main><footer>${foot}<br>Built by Marcus Liberto · Apache-2.0 · <a href="https://github.com/megamegamega/cutsign">source</a></footer>${TZ_SCRIPT}</body></html>`;
 
 // A tile with an href is the navigation to its detail (raw IoCs, corpus, watch section, cards)
 const tile = (n, label, hot, href) => href

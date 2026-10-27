@@ -73,6 +73,6 @@ server.listen(0, '127.0.0.1', () => {
     client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: GMAIL_SCOPE,
     access_type: 'offline', prompt: 'consent', state,
   });
-  console.log('\nOpening your browser — sign in as dispatch@liberto.us (the inbox that receives the brief).');
+  console.log('\nOpening your browser — sign in as the inbox that receives the brief.');
   execFile('open', [url]);
 });

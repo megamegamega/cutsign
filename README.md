@@ -1,159 +1,108 @@
 # Cutsign
 
-Personal, cron-driven pipeline: the sender's daily threat brief → the primary sources behind it →
-the adversary's **behaviors** first, then printed evidence, published detection guidance, and
-atomic IoCs → one email to me. Named for the tracker's "cutting for sign": reading the sign an
-adversary can't avoid leaving.
+A personal, defensive threat-intelligence pipeline. Each weekday Cutsign ingests a public daily
+cyber-threat brief (an emailed digest of published security news and vendor advisories), reads the
+public sources behind each story, and produces a structured record for defenders:
 
-**Current version: v0 — the read, as an email.** No pack page, no Sigma, no validation yet. v0 exists
-to tune `prompts/extract.system.md` against real briefs for 1–2 weeks. v0 is done when, for five
-consecutive briefs, the extracted behaviors match what I'd have written by hand.
+- the adversary **behaviors** described, mapped to MITRE ATT&CK — the point of the whole system;
+- the **evidence** the sources print (command lines, log lines, HTTP requests, file paths), byte-exact;
+- the **detection guidance** vendors and researchers have published;
+- the atomic **indicators** the sources state — last and least;
+- an **exposure check**: affected and fixed versions, preconditions, quick exclusions.
+
+It emails a morning brief, publishes the same material as a small site (analyst, CISO, agent-JSON,
+IoC-corpus and search views), keeps a **watch** on ongoing stories so material developments —
+new advisories, KEV listings, vendor fixes, confirmed exploitation — surface the same day, and for
+the stories that matter most carries hand-written one-page **verdict cards** (patch / hunt / prepare,
+with detection coverage per vendor and tool-neutral inferred detections).
+
+Named for the tracker's "cutting for sign": reading the sign an adversary can't avoid leaving.
+
+Live: https://cutsign.vercel.app · License: Apache-2.0 · Built by Marcus Liberto.
+
+## What it is not
+
+Cutsign is blue-team only. It extracts what adversaries did and how defenders detect it. It does not
+write exploits, payloads or attack tooling; it does not scan, probe or touch any system other than
+reading public web pages; and nothing it produces is executed anywhere — detection logic is published
+as text for a human to review and run. The material is intrinsically about attacks (CVEs, in-the-wild
+exploitation, malware, command-and-control infrastructure, verbatim attacker artifacts) because that is
+what detection engineering is made of; all of it comes from public reporting.
 
 ## The one rule: zero employer data
 
-This system never receives, stores, or references anything from my employer — no internal
-hostnames, index names, sourcetypes, usernames, ticket numbers, or results. Inputs are public OSINT
-only (the brief + public URLs); outputs are generic. There is no table column that could hold an
-internal value, and there must never be one. Every email says so in its banner. A test
-(`test/hygiene.test.js`) greps the repo for internal-looking tokens.
+This system never receives, stores or references anything from the author's employer — no internal
+hostnames, index names, sourcetypes, usernames, ticket numbers or results. Inputs are public OSINT
+only (the brief and public URLs); outputs are generic. There is no table column that could hold an
+internal value, and there must never be one. Every email says so in its banner. `test/hygiene.test.js`
+fails the build on anything shaped like an internal identifier.
 
 ## How it runs
 
 ```
-Vercel cron 13:00 UTC ─┐                     ┌─ chain: POST /api/advance (202, works under waitUntil)
-Vercel cron 17:00 UTC ─┴─ /api/cron ─ intake ─┴─ driveRuns ─ stages… ─ email + Discord ✔/✖
+brief email ─ Resend inbound ─┐
+Vercel crons (UTC) ───────────┴─ /api/cron ─ intake ─ driveRuns ─ stages… ─ email + site + Discord ✔/✖
+hourly ──────────────────────────  /api/watch  (story watches: page diffs, KEV, feeds, NVD, GitHub)
+daily 13:45 ─────────────────────  /api/selfcheck (validates the public contracts the site and cards depend on)
 ```
 
-Email goes to `EMAIL_TO` (default dispatch@liberto.us).
+**Inbound.** The brief is forwarded to a Resend receiving address. The `Message-ID` is checked before
+the body is downloaded (re-delivery is a no-op); messages must carry a DKIM pass and a sender on
+`BRIEF_SENDER_ALLOWLIST`, or they are stored as `rejected` with no body and a Discord warning.
 
-**Inbound (stage `received`).** A Gmail filter forwards the sender's brief (from
-`brief@example.test OR briefs@example.test`, subject "Threat Brief") to `BRIEF_INBOUND_ADDRESS`, a
-Resend Receiving address. Resend stores it; the cron lists received mail via Resend's API (same
-`EMAIL_API_KEY`, full access) and downloads the raw message — no webhook, so a failed run loses nothing.
-Received mail counts toward the Resend account's quota (~1–2/day). The `Message-ID` is checked against
-`briefs` **before** the body is downloaded; re-delivery is a no-op. Then:
-
-- Resend reports the message's DKIM result; anything without a DKIM pass is `rejected` with a Discord ⚠
-  (the public inbound address is otherwise spoofable);
-- sender not on `BRIEF_SENDER_ALLOWLIST` → stored as `rejected` (no body), Discord ⚠, nothing else;
-- subject contains `[TEST]` → `ignored`;
-- a brief for the same date was already accepted (the sender sometimes sends both formats) → `ignored`;
-- otherwise `accepted` + a new `runs` row.
-
-**Stages.** `runs.stage` is always the last stage that *completed*:
+**Stages.** `runs.stage` is always the last stage that completed; any error marks the run `failed`
+and the next tick retries from that stage (3 attempts), resuming what was persisted.
 
 | from → to | what happens |
 |---|---|
-| received → parsed | MIME → clean text; brief split into one story per item (deterministic — the brief is a structured list) |
-| parsed → fetched | each story's first link, ≤ `MAX_SOURCES` (40) per brief; 10 s timeout, 1 MB cap, ≤ 3 redirects, robots.txt honored; one hop from a news page to a linked vendor/CERT page; 7-day cache; prompt-injection screen flags `suspicious` sources, which are excluded from extraction and shown in the email |
-| fetched → extracted | **light read** of every story (`claude-haiku-5-5`, first source, 20k chars, 4 at a time) → **score** each on what it found (`lib/select.js`: behaviors, evidence, guidance, IoCs, KEV, primary source, financial relevance; unconfirmed/roundup penalized) → top ≤ `MAX_STORIES` (4) scoring ≥ `MIN_DEEP_SCORE` (6) get their second link + one hop to a vendor/CERT page and a **deep read** (`claude-opus-5-5`, 50k chars). Stories the light read rated P3 never get a deep read, and two write-ups of the same campaign (shared CVE, or same actor + malware) never take two deep slots. A failed deep read falls back to the light result. (Structured output validated by zod; ATT&CK IDs checked against `lib/attack-ids.json`; one corrective retry). Exploited + behaviors, or KEV, floors priority at P1 |
-| extracted → normalized | IoCs refanged, canonicalized, placeholders/private ranges dropped, upserted on `(type, value_norm)`; `seen_count` +1 once per run. Each story is then matched to the trailing 14 days (shared CVE, same specific malware family, or same actor + a shared IoC) and linked via `updates_story_id` |
-| normalized → validated → queried → rendered | **v1/v2 seams — pass-through in v0** |
-| rendered → sent | email to `EMAIL_TO` (skipped for dry runs or when over the monthly cap) and a Discord ✔ line |
+| received → parsed | MIME → clean text; the brief split into one story per item |
+| parsed → fetched | each story's sources, with timeouts, size caps, redirect limits, robots.txt, a 7-day cache, and a prompt-injection screen that excludes suspicious pages from extraction |
+| fetched → extracted | a **light read** of every story, scored on what it found; the top stories get a **deep read** with more sources. Structured output validated by zod; ATT&CK IDs checked against a local mirror. Titles and summaries claim outcomes only as strongly as the sources confirm |
+| extracted → normalized | IoCs refanged and canonicalized, placeholders and private ranges dropped, upserted on `(type, value)`; stories matched to the trailing 14 days and linked as updates |
+| normalized → … → sent | email, site, Discord. The `validated` / `queried` stages are seams for the detection-validation companion (see below) |
 
-Any thrown error → `stage='failed'`, `failed_stage`, `error`, a Discord ✖ line, and a retry from that
-stage on the next tick (3 attempts max). Long stages check the clock and yield; what they finished is
-persisted, so the next invocation resumes. A short lease on the run row stops two invocations working one run.
+**Watches.** Each day's deep-read stories become watches (14 days, extended by material changes,
+capped at 30). Hourly checks are free; models run only on a change, reading just the added text. A
+development that falsifies a title's outcome claim ("no confirmed compromises") retitles the story and
+its watch in place. HIGH events alert immediately; everything appears in the next morning's email under
+"Developments on tracked stories".
 
-**Schedule and DST.** Vercel Hobby crons run once a day each and may fire anywhere in the scheduled
-hour, in **fixed UTC**. The brief lands ~11:10–12:10 UTC. `0 13 * * *` therefore fires 13:00–13:59 UTC
-= 9–10 AM EDT in summer, 8–9 AM EST in winter (DST shifts *local* time by an hour; the brief, also
-UTC-scheduled on the sender's side, shifts with it or not — either way 13:00 UTC is after it). `0 17 * * *`
-is the catch-up for late or re-sent briefs and for resuming a stuck run; it's normally a no-op.
+**Verdict cards** (`public/cards/`, manifest in `lib/cards.js`): one per campaign, re-issued in place
+(the as-of date and the manifest date move together — a test enforces it), with a lifecycle of
+`active → archived → superseded`. Every card ends with inferred, tool-neutral detections and a
+runnable Splunk block over `index=*`; every bare identifier printed is labeled.
 
-**Cost.** Measured: Opus deep reads at medium effort ×6 + Haiku ×30 = $1.67/brief (2026-10-16) — most of it
-Opus output/thinking. Now: ≤ 4 deep reads at low effort → est. $0.70–0.90/brief, ~$21–27/month. The Discord
-line reports the deep/quick split. `MAX_MONTHLY_USD` (25): above it the pipeline still extracts but stops
-emailing and says so on Discord. `PAUSED=1` stops everything without a deploy.
+**Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
+`/?view=cards&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
+vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
 
-## Story watches (`lib/watch.js`, `api/watch.js`, migration `0002_watches.sql`)
+## Cost and safety rails
 
-Each day's deep-read stories become **watches** for 14 days (a material change extends by 7, capped at 30);
-a later story about the same campaign (shared CVE, same malware, or actor + shared URL) extends the existing
-watch. Roughly hourly — 24 daily Vercel crons, one per hour, since Hobby allows only daily jobs — each watch:
-
-- re-fetches its pages and diffs them line by line (advisories edited in place),
-- checks CISA KEV, scans 13 news/vendor feeds for its CVE / actor / malware, and every 6 h checks NVD status
-  and GitHub for public repos.
-
-Checks are free. **Models run only on a change:** Haiku reads just the added text against what's known
-(material? new IoCs?); only material new behaviors/IoCs escalate to an Opus re-read (≤
-`WATCH_MAX_DEEP_PER_DAY`, default 2). The first look at a watch is a silent baseline; injection-shaped text is
-reported once and never analyzed. **HIGH** events (KEV listing, exploitation, new IoCs/behaviors, new
-versions/fix, PoC-looking repo) alert immediately (Discord `Cutsign ⚡` + "Cutsign update" email); all events
-appear in the next morning's email under "Watched stories — what changed". Watch spend counts toward
-`MAX_MONTHLY_USD`. `GET /api/watch?backfill=1` starts watches for the last 7 days of runs.
-
-## Deep-read reuse (cost, without losing new information)
-
-Running campaigns recur for days. Before a deep read, the pipeline checks the last 14 days of deep reads; it
-reuses one **only if nothing could be new**: every source today's deep read would use was read before with
-**byte-identical content** (same URL, same content hash — an advisory updated in place changes the hash), the
-quick read found **no IoC** the earlier read lacked, and the brief names **no new CVE**. Otherwise Opus reads
-it fresh. A reused story still shows in full ("Deep read reused from <date> — sources unchanged…") and its
-slot passes to the next story in the ranked list, so up to `MAX_STORIES` fresh deep reads still happen.
-Pages are re-fetched after 12 h, so in-place updates are seen the next day.
-
-The Discord line breaks cost down per tier: calls, uncached input, cache reads, cache writes, output
-(thinking is billed as output), and how many deep reads were reused.
-
-## Exposure check
-
-Every story carries an **Exposure check** box under its summary — *Affected* (product + versions), *Only if*
-(preconditions: optional module installed, non-default config, interface exposed, auth required), *Not
-affected if* (quick exclusions), *Fixed in* — so a story can be ruled out in seconds. Only conditions the
-sources state; empty rows are omitted. Generic product facts, never a description of anyone's environment.
-
-The brief sometimes lists one story twice under the same link; such items are merged (roundup pages excepted).
-
-## Day-over-day diffing (`lib/diff.js`)
-
-- **Delta line** at the top of every email: new IoCs and never-seen behaviors vs. restated IoCs and story updates.
-- **Story updates:** a story continuing one from the last 14 days is titled "update to <date>'s story"; only
-  what's new is shown, restated IoCs and already-reported behaviors fold into collapsed sections.
-- **Behavior novelty:** a behavior is "seen before" if any behavior in the last 90 days has the same
-  `pattern_kind`, same parent, and ≥ 50 % overlapping children. New ones get a ★.
-
-**Email size.** Gmail clips bodies over ~102 KB. Styles are one `<style>` block, and if a heavy day still
-runs long the renderer trims quick-read stories (then lists them as one-liners) until it fits 95 KB; deep
-stories are never trimmed.
-
-## Endpoints
-
-- `GET /api/cron` (`?dry=1` → new runs don't email) — Bearer `CRON_SECRET` (Vercel cron sends it).
-- `POST /api/advance` — internal self-chain, same secret.
-- `POST /api/inbound` (`?dry=1`) — feed a raw `.eml` brief by hand; same dedupe + allowlist as the poll.
-- `GET /api/health` — liveness + list of *missing* env var names (never values). `noindex` everywhere.
-
-## Env vars
-
-See `.env.example` (names only). Required: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
-`ANTHROPIC_API_KEY`, `EMAIL_API_KEY` (full access), `DISCORD_WEBHOOK_URL`, `BRIEF_INBOUND_ADDRESS`. Gmail
-polling is still available as a fallback (`INBOUND_SOURCE=gmail` + the three `GMAIL_*` vars).
+A monthly spend cap (`MAX_MONTHLY_USD`) stops emailing when exceeded and says so; `PAUSED=1` halts
+everything without a deploy. Secrets live only in the host's environment variables — never in files.
+Every endpoint that mutates state requires a bearer secret. The site is `noindex` and has no login.
 
 ## Local work
 
 ```bash
-npm test                                   # offline: memory store, fake network, fake/replayed LLM
+npm test                                   # offline: memory store, fake network, replayed LLM responses
 node scripts/run-local.js --eml fixtures/briefs/2026-10-20-pipeline.eml   # real sources + real API → out/latest.html
-node scripts/run-local.js --gmail --save-fixture                          # newest real brief from Gmail
-node scripts/run-local.js --eml … --record                                # also save LLM responses to fixtures/llm/
-npm run gmail-auth                         # one-time, in your own Terminal: read-only Gmail token → Vercel (no files)
 npm run update-attack                      # refresh the ATT&CK mirror when MITRE ships a release
 ```
 
-`LLM_MODE=replay` loads `fixtures/llm/<hash>.json`; the hash covers the prompt, so editing the prompt
-means re-recording. CI runs `npm test` in replay mode with no keys.
+`.env.example` lists every variable (names only). `LLM_MODE=replay` loads recorded model responses
+from `fixtures/llm/`; CI runs the suite in replay mode with no keys. Fixture emails use `example.test`
+addresses.
 
 ## Database
 
-`supabase/migrations/0001_v0.sql` — paste into the Supabase SQL editor. RLS on for every table, no
-policies, revoked from `anon`/`authenticated`: only the service-role key (Vercel env, server-side) can
-touch data. Retention jobs (raw MIME 30 d, source text 90 d) and backups arrive with v1.
+`supabase/migrations/` — paste into the Supabase SQL editor. RLS on for every table, no policies; only
+the service-role key (server-side) can touch data.
 
-## Roadmap seams (present, deliberately unbuilt)
+## Companion: bluesign (planned)
 
-`lib/validate.js`, `lib/feeds.js`, `lib/queries.js`, `lib/lint.js`, `lib/backends/{splunk,elastic}.js`,
-`templates/`, `logsources/`, `stories.fingerprint` / `updates_story_id`, `lib/tokens.js` (signed links).
-v1 = the pack; v2 = prove it. Open v1 decision: pySigma is Python — compile in a Python function or in
-an Actions job.
+A blue-team detection-validation tool that consumes Cutsign's agent JSON: constructs synthetic log
+events from a story's signal fields, runs them through the SIEM vendors' own public ingestion
+pipelines in a local Docker lab, asserts the detection fires on signal and stays silent on noise,
+and measures telemetry coverage ("today's brief needed six log sources; you can see four").
+Adversary emulation is out of scope and never initiated by the system.

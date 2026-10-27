@@ -6,6 +6,11 @@ import { _setEmailSink } from '../lib/email.js';
 import { _setDiscordSink } from '../lib/discord.js';
 import { _resetRobotsCache } from '../lib/fetch-source.js';
 
+// fixture senders (example.test) are the allowlist under test; production sets its own
+process.env.BRIEF_SENDER_ALLOWLIST ||= 'brief@example.test,briefs@example.test';
+process.env.EMAIL_FROM ||= 'Cutsign <cutsign@example.test>';
+process.env.EMAIL_TO ||= 'reader@example.test';
+
 const fx = (p) => new URL(`../fixtures/${p}`, import.meta.url);
 export const readFixture = (p) => readFileSync(fx(p), 'utf8');
 
