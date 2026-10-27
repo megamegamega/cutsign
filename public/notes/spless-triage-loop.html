@@ -12,18 +12,18 @@
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f27; --mute: #5c6472; --line: #c7ccd6;
     --accent: #2f6f9f;
-    --sc: #2f6f9f; --ba: #2e8a5e; --al: #7b4fb3;                 /* jobs: scoping, baselining, alerting */
+    --sc: #2f6f9f; --ba: #2e8a5e; --al: #7b4fb3; --inv: #c4651c;  /* jobs: scoping, baselining, alerting, investigating */
     --l1: #8a919c; --hold: #6b7fb3; --l2: #b8861b; --l3: #b23a3a; /* lane semantics */
     --sans: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
     --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6; --inv: #eb9650;
     --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark } }
   :root[data-theme="dark"] {
     --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6; --inv: #eb9650;
     --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark }
 
   body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans);
@@ -47,7 +47,7 @@
   .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
   .grid3 > div { min-width: 0; border-left: 3px solid var(--job); padding-left: 12px; }
   .grid3 h3 { color: var(--job); }
-  .sc { --job: var(--sc); } .ba { --job: var(--ba); } .al { --job: var(--al); }
+  .sc { --job: var(--sc); } .ba { --job: var(--ba); } .al { --job: var(--al); } .inv { --job: var(--inv); }
   h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); }
@@ -69,7 +69,7 @@
   @media print {
     /* PDFs are always dark, like the cards; print-color-adjust keeps the backgrounds. */
     :root { --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-      --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+      --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6; --inv: #eb9650;
       --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; }
     html, body { background: var(--bg) !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     body { padding: 0; font-size: 12.5px; }
@@ -93,12 +93,12 @@
 <main>
   <header>
     <h1>SP-less Triage Loop</h1>
-    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b style="color:var(--sc)">Scoping</b> finds each new app and assigns a lane. <b style="color:var(--ba)">Baselining</b> records what the app normally looks like. <b style="color:var(--al)">Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a known vendor whose stolen credential was used from new infrastructure. Public sources only; describes no particular tenant.</p>
+    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b style="color:var(--sc)">Scoping</b> finds each new app and assigns a lane. <b style="color:var(--ba)">Baselining</b> records what the app normally looks like. <b style="color:var(--al)">Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a known vendor whose stolen credential was used from new infrastructure. <b style="color:var(--inv)">Investigating</b> is where anything that fails a review goes: nothing is written to the kept list until it comes back benign. Public sources only; describes no particular tenant.</p>
   </header>
 
   <figure>
     <div class="wrap">
-    <svg viewBox="0 0 1240 720" role="img" aria-label="Three swimlanes. Scoping, daily: pull all-zeros service-principal sign-ins, group by app ID and owner tenant, stop if no new app ID; otherwise, if the owner is a documented Microsoft tenant or a first-party app ID, lane 1; else look up the owner tenant and, by what comes back, lane 2 vendor, hold, or lane 3 nobody. Lanes 1, 2 and 3 continue into Baselining: pull 90 days of all the app's sign-ins, compute the sets of credential key IDs, resources and ASNs plus first seen, review by hand on day one, append one row to the kept list. Alerting, daily: for each baselined app ID pull two days of sign-ins, diff against its row, stop if nothing is new; otherwise investigate, and on case close append the new value to the row.">
+    <svg viewBox="0 0 1240 935" role="img" aria-label="Four swimlanes. Scoping, daily: pull all-zeros service-principal sign-ins, group by app ID and owner tenant, stop if no new app ID; otherwise, if the owner is a documented Microsoft tenant or a first-party app ID, lane 1; else look up the owner tenant and, by what comes back, lane 2 vendor, hold, or lane 3 nobody. Lanes 1, 2 and 3 continue into Baselining: pull 90 days of all the app's sign-ins, compute the sets, review by hand on day one; if clean, append one row to the kept list, otherwise continue into Investigating. Alerting, daily: for each baselined app ID pull two days of sign-ins, diff against its row, stop if nothing is new, otherwise continue into Investigating. Investigating, on demand: issuance-then-use check, persistence audit, blast-radius scope, then a human verdict; benign writes the row or appends the value to the kept list, malicious opens an IR case with containment and marks the row compromised.">
       <defs>
         <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -108,13 +108,15 @@
       <!-- swimlane bands -->
       <g>
         <rect x="20" y="20" width="1200" height="300" rx="8" style="fill:color-mix(in srgb, var(--sc) 7%, transparent)"/>
-        <rect x="20" y="335" width="1200" height="145" rx="8" style="fill:color-mix(in srgb, var(--ba) 7%, transparent)"/>
-        <rect x="20" y="495" width="1200" height="205" rx="8" style="fill:color-mix(in srgb, var(--al) 7%, transparent)"/>
+        <rect x="20" y="335" width="1200" height="160" rx="8" style="fill:color-mix(in srgb, var(--ba) 7%, transparent)"/>
+        <rect x="20" y="510" width="1200" height="205" rx="8" style="fill:color-mix(in srgb, var(--al) 7%, transparent)"/>
+        <rect x="20" y="730" width="1200" height="185" rx="8" style="fill:color-mix(in srgb, var(--inv) 7%, transparent)"/>
       </g>
       <g font-size="11" font-weight="600" letter-spacing="0.08em">
         <text x="32" y="40" style="fill:var(--sc)">SCOPING · DAILY</text>
         <text x="32" y="355" style="fill:var(--ba)">BASELINING · ONCE PER LANED APPID</text>
-        <text x="32" y="515" style="fill:var(--al)">ALERTING · DAILY</text>
+        <text x="32" y="530" style="fill:var(--al)">ALERTING · DAILY</text>
+        <text x="32" y="750" style="fill:var(--inv)">INVESTIGATING · ON DEMAND, FROM EITHER EXIT</text>
       </g>
 
       <!-- ===== Scoping ===== -->
@@ -126,25 +128,20 @@
         <polygon points="660,130 735,96 810,130 735,164" style="fill:var(--panel)"/>
         <rect x="645" y="186" width="180" height="48" rx="4" style="fill:var(--panel)"/>
         <polygon points="670,282 735,252 800,282 735,312" style="fill:var(--panel)"/>
-        <!-- human tag on the lookup decision's shoulder -->
         <rect x="772" y="244" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
       </g>
-      <!-- stop pill -->
       <rect x="535" y="44" width="70" height="26" rx="13" style="fill:var(--panel);stroke:var(--mute)" stroke-width="1.2"/>
-      <!-- lane boxes (neutral stroke, colored label) -->
       <g fill="none" stroke-width="1.2" style="stroke:var(--line)">
         <rect x="960" y="52" width="190" height="40" rx="4" style="fill:var(--panel)"/>
         <rect x="960" y="112" width="190" height="40" rx="4" style="fill:var(--panel)"/>
         <rect x="960" y="172" width="190" height="40" rx="4" style="fill:var(--panel)"/>
         <rect x="960" y="232" width="190" height="40" rx="4" style="fill:var(--panel)"/>
       </g>
-      <!-- connectors B -->
       <g fill="none" stroke-width="1.4" style="stroke:var(--ba)">
         <circle cx="1185" cy="72" r="13" style="fill:var(--panel)"/>
         <circle cx="1185" cy="132" r="13" style="fill:var(--panel)"/>
         <circle cx="1185" cy="252" r="13" style="fill:var(--panel)"/>
       </g>
-      <!-- scoping edges -->
       <g fill="none" stroke="currentColor" stroke-width="1.2">
         <line x1="120" y1="130" x2="145" y2="130" marker-end="url(#ah)"/>
         <line x1="305" y1="130" x2="330" y2="130" marker-end="url(#ah)"/>
@@ -168,42 +165,69 @@
         <circle cx="62" cy="420" r="13" style="fill:var(--panel)"/>
         <rect x="100" y="396" width="200" height="48" rx="4" style="fill:var(--panel)"/>
         <rect x="325" y="396" width="200" height="48" rx="4" style="fill:var(--panel)"/>
-        <rect x="550" y="396" width="180" height="48" rx="4" style="fill:var(--panel)"/>
-        <rect x="755" y="396" width="140" height="48" rx="4" style="fill:var(--panel)"/>
-        <rect x="614" y="372" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+        <rect x="550" y="396" width="170" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="745,420 800,392 855,420 800,448" style="fill:var(--panel)"/>
+        <rect x="885" y="396" width="140" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="609" y="372" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+      </g>
+      <g fill="none" stroke-width="1.4" style="stroke:var(--inv)">
+        <circle cx="800" cy="476" r="13" style="fill:var(--panel)"/>
       </g>
       <g fill="none" stroke="currentColor" stroke-width="1.2">
         <line x1="75" y1="420" x2="100" y2="420" marker-end="url(#ah)"/>
         <line x1="300" y1="420" x2="325" y2="420" marker-end="url(#ah)"/>
         <line x1="525" y1="420" x2="550" y2="420" marker-end="url(#ah)"/>
-        <line x1="730" y1="420" x2="755" y2="420" marker-end="url(#ah)"/>
-        <polyline points="895,420 1150,420 1150,590" marker-end="url(#ah)"/>
+        <line x1="720" y1="420" x2="745" y2="420" marker-end="url(#ah)"/>
+        <line x1="855" y1="420" x2="885" y2="420" marker-end="url(#ah)"/>
+        <line x1="800" y1="448" x2="800" y2="463" marker-end="url(#ah)"/>
+        <polyline points="1025,420 1150,420 1150,605" marker-end="url(#ah)"/>
       </g>
 
       <!-- ===== Alerting ===== -->
       <g fill="none" stroke-width="1.4" style="stroke:var(--al)">
-        <rect x="40" y="543" width="80" height="34" rx="17" style="fill:var(--panel)"/>
-        <rect x="145" y="536" width="160" height="48" rx="4" style="fill:var(--panel)"/>
-        <rect x="330" y="536" width="160" height="48" rx="4" style="fill:var(--panel)"/>
-        <rect x="515" y="536" width="180" height="48" rx="4" style="fill:var(--panel)"/>
-        <polygon points="720,560 780,530 840,560 780,590" style="fill:var(--panel)"/>
-        <rect x="870" y="532" width="160" height="56" rx="4" style="fill:var(--panel)"/>
-        <rect x="924" y="508" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+        <rect x="40" y="558" width="80" height="34" rx="17" style="fill:var(--panel)"/>
+        <rect x="145" y="551" width="160" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="330" y="551" width="160" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="515" y="551" width="180" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="720,575 780,545 840,575 780,605" style="fill:var(--panel)"/>
       </g>
-      <rect x="745" y="625" width="70" height="26" rx="13" style="fill:var(--panel);stroke:var(--mute)" stroke-width="1.2"/>
+      <g fill="none" stroke-width="1.4" style="stroke:var(--inv)">
+        <circle cx="883" cy="575" r="13" style="fill:var(--panel)"/>
+      </g>
+      <rect x="745" y="640" width="70" height="26" rx="13" style="fill:var(--panel);stroke:var(--mute)" stroke-width="1.2"/>
       <!-- kept list: data store -->
       <g fill="none" stroke-width="1.6" style="stroke:var(--accent)">
-        <path d="M1090,600 v80 a60,10 0 0 0 120,0 v-80" style="fill:var(--panel)"/>
-        <ellipse cx="1150" cy="600" rx="60" ry="10" style="fill:var(--panel)"/>
+        <path d="M1090,615 v80 a60,10 0 0 0 120,0 v-80" style="fill:var(--panel)"/>
+        <ellipse cx="1150" cy="615" rx="60" ry="10" style="fill:var(--panel)"/>
       </g>
       <g fill="none" stroke="currentColor" stroke-width="1.2">
-        <line x1="120" y1="560" x2="145" y2="560" marker-end="url(#ah)"/>
-        <line x1="305" y1="560" x2="330" y2="560" marker-end="url(#ah)"/>
-        <line x1="490" y1="560" x2="515" y2="560" marker-end="url(#ah)"/>
-        <line x1="695" y1="560" x2="720" y2="560" marker-end="url(#ah)"/>
-        <line x1="780" y1="590" x2="780" y2="625" marker-end="url(#ah)"/>
-        <line x1="840" y1="560" x2="870" y2="560" marker-end="url(#ah)"/>
-        <polyline points="1030,560 1060,560 1060,640 1090,640" marker-end="url(#ah)"/>
+        <line x1="120" y1="575" x2="145" y2="575" marker-end="url(#ah)"/>
+        <line x1="305" y1="575" x2="330" y2="575" marker-end="url(#ah)"/>
+        <line x1="490" y1="575" x2="515" y2="575" marker-end="url(#ah)"/>
+        <line x1="695" y1="575" x2="720" y2="575" marker-end="url(#ah)"/>
+        <line x1="780" y1="605" x2="780" y2="640" marker-end="url(#ah)"/>
+        <line x1="840" y1="575" x2="870" y2="575" marker-end="url(#ah)"/>
+      </g>
+
+      <!-- ===== Investigating ===== -->
+      <g fill="none" stroke-width="1.4" style="stroke:var(--inv)">
+        <circle cx="62" cy="805" r="13" style="fill:var(--panel)"/>
+        <rect x="100" y="781" width="200" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="325" y="781" width="200" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="550" y="781" width="170" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="745,805 805,775 865,805 805,835" style="fill:var(--panel)"/>
+        <rect x="885" y="781" width="150" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="834" y="766" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+      </g>
+      <rect x="705" y="858" width="200" height="40" rx="20" style="fill:var(--panel);stroke:var(--l3)" stroke-width="1.4"/>
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="75" y1="805" x2="100" y2="805" marker-end="url(#ah)"/>
+        <line x1="300" y1="805" x2="325" y2="805" marker-end="url(#ah)"/>
+        <line x1="525" y1="805" x2="550" y2="805" marker-end="url(#ah)"/>
+        <line x1="720" y1="805" x2="745" y2="805" marker-end="url(#ah)"/>
+        <line x1="805" y1="835" x2="805" y2="858" marker-end="url(#ah)"/>
+        <line x1="865" y1="805" x2="885" y2="805" marker-end="url(#ah)"/>
+        <polyline points="1035,805 1150,805 1150,708" marker-end="url(#ah)"/>
       </g>
 
       <!-- ===== text ===== -->
@@ -225,7 +249,6 @@
         <text x="735" y="279">what came</text>
         <text x="735" y="293">back?</text>
         <text x="798" y="256" font-size="9.5" style="fill:var(--sc)">human</text>
-        <!-- lanes -->
         <text x="1055" y="68" font-weight="600" style="fill:var(--l1)">Lane 1 · Microsoft</text>
         <text x="1055" y="83" font-size="10.5">documented tenant or first-party appId</text>
         <text x="1055" y="128" font-weight="600" style="fill:var(--l2)">Lane 2 · Vendor</text>
@@ -243,28 +266,42 @@
         <text x="200" y="431" font-size="10.5" style="fill:var(--mute)">for the appId, zeros or real SP</text>
         <text x="425" y="416">Sets: keyIds · resources · ASNs</text>
         <text x="425" y="431" font-size="10.5" style="fill:var(--mute)">plus first seen</text>
-        <text x="640" y="416">Day one: review the sets</text>
-        <text x="640" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may already be in them</text>
-        <text x="640" y="384" font-size="9.5" style="fill:var(--ba)">human</text>
-        <text x="825" y="424">Append one row</text>
+        <text x="635" y="416">Day one: review the sets</text>
+        <text x="635" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may already be in them</text>
+        <text x="635" y="384" font-size="9.5" style="fill:var(--ba)">human</text>
+        <text x="800" y="424">clean?</text>
+        <text x="955" y="416">Append one row</text>
+        <text x="955" y="431" font-size="10.5" style="fill:var(--mute)">benign baseline only</text>
+        <text x="800" y="480" font-size="11" font-weight="600" style="fill:var(--inv)">I</text>
         <!-- alerting -->
-        <text x="80" y="564" font-weight="600">Daily</text>
-        <text x="225" y="556">Baselined appIds</text>
-        <text x="225" y="571" font-size="10.5" style="fill:var(--mute)">read from the kept list</text>
-        <text x="410" y="556">Pull 2 d of sign-ins</text>
-        <text x="410" y="571" font-size="10.5" style="fill:var(--mute)">per appId, zeros or real SP</text>
-        <text x="605" y="556">Diff vs its row</text>
-        <text x="605" y="571" font-size="10.5" style="fill:var(--mute)">keyId · resource · ASN · failures</text>
-        <text x="780" y="557">anything</text>
-        <text x="780" y="571">new?</text>
-        <text x="780" y="642" font-size="11" style="fill:var(--mute)">done</text>
-        <text x="950" y="552">Investigate</text>
-        <text x="950" y="566" font-size="10.5" style="fill:var(--mute)">new keyId outranks new ASN</text>
-        <text x="950" y="580" font-size="10.5" style="fill:var(--mute)">case closed → append the value</text>
-        <text x="950" y="520" font-size="9.5" style="fill:var(--al)">human</text>
+        <text x="80" y="579" font-weight="600">Daily</text>
+        <text x="225" y="571">Baselined appIds</text>
+        <text x="225" y="586" font-size="10.5" style="fill:var(--mute)">read from the kept list</text>
+        <text x="410" y="571">Pull 2 d of sign-ins</text>
+        <text x="410" y="586" font-size="10.5" style="fill:var(--mute)">per appId, zeros or real SP</text>
+        <text x="605" y="571">Diff vs its row</text>
+        <text x="605" y="586" font-size="10.5" style="fill:var(--mute)">keyId · resource · ASN · failures</text>
+        <text x="780" y="572">anything</text>
+        <text x="780" y="586">new?</text>
+        <text x="780" y="657" font-size="11" style="fill:var(--mute)">done</text>
+        <text x="883" y="579" font-size="11" font-weight="600" style="fill:var(--inv)">I</text>
         <!-- store -->
-        <text x="1150" y="636" font-weight="600" style="fill:var(--accent)">Kept list</text>
-        <text x="1150" y="651" font-size="10.5" style="fill:var(--mute)">one row per appId</text>
+        <text x="1150" y="651" font-weight="600" style="fill:var(--accent)">Kept list</text>
+        <text x="1150" y="666" font-size="10.5" style="fill:var(--mute)">one row per appId</text>
+        <!-- investigating -->
+        <text x="62" y="809" font-size="11" font-weight="600" style="fill:var(--inv)">I</text>
+        <text x="200" y="801">Issuance-then-use</text>
+        <text x="200" y="816" font-size="10.5" style="fill:var(--mute)">zeros → 2xx Graph activity, same appId</text>
+        <text x="425" y="801">Persistence audit</text>
+        <text x="425" y="816" font-size="10.5" style="fill:var(--mute)">roles, credentials, add→remove→add churn</text>
+        <text x="635" y="801">Blast radius</text>
+        <text x="635" y="816" font-size="10.5" style="fill:var(--mute)">resources, mailboxes, siblings touched</text>
+        <text x="805" y="809">malicious?</text>
+        <text x="860" y="778" font-size="9.5" style="fill:var(--inv)">human</text>
+        <text x="960" y="801">Benign</text>
+        <text x="960" y="816" font-size="10.5" style="fill:var(--mute)">write the row or append the value</text>
+        <text x="805" y="875" font-weight="600" style="fill:var(--l3)">IR case · contain</text>
+        <text x="805" y="889" font-size="10.5" style="fill:var(--mute)">row marked compromised, never appended</text>
       </g>
       <!-- edge labels -->
       <g font-size="10.5" style="fill:var(--mute)">
@@ -272,27 +309,32 @@
         <text x="642" y="124" text-anchor="middle">new</text>
         <text x="745" y="90" text-anchor="start">yes</text>
         <text x="745" y="180" text-anchor="start">no</text>
-        <text x="788" y="612" text-anchor="start">none</text>
-        <text x="855" y="554" text-anchor="middle">new</text>
+        <text x="870" y="414" text-anchor="middle">yes</text>
+        <text x="808" y="459" text-anchor="start">no</text>
+        <text x="788" y="627" text-anchor="start">none</text>
+        <text x="855" y="569" text-anchor="middle">new</text>
+        <text x="875" y="799" text-anchor="middle">no</text>
+        <text x="813" y="850" text-anchor="start">yes</text>
         <text x="1138" y="412" text-anchor="end" style="fill:var(--ba)">writes the row</text>
-        <text x="1062" y="632" text-anchor="end" style="fill:var(--al)">appends</text>
+        <text x="1138" y="797" text-anchor="end" style="fill:var(--inv)">writes or appends</text>
       </g>
     </svg>
     </div>
     <div class="legend">
-      <span><b>Pill</b> start or stop</span><span><b>Rectangle</b> a step</span><span><b>Diamond</b> a decision</span><span><b>Cylinder</b> the kept list</span><span><b>human</b> an analyst decides</span><span><b>B</b> continues in Baselining</span><span><b>Band color</b> the job; same color on its query below</span>
+      <span><b>Pill</b> start or stop</span><span><b>Rectangle</b> a step</span><span><b>Diamond</b> a decision</span><span><b>Cylinder</b> the kept list</span><span><b>human</b> an analyst decides</span><span><b>B</b> continues in Baselining</span><span><b>I</b> continues in Investigating</span><span><b>Band color</b> the job; same color on its query below</span>
     </div>
-    <figcaption>Scoping classifies without a service principal, because an SP-less app has none in your tenant to read; lane 3 creates one in order to disable it. The owner tenant says who registered the app, not who is operating it today, which is why Alerting exists.</figcaption>
+    <figcaption>Scoping classifies without a service principal, because an SP-less app has none in your tenant to read; lane 3 creates one in order to disable it. The owner tenant says who registered the app, not who is operating it today, which is why Alerting exists. The kept list is written only from benign outcomes: a clean day-one review, or an investigation that came back benign.</figcaption>
   </figure>
 
   <section>
-    <h2>Three jobs, two human gates</h2>
+    <h2>Four jobs, three human gates</h2>
     <div class="tw">
     <table>
       <tr><th>Job</th><th>Runs</th><th>Does</th><th>Human gate</th></tr>
       <tr><td class="sc"><span class="job">Scoping</span></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
-      <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Day one only: the sets are reviewed by hand before the row is written, because the first 90 days may already contain the attacker.</td></tr>
-      <tr><td class="al"><span class="job">Alerting</span></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>Case close. An analyst appends the new value to the row. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
+      <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Day one only: the sets are reviewed by hand before the row is written, because the first 90 days may already contain the attacker. Not clean → Investigating; the row is not written.</td></tr>
+      <tr><td class="al"><span class="job">Alerting</span></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>None. Anything new → Investigating. Alerting never writes the kept list.</td></tr>
+      <tr><td class="inv"><span class="job">Investigating</span></td><td>On demand, from either exit</td><td>Issuance-then-use (did the all-zeros token get used: 2xx Graph activity from the same appId), persistence audit (roles, credentials, add→remove→add churn), blast radius (resources, mailboxes, sibling principals touched). The queries are on the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise card</a>.</td><td>The verdict. Benign: write the row or append the new value, by hand. Malicious: IR case, contain (create-then-disable the service principal, revoke what it touched), mark the row compromised and never append. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
     </table>
     </div>
   </section>
@@ -403,6 +445,23 @@ index=* category=ServicePrincipalSignInLogs earliest=-2d@d
 
 </pre>
         <p class="note">The kept list stores each set pipe-delimited. No success filter: a failed sign-in for a baselined vendor appId from a new ASN is the signal, and error-code shifts (invalid or expired secret) mean someone is testing credentials. Two-day window with dedupe covers export lag. Same cloud provider as the vendor is not clearance.</p>
+      </div>
+      <div class="inv">
+        <h3>Investigating · issuance-then-use, for one appId</h3>
+<pre>
+
+index=* category=MicrosoftGraphActivityLogs earliest=-30d@d
+    properties.appId="&lt;appId under investigation&gt;"
+| rename properties.responseStatusCode as code, properties.requestUri as uri,
+    properties.requestMethod as method
+| where tonumber(code)&gt;=200 AND tonumber(code)&lt;300
+| stats count as ok2xx values(method) as methods values(uri) as uris
+    min(_time) as first max(_time) as last by properties.appId
+→ any row = the app acted despite "no consent"; writes (POST/PATCH/DELETE)
+  against roles, servicePrincipals or applications go straight to the verdict
+
+</pre>
+        <p class="note">Prerequisite: Microsoft Graph activity logs must be enabled; if they are off this is a coverage gap, not a clean result. The persistence audit (Add/Remove member to role, Add/Remove service principal credentials, the 60-minute churn pair) and the blast-radius sweep are the audit-log blocks on the ConnectWise card, run with the same appId.</p>
       </div>
     </div>
     <p class="note">Microsoft's own inventory call, from its reports FAQ: <code>GET https://graph.microsoft.com/beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal') and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'</code>. Beta is required; v1.0 returns no service-principal sign-ins and no owner field. Field names above follow the Azure Monitor export shape; the Log Analytics columns are documented, the exact event-hub keys are inferred from them, so tune to your add-on.</p>
