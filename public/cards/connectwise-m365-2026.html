@@ -328,9 +328,11 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 # Microsoft's own inventory call (reports FAQ, beta required; v1.0 returns no SP sign-ins):
 #   GET /beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal')
 #       and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'
-→ keep the list; a NEW (owner_tenant, appId) is job A. Job B, daily, is the per-appId re-check of
-  every filed app across all its sign-ins (zeros or real SP): new credential keyId outranks new ASN;
-  failures from a new ASN count; append to the baseline only when a case closes.</pre>
+→ three jobs. SCOPING (daily): this query; a NEW (owner_tenant, appId) gets a lane. FILING (once per
+  laned appId): baseline 90 days of ALL its sign-ins, zeros or real SP — credential keyIds, resources,
+  ASNs, first seen — into the kept list. ALERTING (daily): every filed appId against its row; new
+  credential keyId outranks new ASN; failures from a new ASN count; append to the baseline only when
+  a case closes, never rebuild it from raw.</pre>
     <p><b>Network fallback</b> — if Entra retention fails you, the infrastructure is still checkable:</p>
     <pre># firewall / proxy / flow logs
 dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
