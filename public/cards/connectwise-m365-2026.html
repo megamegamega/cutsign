@@ -280,6 +280,18 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
 | stats count as ok2xx values(uri) as uris min(_time) as first max(_time) as last by appId
 # if your Graph activity records lack a publisher field, resolve appId → publisher once via
 # Get-MgServicePrincipal (AppOwnerOrganizationId) and keep the two Microsoft tenants out</pre>
+    <p><b>SP-less inventory</b> — the class this incident belongs to, scoped so it stays finite (one pass, then diff daily):</p>
+<pre># service-principal (app-only) sign-ins ONLY — user-log zeros are first-party apps refreshing
+# tokens for users and carry the user's device IP; ignore them
+index=* category=ServicePrincipalSignInLogs earliest=-90d@d
+    properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
+| stats count min(_time) as first max(_time) as last values(properties.resourceDisplayName) as resources
+    by properties.appId properties.appDisplayName
+→ for each appId: appOwnerOrganizationId → findTenantInformationByTenantId → publisher name
+   Microsoft publisher      = expected, drop
+   known non-Microsoft app  = grandfathered SP-less vendor → watch list (its breach lands here with no consent to revoke)
+   unknown                  = create a service principal for the appId, then disable it (Microsoft's documented block)
+→ keep the list; alert only on a NEW appId. Do not chase IPs or cadence for these.</pre>
     <p><b>Network fallback</b> — if Entra retention fails you, the infrastructure is still checkable:</p>
     <pre># firewall / proxy / flow logs
 dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
