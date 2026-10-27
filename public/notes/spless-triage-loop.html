@@ -99,7 +99,7 @@
 
   <figure>
     <div class="wrap">
-    <svg viewBox="0 0 1240 935" role="img" aria-label="Four swimlanes. Scoping, daily: pull all-zeros service-principal sign-ins, group by app ID and owner tenant, stop if no new app ID; otherwise, if the owner is a documented Microsoft tenant or a first-party app ID, lane 1; else look up the owner tenant and, by what comes back, lane 2 vendor, hold, or lane 3 nobody. Lanes 1, 2 and 3 continue into Baselining: pull 90 days of all the app's sign-ins, compute the sets, review by hand on day one; if clean, append one row to the kept list, otherwise continue into Investigating. Alerting, daily: for each baselined app ID pull two days of sign-ins, diff against its row, stop if nothing is new, otherwise continue into Investigating. Investigating, on demand: issuance-then-use check, persistence audit, blast-radius scope, then a human verdict; benign writes the row or appends the value to the kept list, malicious opens an IR case with containment and marks the row compromised.">
+    <svg viewBox="0 0 1240 935" role="img" aria-label="Four swimlanes. Scoping, daily: pull all-zeros service-principal sign-ins, group by app ID and owner tenant, stop if no new app ID; otherwise, if the owner is a documented Microsoft tenant or a first-party app ID, lane 1; else look up the owner tenant and, by what comes back, lane 2 vendor, hold, or lane 3 nobody. Lanes 1, 2 and 3 continue into Baselining: pull 90 days of all the app's sign-ins, compute the sets, review the sets by hand; if clean, append one row to the kept list, otherwise continue into Investigating. Alerting, daily: for each baselined app ID pull two days of sign-ins, diff against its row, stop if nothing is new, otherwise continue into Investigating. Investigating, on demand: issuance-then-use check, persistence audit, blast-radius scope, then a human verdict; benign writes the row or appends the value to the kept list, malicious opens an IR case with containment and marks the row compromised.">
       <defs>
         <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -267,8 +267,8 @@
         <text x="200" y="431" font-size="10.5" style="fill:var(--mute)">for the appId, zeros or real SP</text>
         <text x="425" y="416">Sets: keyIds · resources · ASNs</text>
         <text x="425" y="431" font-size="10.5" style="fill:var(--mute)">plus first seen</text>
-        <text x="635" y="416">Day one: review the sets</text>
-        <text x="635" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may be in them</text>
+        <text x="635" y="416">Review the sets</text>
+        <text x="635" y="431" font-size="10.5" style="fill:var(--mute)">every new appId; day one has many</text>
         <text x="635" y="384" font-size="9.5" style="fill:var(--ba)">human</text>
         <text x="800" y="424">clean?</text>
         <text x="955" y="416">Append one row</text>
@@ -324,7 +324,7 @@
     <div class="legend">
       <span><b>Pill</b> start or stop</span><span><b>Rectangle</b> a step</span><span><b>Diamond</b> a decision</span><span><b>Cylinder</b> the kept list</span><span><b>human</b> an analyst decides</span><span><b>B</b> continues in Baselining</span><span><b>I</b> continues in Investigating</span><span><b>Band color</b> the job; same color on its query below</span>
     </div>
-    <figcaption>Scoping classifies without a service principal, because an SP-less app has none in your tenant to read; lane 3 creates one in order to disable it. The owner tenant says who registered the app, not who is operating it today, which is why Alerting exists. The kept list is written only from benign outcomes: a clean day-one review, or an investigation that came back benign.</figcaption>
+    <figcaption>Scoping classifies without a service principal, because an SP-less app has none in your tenant to read; lane 3 creates one in order to disable it. The owner tenant says who registered the app, not who is operating it today, which is why Alerting exists. The kept list is written only from benign outcomes: a clean review of a new app's sets, or an investigation that came back benign.</figcaption>
   </figure>
 
   <section>
@@ -333,7 +333,7 @@
     <table>
       <tr><th>Job</th><th>Runs</th><th>Does</th><th>Human gate</th></tr>
       <tr><td class="sc"><span class="job">Scoping</span></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
-      <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Day one only: the sets are reviewed by hand before the row is written, because the first 90 days may already contain the attacker. Not clean → Investigating; the row is not written.</td></tr>
+      <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Every new app: the sets are reviewed by hand before the row is written, because the 90 days behind a newly seen app may already contain the attacker. Not clean → Investigating; the row is not written. Day one is only the day there are many.</td></tr>
       <tr><td class="al"><span class="job">Alerting</span></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>None. Anything new → Investigating. Alerting never writes the kept list.</td></tr>
       <tr><td class="inv"><span class="job">Investigating</span></td><td>On demand, from either exit</td><td>Issuance-then-use (did the all-zeros token get used: 2xx Graph activity from the same appId), persistence audit (roles, credentials, add→remove→add churn), blast radius (resources, mailboxes, sibling principals touched). The three queries and the containment steps are below.</td><td>The verdict. Benign: write the row or append the new value, by hand. Malicious: IR case, contain (create-then-disable the service principal, revoke what it touched), mark the row compromised and never append. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
     </table>
@@ -361,7 +361,7 @@
       <tr><td><span class="lane l3">Lane 3 · Nobody</span></td><td>Lookup answered, nobody claims the app, second analyst agrees. Create a service principal for the appId, disable it, verify via Graph that it exists with <code>accountEnabled=false</code>, record its objectId.</td><td>Not the branch for a failed lookup. Undo is deleting the service principal; re-enabling it leaves a consented app behind.</td></tr>
     </table>
     </div>
-    <p class="note">Day one: the kept list is empty, so every non-Microsoft pair gets the full lookup and a hand review of its Baselining sets before the row is written. Nothing goes to lane 3 on day one.</p>
+    <p class="note">Every newly laned app gets the full lookup and a hand review of its Baselining sets before the row is written. Day one is the same procedure at volume, with one extra rule: nothing goes to lane 3 on day one.</p>
   </section>
 
   <section>
@@ -420,7 +420,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 | outputlookup append=true spless_kept.csv
 
 </pre>
-        <p class="note">No zeros filter: the baseline covers the app under a real service principal too. Review the sets by hand before writing on day one; that review is where an attacker already in the 90 days gets caught.</p>
+        <p class="note">No zeros filter: the baseline covers the app under a real service principal too. Review the sets by hand before writing, for every new app; that review is where an attacker already in the 90 days gets caught.</p>
       </div>
       <div class="al">
         <h3>Alerting · daily drift on baselined appIds</h3>
