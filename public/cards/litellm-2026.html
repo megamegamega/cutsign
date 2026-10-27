@@ -165,16 +165,26 @@ a{color:var(--ink)}
 
     <h2>Inferred detections — while you wait</h2>
     <p class="src">Published guidance above covers the artifacts; these are fleet-sweep translations.</p>
-    <pre># host sweep (any config mgmt / EDR file search)
+    <pre>
+
+# host sweep (any config mgmt / EDR file search)
 find <python site-packages roots> -maxdepth 2 -name 'cook.pth' -o -name 'cook.py'
 test -f /tmp/remote_code_loader.lock   # Linux/macOS: loader marker
 
-# container registries: scan image layers for the three filenames in site-packages</pre>
-    <pre># egress
+# container registries: scan image layers for the three filenames in site-packages
+
+</pre>
+    <pre>
+
+# egress
 dest.domain = litellm.dev OR dest.url contains raw.githubusercontent.com/letters9813
-→ any hit since Oct 21 11:39 UTC is a confirmed infection, not a maybe</pre>
+→ any hit since Oct 21 11:39 UTC is a confirmed infection, not a maybe
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Network Resolution / Web field names; tune to your add-on:</p>
-    <pre># host artifacts (EDR / Sysmon file events, FIM)
+    <pre>
+
+# host artifacts (EDR / Sysmon file events, FIM)
 index=* earliest=-30d@d (file_name IN ("cook.pth","cook.py","sitecustomize.py") OR file_path="/tmp/remote_code_loader.lock")
 | where file_path="*site-packages*" OR file_path="/tmp/remote_code_loader.lock"
 | stats count values(file_path) as paths min(_time) as first by host
@@ -187,7 +197,9 @@ index=* earliest=-30d@d (query="litellm.dev" OR query="*.litellm.dev" OR dest="l
 # package install evidence (CI / build logs, pip caches)
 
 index=* earliest=-30d@d ("litellm==1.107.0" OR "litellm-1.107.0" OR "litellm:1.107.0")
-| stats count by host source</pre>
+| stats count by host source
+
+</pre>
 
     <h2>Timeline — Oct 21–22 (UTC)</h2>
     <ul class="tl">

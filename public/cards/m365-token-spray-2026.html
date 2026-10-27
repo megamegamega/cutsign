@@ -162,19 +162,33 @@ a{color:var(--ink)}
 
     <h2>Inferred detections — while you wait</h2>
     <p class="src">Huntress's published hunts (live above) come first; these are the generic-SIEM translations over exported Entra logs:</p>
-    <pre># sign-in logs
+    <pre>
+
+# sign-in logs
 auth_protocol IN (OAuth2:Token, Cmsi:Cmsi)
 AND user_agent IN ('node') OR user_agent = 'Mozilla/5.0'   # bare, no platform suffix
-AND src.asn in (hosting providers)  → review mailbox + Device Registration Service touches</pre>
-    <pre># audit logs — persistence pair
+AND src.asn in (hosting providers)  → review mailbox + Device Registration Service touches
+
+</pre>
+    <pre>
+
+# audit logs — persistence pair
 device registered matching /^(DESKTOP-|Device-|Work Pc)[0-9A-F]{8}$/ from hosting IPs
-MFA method deleted AND new method added for same user within 10 minutes</pre>
-    <pre># exchange — hidden rules
+MFA method deleted AND new method added for same user within 10 minutes
+
+</pre>
+    <pre>
+
+# exchange — hidden rules
 inbox rule name matches /^.{1,3}$/ or punctuation-only
 AND (moves to 'RSS Feeds'/'RSS Subscriptions'/'Conversation History'
-     OR conditions contain payroll/banking terms)</pre>
+     OR conditions contain payroll/banking terms)
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — Azure Monitor diagnostic export shape (<code>category</code> / <code>properties.*</code>) for Entra, UAL shape for Exchange; tune to your add-on:</p>
-    <pre># replayed sessions: successful sign-ins with the campaign's client shape, Jul 14 → now
+    <pre>
+
+# replayed sessions: successful sign-ins with the campaign's client shape, Jul 14 → now
 index=* category=SignInLogs earliest=-110d@d properties.status.errorCode=0
     (properties.userAgent IN ("node","Mozilla/5.0") OR properties.authenticationProtocol IN ("deviceCode"))
 | rename properties.userPrincipalName as user, properties.ipAddress as src, properties.userAgent as ua,
@@ -203,7 +217,9 @@ index=* earliest=-110d@d Operation IN ("New-InboxRule","Set-InboxRule")
 | rex field=p "\"Name\":\"(?&lt;pname&gt;[^\"]+)\",\"Value\":\"(?&lt;pval&gt;[^\"]*)\""
 | eval rule_name=if(pname="Name", pval, null()), folder=if(pname="MoveToFolder", pval, null())
 | stats values(rule_name) as names values(folder) as folders by UserId ClientIP
-| where match(names, "^.{1,3}$") OR match(names, "^[[:punct:]]+$") OR match(folders, "RSS|Conversation History")</pre>
+| where match(names, "^.{1,3}$") OR match(names, "^[[:punct:]]+$") OR match(folders, "RSS|Conversation History")
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

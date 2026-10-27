@@ -125,7 +125,9 @@ a{color:var(--ink)}
 
     <h2>Official mitigations (php.net) — if you cannot patch today</h2>
     <p class="src">From the PHP team's advisory: these reduce exposure to the confirmed paths but "do not make an installation safe" — patching is the fix.</p>
-    <pre># CVE-2026-109619 (stale global state) — blocks the confirmed session path:
+    <pre>
+
+# CVE-2026-109619 (stale global state) — blocks the confirmed session path:
 session.upload_progress.enabled=0     ; php.ini / FPM pool / server config,
                                       ; NOT ini_set() or .user.ini — then restart every worker
 fatal_error_backtraces=0              ; PHP 8.5 only, blocks the fatal-backtrace path
@@ -138,7 +140,9 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
 # plus web-server/proxy limits on decoded size, field/part/header counts, nesting —
 # enforced even without a usable Content-Length
 # availability boundary: container/cgroup limit killing only the worker.
-# Do NOT use RLIMIT_AS / RLIMIT_DATA — they can trigger the vulnerable allocation failure.</pre>
+# Do NOT use RLIMIT_AS / RLIMIT_DATA — they can trigger the vulnerable allocation failure.
+
+</pre>
 
     <div class="cols">
       <div>
@@ -208,21 +212,35 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
     <h2>Inferred detections — while you wait</h2>
     <p class="src">The behaviors above are published (Wiz, Huntress) but no vendor has shipped ready-made queries. These translate the published behaviors into generic query logic — tune thresholds to your traffic.</p>
     <p><b>Exploit attempt shape</b> — multipart request then memory error, from the same source:</p>
-    <pre># web / LB logs
+    <pre>
+
+# web / LB logs
 multipart POST (content-type contains multipart/form-data)
 followed within 60s by status 500 from same src_ip
-| count by src_ip over 10m → investigate bursts; mass probing will be loud</pre>
+| count by src_ip over 10m → investigate bursts; mass probing will be loud
+
+</pre>
     <p><b>Memory-leak primitive</b> — the PHPSESSID leak is visible in responses:</p>
-    <pre># proxy / web logs with response headers
+    <pre>
+
+# proxy / web logs with response headers
 response Set-Cookie contains PHPSESSID AND cookie length > 1KB
-→ near-zero false positives; any hit is an exploitation attempt that got traction</pre>
+→ near-zero false positives; any hit is an exploitation attempt that got traction
+
+</pre>
     <p><b>Post-exploitation lineage</b> — the published Huntress behavior as a query:</p>
-    <pre># EDR process lineage
+    <pre>
+
+# EDR process lineage
 parent.name IN (php-fpm, php-cgi, apache2, httpd)
 child.name IN (sh, bash, curl, wget, perl, python*)
-also: php-fpm "child exited on signal" bursts in syslog (worker churn)</pre>
+also: php-fpm "child exited on signal" bursts in syslog (worker churn)
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — CIM Web / Endpoint field names, Sysmon names for lineage; tune to your add-on:</p>
-    <pre># exploit attempt shape: multipart POST then HTTP 500 from the same source inside 60 s
+    <pre>
+
+# exploit attempt shape: multipart POST then HTTP 500 from the same source inside 60 s
 index=* earliest=-30d@d ((http_method=POST http_content_type="multipart/form-data*") OR status=500)
 | transaction src maxspan=60s
 | search http_method=POST status=500
@@ -249,7 +267,9 @@ index=* earliest=-30d@d "php-fpm" "child" "exited on signal"
 # campaign infrastructure (Potassium loader)
 
 index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.118.112.100*")
-| stats count min(_time) as first by host src dest</pre>
+| stats count min(_time) as first by host src dest
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

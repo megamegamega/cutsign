@@ -166,15 +166,25 @@ a{color:var(--ink)}
 
     <h2>Inferred detections — while you wait</h2>
     <p class="src">Mandiant's published queries (live above) come first. Generic translations for environments without appliance syslog in the SIEM:</p>
-    <pre># reverse proxy / WAF in front of the appliance
+    <pre>
+
+# reverse proxy / WAF in front of the appliance
 request.path not in (known Remote Support path set)
 AND (path endswith .php OR websocket upgrade)
-AND src not in (support staff + managed endpoint ranges)</pre>
-    <pre># appliance syslog continuity (tamper canary)
+AND src not in (support staff + managed endpoint ranges)
+
+</pre>
+    <pre>
+
+# appliance syslog continuity (tamper canary)
 no events from appliance for > N minutes, where the gap starts and ends
-inside one admin session window → review that session's account and source</pre>
+inside one admin session window → review that session's account and source
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — field names follow the Splunk CIM (Web / Endpoint / Change); tune to your add-on:</p>
-    <pre># reverse proxy / WAF: unknown .php and WebSocket paths, since late August
+    <pre>
+
+# reverse proxy / WAF: unknown .php and WebSocket paths, since late August
 index=* earliest=-90d@d (uri_path="*.php" OR uri_path="/uidchanarge*" OR http_user_agent="*websocket*" OR "Upgrade: websocket")
 | where NOT cidrmatch("&lt;support-staff and managed-endpoint ranges&gt;", src)
 | stats count min(_time) as first max(_time) as last values(uri_path) as paths by src
@@ -189,7 +199,9 @@ index=* earliest=-90d@d (file_path="/usr/bin/dbus-authd" OR file_path="*/post_bo
 
 index=* "&lt;appliance log signature&gt;" earliest=-30d@d
 | timechart span=5m count | where count=0
-→ overlay each gap on /login sessions; a gap bounded by one admin session is tampering evidence</pre>
+→ overlay each gap on /login sessions; a gap bounded by one admin session is tampering evidence
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

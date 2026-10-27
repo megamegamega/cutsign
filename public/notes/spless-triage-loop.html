@@ -312,7 +312,9 @@
     <div class="grid2">
       <div>
         <h3>Scoping · daily inventory, bucketed in-query</h3>
-<pre>index=* category=ServicePrincipalSignInLogs earliest=-90d@d
+<pre>
+
+index=* category=ServicePrincipalSignInLogs earliest=-90d@d
     properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
 | rename properties.appOwnerTenantId as owner_tenant,
     properties.appId as app_id, properties.appDisplayName as app_name
@@ -325,12 +327,16 @@
 | stats count min(_time) as first max(_time) as last
     values(properties.resourceDisplayName) as resources
     by bucket owner_tenant app_id app_name
-| sort bucket</pre>
+| sort bucket
+
+</pre>
         <p class="note">Bucket is pre-triage, not the lane. "resolve" rows go through the lookup and the admission rules. Add <code>| where NOT [ inputlookup spless_kept.csv | fields app_id ]</code> on the scheduled run so only unbaselined appIds alert.</p>
       </div>
       <div>
         <h3>Baselining · once per laned appId</h3>
-<pre>index=* category=ServicePrincipalSignInLogs earliest=-90d@d
+<pre>
+
+index=* category=ServicePrincipalSignInLogs earliest=-90d@d
     properties.appId="&lt;appId being baselined&gt;"
 | rename properties.appId as app_id,
     properties.servicePrincipalCredentialKeyId as key_id,
@@ -342,12 +348,16 @@
 | eval owner_tenant="&lt;owner tenant&gt;", lane="&lt;1|hold|2|3&gt;",
     key_ids=mvjoin(key_ids,"|"), resources=mvjoin(resources,"|"),
     asns=mvjoin(asns,"|")
-| outputlookup append=true spless_kept.csv</pre>
+| outputlookup append=true spless_kept.csv
+
+</pre>
         <p class="note">No zeros filter: the baseline covers the app under a real service principal too. Review the sets by hand before writing on day one; that review is where an attacker already in the 90 days gets caught.</p>
       </div>
       <div>
         <h3>Alerting · daily drift on baselined appIds</h3>
-<pre>index=* category=ServicePrincipalSignInLogs earliest=-2d@d
+<pre>
+
+index=* category=ServicePrincipalSignInLogs earliest=-2d@d
     [ inputlookup spless_kept.csv | fields app_id | rename app_id as properties.appId ]
 | rename properties.appId as app_id,
     properties.servicePrincipalCredentialKeyId as key_id,
@@ -363,7 +373,9 @@
     if(isnull(mvfind(split(resources,"|"),"^".resource."$")),"new resource", null()),
     if(result!="0", "failure ".result, null()))
 | where isnotnull(why)
-| table app_id why key_id resource asn result count</pre>
+| table app_id why key_id resource asn result count
+
+</pre>
         <p class="note">The kept list stores each set pipe-delimited. No success filter: a failed sign-in for a baselined vendor appId from a new ASN is the signal, and error-code shifts (invalid or expired secret) mean someone is testing credentials. Two-day window with dedupe covers export lag. Same cloud provider as the vendor is not clearance.</p>
       </div>
     </div>

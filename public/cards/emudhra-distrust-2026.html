@@ -166,22 +166,36 @@ a{color:var(--ink)}
     <h2>Inferred detections — while you wait</h2>
     <p class="src">No scanner content exists because this is a trust problem, not a CVE scan. Everything below is doable today with standard tooling:</p>
     <p><b>Spot-check any endpoint's chain</b> — one-liner per host:</p>
-    <pre>openssl s_client -connect host:443 -showcerts &lt;/dev/null 2&gt;/dev/null \
+    <pre>
+
+openssl s_client -connect host:443 -showcerts &lt;/dev/null 2&gt;/dev/null \
   | openssl x509 -noout -issuer
 
-# flag any issuer containing "emSign" or "eMudhra"</pre>
+# flag any issuer containing "emSign" or "eMudhra"
+
+</pre>
     <p><b>Estate-wide inventory</b> — if you run TLS inspection or Zeek, the data already exists:</p>
-    <pre># Zeek x509.log / TLS-inspection metadata
+    <pre>
+
+# Zeek x509.log / TLS-inspection metadata
 certificate.issuer contains ("emSign" OR "eMudhra")
 → before Oct 27: that's the replacement worklist
-→ after Oct 27: a NEW cert chaining to the weak intermediates = forgery, escalate</pre>
+→ after Oct 27: a NEW cert chaining to the weak intermediates = forgery, escalate
+
+</pre>
     <p><b>Exact-match sweep</b> — the eight compromised intermediates by hash:</p>
-    <pre>compare observed intermediate cert SHA-256 against the eight published
+    <pre>
+
+compare observed intermediate cert SHA-256 against the eight published
 hashes (on the IoC card) in proxy/Zeek logs and local trust stores
 
-# also: flag code signed by the two code-signing intermediates</pre>
+# also: flag code signed by the two code-signing intermediates
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — CIM Certificates field names (Zeek x509/ssl, TLS-inspection, Stream); tune to your add-on:</p>
-    <pre># estate-wide issuer sweep: before Oct 27 this is the replacement worklist
+    <pre>
+
+# estate-wide issuer sweep: before Oct 27 this is the replacement worklist
 index=* earliest=-30d@d (ssl_issuer="*emSign*" OR ssl_issuer="*eMudhra*" OR issuer="*emSign*" OR issuer="*eMudhra*" OR certificate.issuer="*emSign*")
 | eval issuer=coalesce(ssl_issuer, issuer, 'certificate.issuer')
 | stats dc(dest) as servers values(dest) as hosts values(ssl_subject) as subjects by issuer
@@ -195,7 +209,9 @@ index=* earliest=-30d@d (ssl_hash IN ("&lt;eight SHA-256 from the IoC card&gt;")
 
 index=* earliest=-1d@d ssl_issuer IN ("*emSign*","*eMudhra*")
 | stats min(_time) as first_seen by ssl_subject ssl_serial
-| where first_seen &gt; relative_time(now(), "-1d@d")</pre>
+| where first_seen &gt; relative_time(now(), "-1d@d")
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

@@ -171,21 +171,35 @@ a{color:var(--ink)}
     <h2>Inferred detections — while you wait</h2>
     <p class="src">GitLab named two Sigma rules but the rule text is not in public sources, and scanners have nothing. The logic below reconstructs what those rules must look for, inferred from the flaw's shape (crafted regex → Onigmo crash during compile) — tune before trusting. These catch <b>failed</b> attempts; a clean exploit may leave neither.</p>
     <p><b>Worker-crash canary</b> — regex engine overflows crash Ruby workers before they succeed:</p>
-    <pre># host telemetry on GitLab servers
+    <pre>
+
+# host telemetry on GitLab servers
 process.name IN (ruby, puma, sidekiq, gitlab-workhorse)
 termination.signal = SIGSEGV
-→ any occurrence on a GitLab host since Oct 20 is worth a look</pre>
+→ any occurrence on a GitLab host since Oct 20 is worth a look
+
+</pre>
     <p><b>Render-endpoint error bursts</b> — the demonstrated path is a crafted Org-mode file render ("Org mode render error burst"):</p>
-    <pre># GitLab production_json.log / LB logs
+    <pre>
+
+# GitLab production_json.log / LB logs
 status = 500 AND (path contains preview_markdown OR render OR blob
   OR requested file extension = .org)
-| bucket 10m, count by src_ip → alert on bursts from a single source</pre>
+| bucket 10m, count by src_ip → alert on bursts from a single source
+
+</pre>
     <p><b>Pre-patch inventory sweep</b> — find the instances nobody registered:</p>
-    <pre># network / asset data
+    <pre>
+
+# network / asset data
 HTTP responses with header X-GitLab-* OR title "GitLab" on internal ranges
-→ cross-check each against the fixed-version table above</pre>
+→ cross-check each against the fixed-version table above
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Web field names; GitLab's own JSON logs carry <code>status</code> and <code>path</code>; tune to your add-on:</p>
-    <pre># worker-crash canary on GitLab hosts
+    <pre>
+
+# worker-crash canary on GitLab hosts
 index=* earliest=-30d@d (process_name IN ("ruby","puma","sidekiq","gitlab-workhorse") OR "puma" OR "sidekiq") ("SIGSEGV" OR signal="SIGSEGV" OR "segfault")
 | stats count min(_time) as first max(_time) as last by host process_name
 
@@ -200,7 +214,9 @@ index=* earliest=-30d@d status=500 (path="*preview_markdown*" OR uri_path="*prev
 # pre-patch inventory: GitLab instances answering on internal ranges
 
 index=* earliest=-7d@d ("X-Gitlab-Feature-Category" OR "X-GitLab-Meta" OR server="nginx" "GitLab")
-| stats dc(dest) as instances values(dest) as hosts</pre>
+| stats dc(dest) as instances values(dest) as hosts
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">

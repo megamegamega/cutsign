@@ -204,22 +204,36 @@ a{color:var(--ink)}
     <h2>Inferred detections — while you wait</h2>
     <p class="src">No vendor-published queries exist for this flaw. The logic below is inferred from the exploit shape (crafted Brotli → memory corruption → crash or code execution), not published by anyone — tune to your environment and expect noise. Failed exploitation is loud; success may be quiet.</p>
     <p><b>Node crash canary</b> — on standard builds the public PoC crashes the process, so a burst of Node crashes is the cheapest tripwire:</p>
-    <pre># EDR / syslog / crash telemetry
+    <pre>
+
+# EDR / syslog / crash telemetry
 process.name = node (or your bundled runtime names)
 termination.signal IN (SIGSEGV, SIGABRT, SIGBUS)
-→ alert when count per host > baseline over 1h; triage what it was fetching</pre>
+→ alert when count per host > baseline over 1h; triage what it was fetching
+
+</pre>
     <p><b>Node spawning shells</b> — generic post-exploitation shape for any runtime RCE:</p>
-    <pre># EDR process lineage
+    <pre>
+
+# EDR process lineage
 parent.name IN (node, nodejs)
 child.name IN (sh, bash, dash, curl, wget, python*, perl)
-exclude: build/CI hosts where this is routine</pre>
+exclude: build/CI hosts where this is routine
+
+</pre>
     <p><b>Response-side exposure</b> — the riskier path is your servers fetching Brotli from outside; proxy logs can show which services actually do:</p>
-    <pre># egress proxy / NetFlow with HTTP metadata
+    <pre>
+
+# egress proxy / NetFlow with HTTP metadata
 src IN (server subnets) AND response.content_encoding = br
 AND dest.domain not seen before (e.g. first_seen < 7d)
-→ inventory which apps decode untrusted Brotli at all; those patch first</pre>
+→ inventory which apps decode untrusted Brotli at all; those patch first
+
+</pre>
     <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Web field names, Sysmon names for lineage; tune to your add-on:</p>
-    <pre># node crash canary: more than a baseline of crashes per host per hour
+    <pre>
+
+# node crash canary: more than a baseline of crashes per host per hour
 index=* earliest=-30d@d (process_name="node" OR Image="*/node" OR "node[") (signal IN ("SIGSEGV","SIGABRT","SIGBUS") OR "SIGSEGV" OR "SIGABRT" OR "SIGBUS")
 | bin _time span=1h
 | stats count by _time host
@@ -242,7 +256,9 @@ index=* earliest=-7d@d (response_content_encoding="br" OR "content-encoding: br"
 
 index=* earliest=-7d@d (process_name="node" OR "node.exe") version=*
 | eval fixed=case(match(version,"^26\."), "26.12.1", match(version,"^24\."), "24.22.1", match(version,"^22\."), "22.23.4", true(), "EOL line")
-| stats dc(host) as hosts values(host) as sample by version fixed</pre>
+| stats dc(host) as hosts values(host) as sample by version fixed
+
+</pre>
 
     <h2>Timeline</h2>
     <ul class="tl">
