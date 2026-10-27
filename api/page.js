@@ -7,13 +7,27 @@
 
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
-import { CARDS, cardByStory } from '../lib/cards.js';
+import { CARDS, cardForStory } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 
+// The card a story belongs to, following its update chain (today's row → the row it updates → …);
+// `d.priorById` (from buildDigestData) supplies the earlier rows. Search and corpus rows carry
+// only updates_story_id, so they resolve one hop back.
+const cardOf = (s, d) => cardForStory(s, (id) => d?.priorById?.get(id) || null);
 // "Verdict card" chip for a story that has a hand-written card in public/cards/
-const verdictChip = (storyId) => {
-  const c = cardByStory.get(storyId);
+const verdictChip = (s, d) => {
+  const c = cardOf(s, d);
   return c ? `<a class="c" href="/cards/${esc(c.slug)}.html">Verdict card</a>` : '';
+};
+// "update to <date>" chip links to the earlier story in its own brief (CISO view when it was
+// an executive story that day, the analyst view otherwise, which anchors every story)
+const updateChip = (s) => {
+  const u = s.updateOf;
+  if (!u) return '';
+  const date = u.brief_date || String(u.created_at || '').slice(0, 10);
+  const exec = u.selected || (u.priority ?? 3) <= 2;
+  const href = `/?d=${encodeURIComponent(date)}${exec ? '&view=ciso' : ''}#s-${esc(String(u.id).slice(0, 8))}`;
+  return `<a class="c" href="${href}">update to ${esc(date)}</a>`;
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -185,7 +199,7 @@ function searchBody(q, stories, iocs) {
         `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}#${a}">brief ${esc(s.brief_date)}</a>` : ''}`
         + (s.brief_date && (s.selected || (s.priority ?? 3) <= 2) ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}&view=ciso#${a}">CISO card</a>` : '')
         + (s.ioc_count ? `<a class="c" href="/?view=iocs#${a}">IoC card (${s.ioc_count})</a>` : '')
-        + verdictChip(s.id)
+        + verdictChip(s)
         + `${chips([s.selected ? 'deep read' : 'quick read', s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
         `<p style="margin:8px 0 0">${esc(s.summary || '')}</p></div>`);
     }
@@ -277,7 +291,7 @@ sources printed (replay targets). exposure is null when the sources stated nothi
     const iocs = [...s.newIocs, ...s.repeatIocs].map((i) => ({ type: i.type, value: i.value_norm }));
     const fromWatch = matched.get(s.id) || [];
     const srcByUrl = new Map((s.sources || []).map((x) => [x.url, x]));
-    parts.push(`<h3 id="s-${esc(String(s.id).slice(0, 8))}">P${s.priority ?? 3} · ${esc(s.title)}${cardByStory.has(s.id) ? ` <a class="c" href="/cards/${esc(cardByStory.get(s.id).slug)}.html">Verdict card</a>` : ''}</h3>`,
+    parts.push(`<h3 id="s-${esc(String(s.id).slice(0, 8))}">P${s.priority ?? 3} · ${esc(s.title)}${cardOf(s, d) ? ` ${verdictChip(s, d)}` : ''}</h3>`,
       `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...(s.cves || [])])}</div>`,
       s.summary ? `<p class="s">${esc(s.summary)}</p>` : '',
       s.priority_reason ? `<p class="s"><b>Why P${s.priority ?? 3}:</b> ${esc(s.priority_reason)}</p>` : '',
@@ -322,7 +336,7 @@ function agentJson(d, days) {
       id: s.id,
       updates_story_id: s.updates_story_id || null,
       brief_date: d.date,
-      verdict_card: cardByStory.has(s.id) ? `/cards/${cardByStory.get(s.id).slug}.html` : null,
+      verdict_card: cardOf(s, d) ? `/cards/${cardOf(s, d).slug}.html` : null,
       title: s.title,
       priority: s.priority ?? 3,
       deep_read: !!s.selected,
@@ -400,9 +414,8 @@ function cisoBody(d) {
   for (const s of cards) {
     const p = pri(s);
     parts.push(`<div class="card" id="s-${esc(String(s.id).slice(0, 8))}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
-      `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`,
-        ...s.cves, s.updateOf && `update to ${s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10)}`])}`
-      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + verdictChip(s.id) + '</div>',
+      `<div>${chips([s.severity, s.threat_actor && `actor: ${s.threat_actor}`, s.malware_family && `malware: ${s.malware_family}`, ...s.cves])}${updateChip(s)}`
+      + (s.newIocs?.length || s.repeatIocs?.length ? `<a class="c" href="/?view=iocs#s-${esc(String(s.id).slice(0, 8))}">IoC card</a>` : '') + verdictChip(s, d) + '</div>',
       `<p style="margin:8px 0">${esc(s.summary)}</p>`,
       exposureBox(s.raw_iocs?.exposure),
       `<p class="s"><b>Why it matters:</b> ${esc(s.priority_reason || '')}</p></div>`);
@@ -574,7 +587,7 @@ export default async function handler(req, res) {
         parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
           `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}">brief ${esc(s.date)}</a>` : ''}`
           + (s.date && ((s.priority ?? 3) <= 2 || s.selected) ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=ciso#${sid(s.id)}">CISO card</a>` : '')
-          + verdictChip(s.id)
+          + verdictChip(s)
           + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
           + (parent ? `<a class="c" href="#${sid(s.updates_story_id)}">↳ updates earlier card</a>` : '')
           + children.map((x) => `<a class="c" href="#${sid(x.story.id)}">↰ updated by ${esc(x.story.date || 'later brief')}</a>`).join('') + '</div>',
@@ -643,7 +656,7 @@ export default async function handler(req, res) {
     // tiles count what matters: watch developments above the low-signal bar, and this
     // brief's stories that have a hand-written verdict card
     const matWatch = (d.watchEvents || []).filter((e) => e.level === 'HIGH' || e.assessment?.new_iocs?.length || e.assessment?.deep).length;
-    const cardsToday = d.analyzed.filter((s) => cardByStory.has(s.id)).length;
+    const cardsToday = d.analyzed.filter((s) => cardOf(s, d)).length;
 
     // each counting tile opens an inline strip breaking its number down per story, deep-linked —
     // a count you cannot decompose is decoration

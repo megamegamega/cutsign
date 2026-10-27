@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, STATUSES, cardByStory, activeCards, archiveCandidates } from '../lib/cards.js';
+import { CARDS, STATUSES, cardByStory, cardForStory, activeCards, archiveCandidates } from '../lib/cards.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -25,6 +25,25 @@ test('manifest entries are well-formed and story ids are unique UUIDs', () => {
     for (const v of c.cves) assert.match(v, /^CVE-\d{4}-\d{4,}$/, `${c.slug}: bad CVE ${v}`);
   }
   assert.equal(cardByStory.size, CARDS.flatMap((c) => c.story_ids).length, 'story id mapped to two cards');
+});
+
+test('a card is found through a story\'s update chain, not only on the row the manifest names', () => {
+  const card = CARDS[0];
+  const carded = card.story_ids[0];
+  // day 1 row is the one the manifest names; day 2 and day 3 rows each update the previous day
+  const day2 = { id: 'd2d2d2d2-0000-4000-8000-000000000002', updates_story_id: carded };
+  const day3 = { id: 'd3d3d3d3-0000-4000-8000-000000000003', updates_story_id: day2.id };
+  const priors = new Map([[day2.id, day2]]);
+  const lookup = (id) => priors.get(id) || null;
+  assert.equal(cardForStory({ id: carded }).slug, card.slug, 'the named row itself');
+  assert.equal(cardForStory(day2).slug, card.slug, 'one hop back needs no lookup');
+  assert.equal(cardForStory(day3, lookup).slug, card.slug, 'two hops back through the lookup');
+  assert.equal(cardForStory(day3), null, 'two hops back without a lookup cannot be resolved');
+  assert.equal(cardForStory({ id: 'e4e4e4e4-0000-4000-8000-000000000004', updates_story_id: null }), null, 'no chain, no card');
+  // a cycle in the chain terminates
+  const loopA = { id: 'a0a0a0a0-0000-4000-8000-00000000000a', updates_story_id: 'b0b0b0b0-0000-4000-8000-00000000000b' };
+  const loopB = { id: loopA.updates_story_id, updates_story_id: loopA.id };
+  assert.equal(cardForStory(loopA, (id) => (id === loopB.id ? loopB : loopA)), null);
 });
 
 test('every card page keeps the blocks the live scripts and format depend on', () => {
