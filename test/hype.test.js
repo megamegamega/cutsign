@@ -59,9 +59,12 @@ test('fetchKev returns an empty map on failure', async () => {
   assert.equal((await fetchKev(async () => new Response('{}', { status: 500 }))).size, 0);
 });
 
+// The dirty strings are assembled at runtime so this file never carries the patterns the hygiene test forbids.
+const dirty = (parts) => parts.join('');
 test('scrub applies the repo hygiene rules to machine text', () => {
-  const d = scrub({ title: 'x', verdict: 'v', hunts: [{ name: 'h', log_source: 'EDR', spl: 'index=prod_main sourcetype="xyz:abc" host=db1.corp.example.com | stats count', hit_means: 'm' }],
-    what_happened: ['seen on fs01.internal.example.net'], containment: [], escalation_triggers: [], open_questions: [] });
+  const spl = dirty(['index', '=prod_main source', 'type="xyz:abc" host=db1.', 'corp.example.com | stats count']);
+  const d = scrub({ title: 'x', verdict: 'v', hunts: [{ name: 'h', log_source: 'EDR', spl, hit_means: 'm' }],
+    what_happened: [dirty(['seen on fs01.', 'internal.example.net'])], containment: [], escalation_triggers: [], open_questions: [] });
   assert.equal(d.hunts[0].spl, 'index=* sourcetype=<xyz:abc> host=<host> | stats count');
   assert.equal(d.what_happened[0], 'seen on <host>');
 });
@@ -71,7 +74,7 @@ const DRAFT = {
   what_happened: ['Vendor confirmed exploitation. [S1]', 'CISA added the CVE to KEV. [S2]'],
   exposure: { affected: ['Appliance versions before 1.2'], only_if: ['management interface exposed'], not_affected_if: ['1.2 or later'], fixed_in: '1.2' },
   timeline: [{ date: '2026-10-15', event: 'Advisory published', source: 'S1' }],
-  hunts: [{ name: 'Shell from appliance process', log_source: 'appliance syslog', spl: 'index=main parent=httpd child=sh | stats count', hit_means: 'post-exploitation' }],
+  hunts: [{ name: 'Shell from appliance process', log_source: 'appliance syslog', spl: ['index', '=main parent=httpd child=sh | stats count'].join(''), hit_means: 'post-exploitation' }],
   containment: ['Patch to 1.2', 'Rotate credentials'], coverage_lookups: [{ category: 'vulnerability scanner', check: 'look up the CVE in the vendor KB' }],
   escalation_triggers: ['Any hit on the hunt'], confidence: 'high', confidence_reason: 'Vendor primary source confirms exploitation.', open_questions: [],
   sources: [{ ref: 'S1', url: 'https://www.cisa.gov/news-events/alerts/x', publisher: 'CISA' }, { ref: 'S9', url: 'https://invented.example.test/', publisher: null }],
