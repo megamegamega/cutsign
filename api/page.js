@@ -9,6 +9,7 @@ import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
 import { CARDS, cardForStory } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
+import { draftBody } from '../lib/carddraft.js';
 
 // The card a story belongs to, following its update chain (today's row → the row it updates → …);
 // `d.priorById` (from buildDigestData) supplies the earlier rows. Search and corpus rows carry
@@ -465,16 +466,35 @@ export default async function handler(req, res) {
         'Cutsign · public OSINT digest · search across all stored briefs'));
     }
 
+    // Machine card draft (lib/hype.js → lib/carddraft.js): private by uuid, banner, never in the manifest
+    if (req.query.view === 'draft') {
+      const id = String(req.query.id || '');
+      let row = null;
+      try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
+      if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
+      const tabsDraft = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
+        `<div class="w">${draftBody(row)}</div>`, 'Cutsign · machine draft, unreviewed · public OSINT only'));
+    }
+
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
     if (req.query.view === 'cards') {
+      // machine drafts awaiting a human (table may not exist before migration 0004)
+      let drafts = [];
+      try { drafts = await store.listCardDrafts({ status: 'draft', limit: 10 }); } catch { drafts = []; }
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.cards', generated: new Date().toISOString(),
           cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html` })),
+          candidates: drafts.map((x) => ({ id: x.id, title: x.title, score: x.score, reasons: x.reasons, created_at: x.created_at, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
       const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
+      const candidates = drafts.length ? `<h3 style="border:none">Candidates — machine drafts awaiting review (${drafts.length})</h3>`
+        + drafts.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
+          + `<div><span class="c">score ${esc(String(x.score))}</span><span class="c">drafted ${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
+          + `<p class="s" style="margin:8px 0 0">Unreviewed. ${esc(x.draft?.verdict || '')}</p></div>`).join('\n') : '';
       const active = CARDS.filter((c) => c.status === 'active');
       const retired = CARDS.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
       const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${retired.length ? ` · ${retired.length} archived` : ''} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
@@ -497,7 +517,7 @@ export default async function handler(req, res) {
       if (retired.length) {
         parts.push(`<details><summary class="s">Archived (${retired.length}) — no longer tracked; pages stay at their URLs</summary>${retired.map(cardHtml).join('\n')}</details>`);
       }
-      const partsHtml = parts.join('\n');
+      const partsHtml = candidates + parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
         `${hero}<div class="w">${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }
