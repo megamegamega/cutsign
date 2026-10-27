@@ -48,6 +48,7 @@
   .grid3 > div { min-width: 0; border-left: 3px solid var(--job); padding-left: 12px; }
   .grid3 h3 { color: var(--job); }
   .sc { --job: var(--sc); } .ba { --job: var(--ba); } .al { --job: var(--al); } .inv { --job: var(--inv); }
+  section.inv ol li::marker { color: var(--inv); }
   h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); }
@@ -334,7 +335,7 @@
       <tr><td class="sc"><span class="job">Scoping</span></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
       <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Day one only: the sets are reviewed by hand before the row is written, because the first 90 days may already contain the attacker. Not clean → Investigating; the row is not written.</td></tr>
       <tr><td class="al"><span class="job">Alerting</span></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>None. Anything new → Investigating. Alerting never writes the kept list.</td></tr>
-      <tr><td class="inv"><span class="job">Investigating</span></td><td>On demand, from either exit</td><td>Issuance-then-use (did the all-zeros token get used: 2xx Graph activity from the same appId), persistence audit (roles, credentials, add→remove→add churn), blast radius (resources, mailboxes, sibling principals touched). The queries are on the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise card</a>.</td><td>The verdict. Benign: write the row or append the new value, by hand. Malicious: IR case, contain (create-then-disable the service principal, revoke what it touched), mark the row compromised and never append. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
+      <tr><td class="inv"><span class="job">Investigating</span></td><td>On demand, from either exit</td><td>Issuance-then-use (did the all-zeros token get used: 2xx Graph activity from the same appId), persistence audit (roles, credentials, add→remove→add churn), blast radius (resources, mailboxes, sibling principals touched). The three queries and the containment steps are below.</td><td>The verdict. Benign: write the row or append the new value, by hand. Malicious: IR case, contain (create-then-disable the service principal, revoke what it touched), mark the row compromised and never append. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
     </table>
     </div>
   </section>
@@ -446,8 +447,15 @@ index=* category=ServicePrincipalSignInLogs earliest=-2d@d
 </pre>
         <p class="note">The kept list stores each set pipe-delimited. No success filter: a failed sign-in for a baselined vendor appId from a new ASN is the signal, and error-code shifts (invalid or expired secret) mean someone is testing credentials. Two-day window with dedupe covers export lag. Same cloud provider as the vendor is not clearance.</p>
       </div>
+    </div>
+    <p class="note">Microsoft's own inventory call, from its reports FAQ: <code>GET https://graph.microsoft.com/beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal') and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'</code>. Beta is required; v1.0 returns no service-principal sign-ins and no owner field. Field names above follow the Azure Monitor export shape; the Log Analytics columns are documented, the exact event-hub keys are inferred from them, so tune to your add-on.</p>
+  </section>
+
+  <section class="inv">
+    <h2 style="color:var(--inv)">Investigating · queries for one appId</h2>
+    <div class="grid3">
       <div class="inv">
-        <h3>Investigating · issuance-then-use, for one appId</h3>
+        <h3>Issuance-then-use</h3>
 <pre>
 
 index=* category=MicrosoftGraphActivityLogs earliest=-30d@d
@@ -461,10 +469,87 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d
   against roles, servicePrincipals or applications go straight to the verdict
 
 </pre>
-        <p class="note">Prerequisite: Microsoft Graph activity logs must be enabled; if they are off this is a coverage gap, not a clean result. The persistence audit (Add/Remove member to role, Add/Remove service principal credentials, the 60-minute churn pair) and the blast-radius sweep are the audit-log blocks on the ConnectWise card, run with the same appId.</p>
+        <p class="note">Prerequisite: Microsoft Graph activity logs must be enabled. Off means a coverage gap, not a clean result. First-party app-only tokens are not in the sign-in log, so Graph rows you cannot pair with a sign-in are not evidence either way.</p>
+      </div>
+      <div class="inv">
+        <h3>Persistence audit</h3>
+<pre>
+
+# two views of one appId: what it DID (actor) and what was done TO it (target)
+index=* category=AuditLogs earliest=-30d@d ("&lt;appId&gt;" OR "&lt;app display name&gt;")
+    operationName IN ("Add member to role", "Remove member from role",
+        "Add app role assignment to service principal",
+        "Remove app role assignment from service principal",
+        "Add service principal credentials", "Remove service principal credentials",
+        "Update application – Certificates and secrets management",
+        "Add service principal", "Remove service principal", "Delete application",
+        "Add owner to application", "Add owner to service principal",
+        "Consent to application", "Add delegated permission grant")
+| rename properties.initiatedBy.app.appId as actor_app,
+    properties.initiatedBy.app.displayName as actor_name,
+    properties.initiatedBy.user.userPrincipalName as actor_user,
+    properties.targetResources{}.displayName as target, properties.result as result
+| eval side=if(actor_app="&lt;appId&gt;", "actor", "target")
+| table _time side operationName actor_app actor_name actor_user target result
+| sort _time
+
+# churn: the same target gets an add AND a remove inside 60 min (operator or agent at the keyboard)
+index=* category=AuditLogs earliest=-30d@d ("&lt;appId&gt;" OR "&lt;app display name&gt;")
+    operationName IN ("Add member to role", "Remove member from role",
+        "Add service principal credentials", "Remove service principal credentials")
+| rename properties.targetResources{}.displayName as target
+| eval verb=if(match(operationName, "^Add"), "add", "remove")
+| transaction target maxspan=60m
+| where mvcount(mvdedup(verb))=2
+| table _time duration target operationName
+→ actor rows: the app changed something (self-assigned a role, put a credential on another app)
+→ target rows: someone changed the app (a credential added since the vendor's incident date is the way in)
+→ sibling principals it touched go on the containment list
+
+</pre>
+      </div>
+      <div class="inv">
+        <h3>Blast radius</h3>
+<pre>
+
+# 1) resources the token was minted for, and from where
+index=* category=ServicePrincipalSignInLogs earliest=-30d@d properties.appId="&lt;appId&gt;"
+| stats count min(_time) as first max(_time) as last
+    by properties.resourceDisplayName properties.ipAddress properties.autonomousSystemNumber
+
+# 2) Graph: which object families, how many distinct users
+index=* category=MicrosoftGraphActivityLogs earliest=-30d@d properties.appId="&lt;appId&gt;"
+| rename properties.requestUri as uri, properties.requestMethod as method,
+    properties.responseStatusCode as code
+| eval family=case(match(uri,"/messages|/mailFolders"), "mail",
+    match(uri,"/drives|/sites"), "files", match(uri,"/directoryRoles|/roleManagement"), "roles",
+    match(uri,"/servicePrincipals|/applications|/oauth2PermissionGrants"), "apps",
+    match(uri,"/users"), "users", match(uri,"/groups"), "groups", true(), "other")
+| rex field=uri "/users/(?&lt;user&gt;[^/?]+)"
+| stats count dc(user) as users values(method) as methods by family code
+| sort family
+
+# 3) mailboxes actually read (Microsoft 365 unified audit log; MailItemsAccessed needs the
+#    auditing license or the mailbox audit setting enabled — if absent, that is a gap, not a zero)
+index=* Workload=Exchange Operation=MailItemsAccessed AppId="&lt;appId&gt;" earliest=-30d@d
+| stats count dc(MailboxOwnerUPN) as mailboxes values(ClientIPAddress) as ips by AppId
+→ the "users", "mail" and "files" rows and the mailbox count are the notification scope
+
+</pre>
       </div>
     </div>
-    <p class="note">Microsoft's own inventory call, from its reports FAQ: <code>GET https://graph.microsoft.com/beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal') and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'</code>. Beta is required; v1.0 returns no service-principal sign-ins and no owner field. Field names above follow the Azure Monitor export shape; the Log Analytics columns are documented, the exact event-hub keys are inferred from them, so tune to your add-on.</p>
+
+    <h3 style="color:var(--inv);margin-top:18px">Contain</h3>
+    <ol>
+      <li><b>Stop new tokens.</b> If the app has a service principal in your tenant, disable it (<code>accountEnabled=false</code>). Disable, do not delete: deletion destroys the object the audit trail points at. If it has none, create one for the appId and disable it, which is Microsoft's documented block for SP-less apps.</li>
+      <li><b>Accept the token tail.</b> App-only access tokens cannot be revoked; they expire on their own, 60 to 90 minutes by Microsoft's default lifetime. Disabling the service principal stops issuance, so the exposure window closes within that span. Watch the Graph activity log for the appId until it goes quiet.</li>
+      <li><b>Undo what it did.</b> From the persistence audit's actor rows: remove role assignments it granted (Global Administrator first), delete credentials it added to other applications or service principals, delete sibling service principals it created, revoke consent grants it added. Each of these is its own audit event, so the undo is itself auditable.</li>
+      <li><b>Close the way in.</b> From the target rows: remove any credential added to the app since the vendor's incident date. If the vendor holds the credential, the vendor rotates it; keep the service principal disabled until the vendor confirms.</li>
+      <li><b>Users it reached.</b> For every user in the blast radius, revoke sign-in sessions (<code>revokeSignInSessions</code>), review inbox rules and mail forwarding, and reset credentials where the app had write scope on the user.</li>
+      <li><b>Put a control in front of it.</b> With a service principal now present, workload-identity Conditional Access can target the app: block it except from the vendor's known locations before it is ever re-enabled.</li>
+      <li><b>Preserve, then record.</b> Export the sign-in, audit and Graph activity logs for the window before portal retention (30 days) drops them. Mark the kept-list row compromised with the case ID; it is never appended.</li>
+    </ol>
+    <p class="note">Containment order follows Microsoft's Storm-0940 post (disable the application identities, review credentials and role assignments, revoke sessions) and Huntress's guidance to disable rather than delete. Undo for a lane 3 block is deleting the created service principal; undo for containment is the vendor's confirmed rotation plus a permission review, never a bare re-enable.</p>
   </section>
 
   <section>
