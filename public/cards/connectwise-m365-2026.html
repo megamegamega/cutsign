@@ -56,6 +56,12 @@ th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color
 .tl li{display:flex;gap:12px;margin:7px 0}
 .tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
 .src{font-size:13px;color:var(--mut)}
+.lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0 14px}
+.lanes div{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--c);border-radius:6px;padding:12px 14px;font-size:13.5px}
+.lanes .t{font:700 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--c);margin:0 0 8px}
+.lanes b{display:block;font-size:15px;margin:0 0 6px}
+.lanes p{margin:0 0 6px}.lanes p:last-child{margin:0}
+@media (max-width:620px){.lanes{grid-template-columns:1fr}}
 .src a{color:inherit}
 .foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
 a{color:var(--ink)}
@@ -280,7 +286,13 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d latest=now
 | stats count as ok2xx values(uri) as uris min(_time) as first max(_time) as last by appId
 # if your Graph activity records lack a publisher field, resolve appId → publisher once via
 # Get-MgServicePrincipal (AppOwnerOrganizationId) and keep the two Microsoft tenants out</pre>
-    <p><b>SP-less inventory</b> — the class this incident belongs to, scoped so it stays finite (one pass, then diff daily). Three lanes: <b>Microsoft publisher → ignore.</b> <b>Known vendor → watch</b> for breach news, hunt zeros → 2xx Graph activity (issuance-then-use above) and the role/credential changes they make (persistence audit above). <b>Unknown vendor → diff daily</b> for new appIds; look each up, then file it under "known" or block it (create the service principal, then disable it). "Lateral movement" here is identity-side — roles, credentials on other apps, mailbox and Graph access — not host-to-host.</p>
+    <p><b>SP-less inventory</b> — the class this incident belongs to. Pull the app-only sign-ins with the all-zeros ID, group by appId, resolve each app's publisher, and sort into three lanes:</p>
+    <div class="lanes">
+      <div style="--c:var(--mut)"><p class="t">Lane 1 · Microsoft publisher</p><b>Ignore</b><p>Microsoft's own apps authenticate without a service principal by design. The publisher lookup identifies them; Microsoft's partial list is not needed.</p></div>
+      <div style="--c:#c9972b"><p class="t">Lane 2 · Known vendor</p><b>Watch</b><p>A grandfathered app reaching your tenant with no consent to revoke — a ConnectWise-shaped exposure. Watch for breach news; hunt zeros → 2xx Graph activity (issuance-then-use) and the roles/credentials it touches (persistence audit).</p></div>
+      <div style="--c:var(--bad)"><p class="t">Lane 3 · Unknown vendor</p><b>Diff daily, then file or block</b><p>Alert only on a <i>new</i> appId. Look it up: known → lane 2; nobody's → create a service principal for the appId, then disable it. Breaks loudly if something depended on it — which is the point.</p></div>
+    </div>
+    <p class="src">"Lateral movement" in this class is identity-side — role grants, credentials added to other apps, mailbox and Graph access — not host-to-host. The list is finite: Microsoft blocked SP-less auth for non-Microsoft apps on March 31, 2026; anything still doing it is an exception.</p>
 <pre># service-principal (app-only) sign-ins ONLY — user-log zeros are first-party apps refreshing
 # tokens for users and carry the user's device IP; ignore them
 index=* category=ServicePrincipalSignInLogs earliest=-90d@d
