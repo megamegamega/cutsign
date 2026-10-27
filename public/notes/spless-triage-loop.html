@@ -344,10 +344,34 @@
     <h2>What this loop can and cannot see</h2>
     <ul>
       <li><b>Scope.</b> The all-zeros filter shows apps that have <i>no</i> service principal in your tenant. A vendor app you consented to has a real one and never appears here. For ConnectWise Cloud Backup that means Scoping sees the exposure in tenants that never used the product; in customer tenants only Alerting, keyed on appId regardless of service principal ID, sees the stolen credential being used from new infrastructure.</li>
-      <li><b>Prior.</b> Microsoft announced a block on SP-less authentication for non-Microsoft multitenant apps for March 31, 2026, and its FAQ still says tokens are issued "except for a few Microsoft and non-Microsoft applications". A non-Microsoft owner with all-zeros successes after that date is a Microsoft-granted exception. Treat it as rare and high-prior, not routine.</li>
+      <li><b>Prior.</b> Microsoft built the exception list from observed traffic. Its Entra blog says resource apps reached by SP-less clients were frozen in April 2025 and traffic "observed between February 11 and March 11, 2025" was allowed through; a second freeze in August 2025 covered three Microsoft resources (Exchange Online, AAD Graph, ARM) and six third-party resource apps, keeping clients that averaged more than one request a day; and the timeline says March 31, 2026 blocks "all client apps without a service principal ... including the ones previously allowed to continue working". The FAQ, updated since, still says tokens are issued "except for a few Microsoft and non-Microsoft applications". Microsoft has not published that list. A non-Microsoft owner with all-zeros successes today is on it: rare and high-prior, not routine. Both freezes were scoped by resource, so read the exception as a client-and-resource pair, which is why Scoping keeps the resource column.</li>
+      <li><b>Success is issuance.</b> A "Success" row in the service-principal sign-in log records that Entra cut the token. Whether the resource honoured it is a separate question, answered below, and for every resource except Graph the tenant has no log of the answer.</li>
       <li><b>No preventive layer.</b> Workload-identity Conditional Access cannot target an app with no service principal. Lanes 1 and 2 are detection only; lane 3 is the only control.</li>
       <li><b>Expected gaps.</b> Microsoft's FAQ says some first-party app-only tokens are not published to the service-principal sign-in log, so Graph activity you cannot match to a sign-in is not evidence either way.</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>What an SP-less token is, from public sources</h2>
+    <div class="tw">
+    <table>
+      <tr><th>Claim</th><th>Consented app-only token (Microsoft's sample)</th><th>SP-less token</th></tr>
+      <tr><td><code>appid</code> (v1.0) or <code>azp</code> (v2.0)</td><td>The client's application ID.</td><td>Present. It is the only identity in the token, and it is what the sign-in record prints as appId.</td></tr>
+      <tr><td><code>oid</code>, <code>sub</code></td><td>The client's service principal object ID in your tenant; both carry the same GUID in Microsoft's sample.</td><td>Absent. The Entra blog: SP-less authentication "issues tokens without permissions and without an object identifier (object ID)". A Microsoft moderator on Q&amp;A: oid and sub "will be null and not returned in the token" when "its service principal is missing in that tenant".</td></tr>
+      <tr><td><code>roles</code></td><td>The application permissions your admin consented to, for example <code>ActivityFeed.Read</code>.</td><td>Absent; there is no consent to copy from. The claims reference: "Claims are present only if a value exists to fill it."</td></tr>
+      <tr><td><code>tid</code>, <code>aud</code>, <code>iss</code>, <code>exp</code></td><td>Your tenant, the resource, the issuer, the expiry.</td><td>Present and ordinary. <code>tid</code> is your tenant, which is why the row lands in your log.</td></tr>
+    </table>
+    </div>
+    <p class="note">The consented sample is the app-only token on Microsoft's Office 365 Management APIs getting-started page. Nobody has published a decoded SP-less token, so the right-hand column is Microsoft's own description plus the claims reference, not a capture.</p>
+    <div class="tw">
+    <table>
+      <tr><th>Resource</th><th>What it does with an SP-less token</th><th>Tenant-side record</th></tr>
+      <tr><td>Microsoft Graph</td><td>Entra issues the token; Graph evaluates the empty permission set per request. Inforcer, Oct 17: "Microsoft Graph can still return a token", and "the token carries no permissions".</td><td>The sign-in row, plus Graph activity logs if enabled. A 2xx there is the Investigating trigger.</td></tr>
+      <tr><td>Exchange Online, SharePoint Online</td><td>Inforcer: both "reject the request with a 'missing service principal' error".</td><td>The sign-in row only. A rejected request writes no mailbox or file audit.</td></tr>
+      <tr><td>Office 365 Management APIs (<code>manage.office.com</code>; appId <code>c5393580-f805-4401-95e8-94b7a6ef2fc2</code> per the community first-party list)</td><td>Needs tenant-admin consent and a token carrying <code>ActivityFeed.Read</code>; without it Microsoft's error <code>AF10001</code>, "the permission set sent in the request did not include the expected permission". Huntress names this API among the targets of the Oct 15 manual sweep.</td><td>The sign-in row only. The API reference documents no customer-visible log of who called it.</td></tr>
+    </table>
+    </div>
+    <p class="note">The resource decides, and for everything except Graph the tenant never sees the decision. That is why Investigating starts from the Graph activity log and reads the other resources' sign-in rows as attempts.</p>
   </section>
 
   <section>
@@ -470,6 +494,23 @@ index=* category=MicrosoftGraphActivityLogs earliest=-30d@d
 
 </pre>
         <p class="note">Prerequisite: Microsoft Graph activity logs must be enabled. Off means a coverage gap, not a clean result. First-party app-only tokens are not in the sign-in log, so Graph rows you cannot pair with a sign-in are not evidence either way.</p>
+<pre>
+
+# which resource each all-zeros token was cut for
+
+index=* category=ServicePrincipalSignInLogs earliest=-30d@d
+    properties.appId="&lt;appId under investigation&gt;"
+    properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
+| fillnull value="-" properties.resourceDisplayName properties.resourceId
+| stats count values(resultType) as results
+    min(_time) as first max(_time) as last
+    by properties.resourceDisplayName properties.resourceId
+→ Graph rows: read the block above. Exchange, SharePoint and the
+  Office 365 Management APIs reject an SP-less token and write no
+  tenant-side log of it; those rows are attempts, and the only record
+
+</pre>
+        <p class="note">The resource column is also the exception evidence: Microsoft's freezes were scoped per resource, so a client allowed through to one resource may be blocked at another. Issuance rows for a resource the vendor never documented using belong in the verdict.</p>
       </div>
       <div class="inv">
         <h3>Persistence audit</h3>
@@ -562,7 +603,7 @@ index=* Workload=Exchange Operation=MailItemsAccessed AppId="&lt;appId&gt;" earl
     </ul>
   </section>
 
-  <p class="foot">Sources: Microsoft Learn, <a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Retirement of service principal-less authentication</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reports-faq">Monitoring and health FAQ</a>; <a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">Verify first-party Microsoft applications in sign-in reports</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-service-principal-table">service principal reference table</a> (the first-party application table); <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/aadserviceprincipalsigninlogs">AADServicePrincipalSignInLogs schema</a>; <a href="https://learn.microsoft.com/en-us/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0">findTenantInformationByTenantId</a>; <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog timeline</a>; <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress, Oct 16 2026</a> and <a href="https://www.huntress.com/blog/connectwise-attack-ai">Oct 26 2026</a>; <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber, Oct 19 2026</a>. Flowchart symbols per ISO 5807. Companion to the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise verdict card</a>. Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a> · public OSINT only.</p>
+  <p class="foot">Sources: Microsoft Learn, <a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Retirement of service principal-less authentication</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reports-faq">Monitoring and health FAQ</a>; <a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">Verify first-party Microsoft applications in sign-in reports</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-service-principal-table">service principal reference table</a> (the first-party application table); <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/aadserviceprincipalsigninlogs">AADServicePrincipalSignInLogs schema</a>; <a href="https://learn.microsoft.com/en-us/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0">findTenantInformationByTenantId</a>; <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog timeline</a> (the freezes, the observation windows and the "without permissions and without an object identifier" description); <a href="https://learn.microsoft.com/en-us/entra/identity-platform/access-token-claims-reference">access token claims reference</a>; <a href="https://learn.microsoft.com/en-us/answers/questions/823411/oid-and-sub-claim-are-missing-from-aad-v2-access-t">Q&amp;A, oid and sub missing when the service principal is missing</a> (Microsoft moderator, 2022); <a href="https://learn.microsoft.com/en-us/office/office-365-management-api/get-started-with-office-365-management-apis">Office 365 Management APIs getting started</a> (admin consent, sample app-only token) and <a href="https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference">Activity API reference</a> (the <code>ActivityFeed.Read</code> requirement, error AF10001); <a href="https://github.com/merill/microsoft-info">merill/microsoft-info</a> (community first-party appId list, used only to label a resource); <a href="https://www.inforcer.com/insights/when-the-backup-app-becomes-the-way-in">Inforcer, Oct 17 2026</a> (Graph issues, Exchange and SharePoint reject);<a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress, Oct 16 2026</a> and <a href="https://www.huntress.com/blog/connectwise-attack-ai">Oct 26 2026</a>; <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber, Oct 19 2026</a>. Flowchart symbols per ISO 5807. Companion to the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise verdict card</a>. Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a> · public OSINT only.</p>
 </main>
 </body>
 </html>
