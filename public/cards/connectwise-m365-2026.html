@@ -91,7 +91,7 @@ a{color:var(--ink)}
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Active campaign</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Storm-0940 (China-aligned)</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE — identity abuse</span>
-    <span class="asof">as of 2026-10-25</span>
+    <span class="asof">as of 2026-10-27</span>
   </div>
   <div class="inner">
     <h1>ConnectWise Cloud Backup supply chain compromise</h1>
@@ -145,7 +145,9 @@ a{color:var(--ink)}
     <ul>
       <li>Token abuse: <span class="v">144.172.64[.]128</span> · <span class="v">144.172.64[.]99</span> · <span class="v">144.172.64[.]60</span> · <span class="v">144.172.94[.]243</span> (FranTech/PONYNET and related VPS)</li>
       <li>Password spray: <span class="v">187.15.88-90[.]x</span> range, Oct 10–14</li>
-      <li>Suspicious-leaning user agents: <code>Python-urllib/3.12</code>, <code>python-requests/*</code>, <code>curl/*</code> — expected vendor traffic is <code>kiota-dotnet</code> from Azure private IPv6</li>
+      <li>Suspicious-leaning user agents: <code>Python-urllib/3.12</code> (enumeration and escalation tooling), <code>python-requests/2.31</code> and <code>2.34.2</code> (targeted sweeps; the Oct 10–14 spray), <code>curl/7.88.1</code> (Debian 12 <code>python:3.12</code> container), <code>azure-toolkit/1.0</code> (listed by Microsoft, not seen by Huntress) — expected vendor traffic is <code>kiota-dotnet</code> from Azure private IPv6. One Oct 13 browser user agent was missing its <code>(KHTML, like Gecko)</code> segment — a hand-set string</li>
+      <li>Low-confidence link: <span class="v">194.165.16[.]21</span> (Huntress, on reuse of <code>python-requests/2.31</code> only)</li>
+      <li><b>Operator tempo</b> (Huntress, Oct 26 — scripted, with something adapting between runs): token requests to ~1,000 tenants one to six minutes apart (06:13–08:46 UTC Oct 15); ~100 failed token requests inside 10 s (06:04); a six-resource probe at exactly 4 s per tenant (13:54); credential replay at 13–21 requests/s against a 100-tenant list; post-change requests every 4–8 s for 22 min. Sub-second timestamps make these visible; minute-rounded exports hide them</li>
       <li>Raw values: <a href="/?view=iocs#s-e0286e2a">IoC corpus cards</a> (16 + 11 indicators across the two stories)</li>
       <li><b>All-zeros ServicePrincipalId</b> (<code>00000000-0000-0000-0000-000000000000</code>) is Microsoft-documented <b>service-principal-less authentication</b>: "the service principal ID of an application making a service principal-less authentication is shown as 00000000-0000-0000-0000-000000000000 in the sign-in logs of the resource tenant" (<a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Entra docs</a>). A multitenant app obtains an app-only token from a tenant where it has no service principal object — no consent, no object ID claim, and in Microsoft's words "in most cases … harmless", except "where the target API has implemented improper authorization checks". That is the mechanism behind Chorus Cyber's observation: the campaign's token requests appear in tenants that <b>never consented</b> Cloud Backup; Chorus excludes those rows as noise. Read it the other way too: an all-zeros sign-in <i>followed by</i> successful Graph activity for the same appId is exactly the "improper authorization checks" case Microsoft warns about, and is a finding (inferred test below). <b>Unresolved:</b> Microsoft's retirement blocks SP-less auth for all non-Microsoft multitenant apps after <b>March 31, 2026</b> (apps seen Feb 11–Mar 11 2025 were allowed until then; most others frozen April 2025) — all-zeros <i>successful</i> sign-ins for a third-party app in October 2026 should therefore not occur. Either enforcement is incomplete, the app was excepted, or the logged rows are blocked attempts (check <code>resultType</code>). Microsoft first-party apps still authenticate SP-less by design and show in <i>user</i> sign-in logs — expected, not this campaign</li>
     </ul>
@@ -156,7 +158,7 @@ a{color:var(--ink)}
       <tr><td><a href="https://www.connectwise.com/company/trust/advisories">ConnectWise</a></td><td><span class="ok">Acted + guide published</span> — seven app identities disabled 07:00 UTC Oct 17 (Trust Center); Cloud Backup / SaaS Security / Cloud Management suspended. The Oct 18 <b>technical investigation &amp; remediation guide</b> is the vendor playbook: per-tenant checklist covering SP sign-in review (window Oct 13 → now, extend to Oct 1), Entra audit, Conditional Access review, <b>federated credentials on locally registered apps</b>, and Exchange/Purview audit — run it in every tenant including dormant connections; it covers resold/managed tenants too (reviewing your own tenant does not review the customer's). Live help exists: <b>technical webinars every two hours since Oct 20 18:00 UTC</b> (walkthrough of Entra sign-in/audit logs, app registrations, credentials, permissions — <a href="https://www.connectwise.com/webinars/cloud-backup-technical-investigation-and-remediation">register and pick a session</a>; share the invite with customer admins), plus a video walkthrough of guide steps. The <a href="https://www.connectwise.com/company/trust/advisories">Trust Center advisory</a> updates several times daily (20 updates Oct 16–23). Caveats: completing the checklist does not establish a tenant was unaffected; previously issued tokens may remain valid until expiry; escalation route <span class="v">SecurityPartnerSupport@ConnectWise.com</span> (tenant/app IDs, UTC timestamps, correlation IDs — no secrets)</td></tr>
       <tr><td><a href="https://www.microsoft.com/en-us/security/blog/2026/10/21/storm-0940-uses-artex-agentic-ai-connectwise-supply-chain-compromise/">Microsoft</a></td><td><span class="ok">Published</span> — Defender XDR alerts ("Application self-assigned Global Administrator role", "Unusual Microsoft Graph activity associated with Compromised ConnectWise Application") plus KQL for <code>OAuthAppInfo</code>, <code>EntraIdSpnSignInEvents</code>, <code>GraphAPIAuditEvents</code> and Sentinel <code>SigninLogs</code> in the Oct 21 Storm-0940 post (tier A)</td></tr>
       <tr><td><a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Microsoft — Entra platform docs</a></td><td><span class="ok">Published (platform semantics, tier A)</span> — the all-zeros ServicePrincipalId is documented SP-less authentication; admin-center procedure: Sign-in logs → <b>Service principal sign-ins</b> tab → filter Service principal ID = <code>00000000-0000-0000-0000-000000000000</code> → read the Application ID per entry. <b>Documented blocking control:</b> "create a service principal for the app, and then disable the service principal. Disabling the app's service principal will block all future sign-in and authentication attempts by that app in your tenant" — applicable per appId in tenants that never consented Cloud Backup, and it makes the app targetable by Conditional Access. Retirement timeline per the <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog</a>: most resource apps frozen April 2025; traffic seen Feb 11–Mar 11 2025 allowed until March 31, 2026; low-volume clients notified with a month to register. No published list of exempt third-party apps; first-party Microsoft apps are exempt (<a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">verify via AppOwnerOrganizationId</a>: <code>f8cdef31-a31e-4b4a-93e4-5f571e91255a</code> = the "Microsoft Services" tenant, <code>72f988bf-86f1-41af-91ab-2d7cd011db47</code> = Microsoft's corporate microsoft.com tenant). Caveat: a volunteer-moderator <a href="https://learn.microsoft.com/en-us/answers/questions/5580963/why-the-service-principal-ids-are-all-zero-in-the">Q&amp;A answer</a> (Oct 2025) notes an app can appear under Enterprise Applications yet still log zeros when not properly provisioned/consented — presence in the app list is not proof of a service principal</td></tr>
-      <tr><td><a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress</a></td><td><span class="ok">Published</span> — Entra review procedure: SP sign-ins by appId vs non-Azure source IPs, audit events (Add member to role / Update application / Add service principal credentials), secrets added since Oct 13, CA exclusions; disable (do not delete) the apps</td></tr>
+      <tr><td><a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress</a></td><td><span class="ok">Published</span> — Entra review procedure: SP sign-ins by appId vs non-Azure source IPs, audit events (Add member to role / Update application / Add service principal credentials), secrets added since Oct 13, CA exclusions; disable (do not delete) the apps. <b>Oct 26 follow-up</b> (<a href="https://www.huntress.com/blog/connectwise-attack-ai">"scripts, people, and AI agents"</a>, tier A, from Entra sign-in + directory audit logs; Graph activity logs were not available to them): persistence observed as <b>add → remove → add churn</b> of an application secret and of the Global Administrator role (03:42–03:57 UTC Oct 15), a certificate credential upload that failed on a thumbprint mismatch and was retried to success 55 s later, the Teams application identity <b>self-assigning Global Administrator via Graph</b> (T1098.003), a refused GA removal answered by granting a different role to a <b>sibling service principal</b>, and <b>service-principal deletion</b> afterwards (Teams SP deleted 03:57). No queries printed; no appIds listed. Recommendation: enable Microsoft Graph activity logs. Confidence that an AI agent was in the loop: low–medium on their telemetry alone, medium–high with Microsoft's attribution</td></tr>
       <tr><td><a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber</a></td><td><span class="ok">Published (MSSP advisory, Oct 19, tier B)</span> — sign-in interpretation: a successful sign-in for the Cloud Backup app from the attacker IP can appear even where the product was never used; entries carry an <b>all-zeros ServicePrincipalId</b> and their queries exclude them, because an unconsented app has no permissions in the tenant. Artefacts to review beyond sign-ins: new secrets or certificates on enterprise applications and app registrations, directory roles held by ConnectWise/SkyKick apps, Conditional Access exclusions for those apps. Activity from Oct 13; credential use from Oct 15. Caveats: no queries printed ("our detection rule identifies this activity"); the IOC table is an image, not machine-readable; the seven appIds are referenced but not listed</td></tr>
       <tr><td><a href="https://www.cisa.gov/news-events/cybersecurity-advisories">CISA</a></td><td><span class="bad">No advisory found</span> as of Oct 23; no KEV entry (no CVE exists)</td></tr>
       <tr><td>VM scanners / EDR</td><td><span class="bad">Not applicable</span> — nothing to scan; coverage is Entra/Graph log review and the Microsoft/Huntress content above</td></tr>
@@ -180,6 +182,7 @@ a{color:var(--ink)}
         <ul>
           <li>Any successful SP sign-in from the listed IPs or with the Python/curl UAs</li>
           <li>Service principal self-assigning a directory role, or credentials added to unrelated apps</li>
+          <li>Credential or role <b>churn</b> on one app inside an hour (add → remove → add), a role granted to a sibling principal after a refused removal, or a service principal deleted after such changes — the Oct 26 Huntress persistence shape; also an anti-forensics tell</li>
           <li>New IoCs or appIds published by ConnectWise / Microsoft</li>
           <li>CISA advisory or broader MSP-tooling expansion of the campaign</li>
         </ul>
@@ -203,16 +206,41 @@ AND initiated_by is a service principal (not a user)
 → every hit gets a human review; self-role-assignment = incident
 
 # Splunk (Azure Monitor diagnostic export shape: category / properties.*; tune field
-# names to your add-on)
+# names to your add-on). Includes the REMOVE and DELETE operations: Huntress's Oct 26
+# telemetry shows the persistence as churn and cleanup, not just additions.
 index=* category=AuditLogs earliest=-30d@d
-    operationName IN ("Add service principal credentials", "Add member to role",
-      "Update application", "Consent to application")
+    operationName IN ("Add service principal credentials", "Remove service principal credentials",
+      "Update application – Certificates and secrets management",
+      "Add member to role", "Remove member from role",
+      "Add app role assignment to service principal",
+      "Update application", "Consent to application",
+      "Remove service principal", "Delete application")
     properties.initiatedBy.app.servicePrincipalId=*
 | rename properties.initiatedBy.app.displayName as actor_app,
     properties.initiatedBy.app.servicePrincipalId as actor_sp,
     properties.targetResources{}.displayName as target
 | stats count values(target) as targets min(_time) as first max(_time) as last
-    by actor_app actor_sp operationName</pre>
+    by actor_app actor_sp operationName
+
+# churn: the same target gets an add AND a remove of credentials or roles inside 60 min
+index=* category=AuditLogs earliest=-30d@d
+    operationName IN ("Add service principal credentials", "Remove service principal credentials",
+      "Add member to role", "Remove member from role")
+| rename properties.targetResources{}.displayName as target, properties.initiatedBy.app.displayName as actor_app
+| eval verb=if(match(operationName, "^Add"), "add", "remove")
+| transaction target maxspan=60m
+| where mvcount(mvdedup(verb))=2
+| table _time duration target actor_app operationName
+→ any churn pair is a hands-on operator (or an agent retrying); a failed cert upload followed by
+  a successful one within a minute is the same tell
+
+# sibling-principal grant + cleanup: role granted to one principal, then another principal deleted
+index=* category=AuditLogs earliest=-30d@d
+    operationName IN ("Add member to role", "Remove service principal", "Delete application")
+| rename properties.initiatedBy.app.displayName as actor_app
+| transaction actor_app maxspan=30m
+| where searchmatch("Add member to role") AND (searchmatch("Remove service principal") OR searchmatch("Delete application"))
+| table _time duration actor_app operationName</pre>
     <p><b>Issuance-then-use</b> — tests the "no consent, no access" assumption instead of inheriting it (inferred; derived from the Chorus note above):</p>
 <pre># stage 1: exported Entra SP sign-in logs, Oct 1 → now
 service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
@@ -220,6 +248,8 @@ service_principal_id = 00000000-0000-0000-0000-000000000000 AND result = success
 # stage 2: Graph activity logs, same window
 appId IN (stage 1) AND response_status 200–299
 → any row = the app acted despite "no permissions"; review requestUri per appId
+# prerequisite: Microsoft Graph activity logs must be ENABLED (diagnostic setting) — Huntress
+# could not see them in affected tenants. If yours are off, stage 2 is a coverage gap, not a clean result
 # noise: run stage 1 on service-principal (app-only) sign-ins ONLY — Microsoft first-party
 # apps authenticate SP-less by design and surface in USER sign-in logs. Exclude apps whose
 # publisher (AppOwnerOrganizationId / appOwnerTenantId) is a Microsoft tenant:
@@ -266,12 +296,14 @@ dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
       <li><span class="d">Oct 20</span><span>ConnectWise technical webinars begin — every two hours from 18:00 UTC; video walkthrough of guide steps posted Oct 19</span></li>
       <li><span class="d">Oct 21</span><span>Microsoft attributes to Storm-0940 using ARTEX agentic AI; publishes Defender XDR detections and hunting KQL</span></li>
       <li><span class="d">Oct 22–23</span><span>Sophos: sweep included tenants with no active subscription. No CISA advisory yet. Status (Oct 23 14:00 UTC): restoration testing expected complete by end of the weekend, backup-restore access early next week, phased re-enrollment after — keep affected connections disabled until vendor instructions</span></li>
+      <li><span class="d">Oct 26</span><span>Huntress publishes the log-level reconstruction of Oct 15: secret and Global Administrator add→remove→add churn (03:42–03:57 UTC), certificate upload retried after a thumbprint mismatch, Teams identity self-assigning GA, sibling-principal role grant after a refused removal, service-principal deletion; ~1,000-tenant token loop 06:13–08:46; scripted tempo with something adapting between runs — possibly an agent. Recommends enabling Graph activity logs</span></li>
     </ul>
 
     <h2>Sources</h2>
     <p class="src">
       <a href="https://www.microsoft.com/en-us/security/blog/2026/10/21/storm-0940-uses-artex-agentic-ai-connectwise-supply-chain-compromise/">Microsoft Security Blog — Storm-0940 / ARTEX, Oct 21</a> ·
       <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress — vendor credential abuse</a> ·
+      <a href="https://www.huntress.com/blog/connectwise-attack-ai">Huntress — scripts, people, and AI agents (Oct 26)</a> ·
       <a href="https://www.bleepingcomputer.com/news/security/hackers-breach-microsoft-365-tenants-via-connectwise-supply-chain-attack/">BleepingComputer</a> ·
       <a href="https://thehackernews.com/2026/10/china-linked-hackers-use-artex-ai.html">The Hacker News — ARTEX attribution, Oct 22</a> ·
       <a href="https://brandefense.io/security-news/storm-0940-artex-connectwise-supply-chain-attack/">Brandefense — tenant checks</a> ·
@@ -293,7 +325,7 @@ dest IN (144.172.64.60, 144.172.64.99, 144.172.64.128, 144.172.94.243)
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-10-25', QUERY = 'connectwise';
+  const AS_OF = '2026-10-27', QUERY = 'connectwise';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
