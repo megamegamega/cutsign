@@ -7,55 +7,61 @@
 <title>SP-less Triage Loop</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* Layout: one spine. Title, the two-job loop diagram, then the rules and queries the diagram compresses. */
+  /* Layout: one spine. Title, a three-swimlane flowchart (one job per lane, one color per job),
+     then the rules and the three queries, each carrying its job's color. */
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f27; --mute: #5c6472; --line: #c7ccd6;
-    --accent: #2f6f9f;            /* the loop and the kept list */
-    --l1: #8a919c; --hold: #6b7fb3; --l2: #b8861b; --l3: #b23a3a;   /* lane semantics, not accent */
+    --accent: #2f6f9f;
+    --sc: #2f6f9f; --ba: #2e8a5e; --al: #7b4fb3;                 /* jobs: scoping, baselining, alerting */
+    --l1: #8a919c; --hold: #6b7fb3; --l2: #b8861b; --l3: #b23a3a; /* lane semantics */
     --sans: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
     --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-    --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark } }
+    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+    --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark } }
   :root[data-theme="dark"] {
     --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-    --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark }
+    --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+    --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark }
 
   body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans);
     padding-block: 28px 48px;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-  main { max-width: 940px; margin: 0 auto; display: grid; gap: 28px; }
+  main { max-width: 1240px; margin: 0 auto; display: grid; gap: 28px; }
   h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
-  .sub { color: var(--mute); margin: 0; max-width: 70ch; }
+  .sub { color: var(--mute); margin: 0; max-width: 78ch; }
   h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute);
     margin: 0 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
   figure { margin: 0; }
   .wrap { overflow-x: auto; }
-  svg { display: block; width: 100%; max-width: 940px; height: auto; min-width: 680px; font-family: var(--sans); }
-  figcaption { color: var(--mute); font-size: 13px; margin-top: 8px; max-width: 76ch; }
-  ol { margin: 0; padding-left: 22px; max-width: 76ch; }
-  ol li { margin: 6px 0; }
-  ol li::marker { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  svg { display: block; width: 100%; max-width: 1240px; height: auto; min-width: 1000px; font-family: var(--sans); }
+  figcaption { color: var(--mute); font-size: 13px; margin-top: 8px; max-width: 100ch; }
   code, pre { font-family: var(--mono); font-size: 13px; }
   code { background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 1px 5px; border-radius: 3px; }
   pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
     overflow-x: auto; margin: 0; line-height: 1.45; white-space: pre; }
-  .note { color: var(--mute); font-size: 13px; margin: 6px 0 0; max-width: 76ch; }
-  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-  .grid2 > div { min-width: 0; }
+  .note { color: var(--mute); font-size: 13px; margin: 6px 0 0; max-width: 78ch; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  .grid3 > div { min-width: 0; border-left: 3px solid var(--job); padding-left: 12px; }
+  .grid3 h3 { color: var(--job); }
+  .sc { --job: var(--sc); } .ba { --job: var(--ba); } .al { --job: var(--al); }
   h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); }
   th { font-size: 11px; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; border-top: none; }
   .tw { overflow-x: auto; }
-  .foot { color: var(--mute); font-size: 12px; border-top: 1px solid var(--line); padding-top: 10px; max-width: 86ch; }
+  .job { font-weight: 600; color: var(--job); }
+  .foot { color: var(--mute); font-size: 12px; border-top: 1px solid var(--line); padding-top: 10px; max-width: 100ch; }
   a { color: var(--accent); }
   .lane { font-weight: 600; }
   .l1 { color: var(--l1); } .hold { color: var(--hold); } .l2 { color: var(--l2); } .l3 { color: var(--l3); }
-  ul { margin: 0; padding-left: 22px; max-width: 76ch; } ul li { margin: 5px 0; }
-  .top { max-width: 940px; margin: 0 auto 14px; display: flex; align-items: center; gap: 16px; font: 600 12px var(--mono); }
+  ul { margin: 0; padding-left: 22px; max-width: 78ch; } ul li { margin: 5px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--mute); font-size: 12px; margin-top: 6px; }
+  .legend span b { color: var(--fg); font-weight: 500; }
+  .top { max-width: 1240px; margin: 0 auto 14px; display: flex; align-items: center; gap: 16px; font: 600 12px var(--mono); }
   .top a { color: var(--mute); text-decoration: none; } .top a:hover { color: var(--fg); }
   .top .pdf { margin-left: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
     color: var(--fg); font: 600 12px var(--mono); padding: 6px 12px; cursor: pointer; }
@@ -63,7 +69,8 @@
   @media print {
     /* PDFs are always dark, like the cards; print-color-adjust keeps the backgrounds. */
     :root { --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
-      --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; }
+      --accent: #6aa7d8; --sc: #6aa7d8; --ba: #5fc08f; --al: #b48ae6;
+      --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; }
     html, body { background: var(--bg) !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     body { padding: 0; font-size: 12.5px; }
     .top { display: none; }
@@ -86,177 +93,196 @@
 <main>
   <header>
     <h1>SP-less Triage Loop</h1>
-    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b>Scoping</b> finds each new app and assigns a lane. <b>Baselining</b> baselines it and writes the row. <b>Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a baselined vendor whose stolen credential was used from new infrastructure. Public sources only; describes no particular tenant.</p>
+    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b style="color:var(--sc)">Scoping</b> finds each new app and assigns a lane. <b style="color:var(--ba)">Baselining</b> records what the app normally looks like. <b style="color:var(--al)">Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a known vendor whose stolen credential was used from new infrastructure. Public sources only; describes no particular tenant.</p>
   </header>
 
   <figure>
     <div class="wrap">
-    <svg viewBox="0 0 940 940" role="img" aria-label="Daily loop with three jobs. Scoping: pull service-principal sign-ins with the all-zeros ID, group by app ID and owner tenant, and for each new app ID test the owner against Microsoft's documented set, otherwise look the tenant up and route to lane 1 Microsoft, a hold lane, lane 2 vendor, or lane 3 nobody. Baselining: for the laned app, baseline all its sign-ins over 90 days and write one row to the kept list. Alerting: for every baselined app ID, pull all its sign-ins, zeros or real service principal, and diff credential key, resources, ASN and failures against the kept list; anything new is investigated. The loop repeats the next day.">
+    <svg viewBox="0 0 1240 720" role="img" aria-label="Three swimlanes. Scoping, daily: pull all-zeros service-principal sign-ins, group by app ID and owner tenant, stop if no new app ID; otherwise, if the owner is a documented Microsoft tenant or a first-party app ID, lane 1; else look up the owner tenant and, by what comes back, lane 2 vendor, hold, or lane 3 nobody. Lanes 1, 2 and 3 continue into Baselining: pull 90 days of all the app's sign-ins, compute the sets of credential key IDs, resources and ASNs plus first seen, review by hand on day one, append one row to the kept list. Alerting, daily: for each baselined app ID pull two days of sign-ins, diff against its row, stop if nothing is new; otherwise investigate, and on case close append the new value to the row.">
       <defs>
         <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
         </marker>
-        <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/>
-        </marker>
       </defs>
 
-      <g stroke="currentColor" stroke-width="1.3" fill="none">
-        <!-- Daily run -->
-        <rect x="450" y="20" width="200" height="36" rx="18" style="fill:var(--panel);stroke:var(--accent)" stroke-width="1.6"/>
+      <!-- swimlane bands -->
+      <g>
+        <rect x="20" y="20" width="1200" height="300" rx="8" style="fill:color-mix(in srgb, var(--sc) 7%, transparent)"/>
+        <rect x="20" y="335" width="1200" height="145" rx="8" style="fill:color-mix(in srgb, var(--ba) 7%, transparent)"/>
+        <rect x="20" y="495" width="1200" height="205" rx="8" style="fill:color-mix(in srgb, var(--al) 7%, transparent)"/>
+      </g>
+      <g font-size="11" font-weight="600" letter-spacing="0.08em">
+        <text x="32" y="40" style="fill:var(--sc)">SCOPING · DAILY</text>
+        <text x="32" y="355" style="fill:var(--ba)">BASELINING · ONCE PER LANED APPID</text>
+        <text x="32" y="515" style="fill:var(--al)">ALERTING · DAILY</text>
+      </g>
 
-        <!-- Job A column, spine x=330 -->
-        <rect x="200" y="96" width="260" height="66" rx="6" style="fill:var(--panel)"/>
-        <rect x="200" y="202" width="260" height="40" rx="6" style="fill:var(--panel)"/>
-        <rect x="220" y="282" width="220" height="40" rx="20" style="fill:var(--panel)"/>
-        <rect x="200" y="362" width="260" height="52" rx="26" style="fill:var(--panel)"/>
-        <rect x="170" y="454" width="320" height="52" rx="6" style="fill:var(--panel)"/>
-        <rect x="250" y="546" width="160" height="40" rx="20" style="fill:var(--panel)"/>
+      <!-- ===== Scoping ===== -->
+      <g fill="none" stroke-width="1.4" style="stroke:var(--sc)">
+        <rect x="40" y="113" width="80" height="34" rx="17" style="fill:var(--panel)"/>
+        <rect x="145" y="102" width="160" height="56" rx="4" style="fill:var(--panel)"/>
+        <rect x="330" y="106" width="160" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="515,130 570,100 625,130 570,160" style="fill:var(--panel)"/>
+        <polygon points="660,130 735,96 810,130 735,164" style="fill:var(--panel)"/>
+        <rect x="660" y="186" width="150" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="670,282 735,252 800,282 735,312" style="fill:var(--panel)"/>
+        <!-- human tag beside the lookup decision -->
+        <rect x="596" y="274" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+      </g>
+      <!-- stop pill -->
+      <rect x="535" y="44" width="70" height="26" rx="13" style="fill:var(--panel);stroke:var(--mute)" stroke-width="1.2"/>
+      <!-- lane boxes (neutral stroke, colored label) -->
+      <g fill="none" stroke-width="1.2" style="stroke:var(--line)">
+        <rect x="960" y="52" width="190" height="40" rx="4" style="fill:var(--panel)"/>
+        <rect x="960" y="112" width="190" height="40" rx="4" style="fill:var(--panel)"/>
+        <rect x="960" y="172" width="190" height="40" rx="4" style="fill:var(--panel)"/>
+        <rect x="960" y="232" width="190" height="40" rx="4" style="fill:var(--panel)"/>
+      </g>
+      <!-- connectors B -->
+      <g fill="none" stroke-width="1.4" style="stroke:var(--ba)">
+        <circle cx="1185" cy="72" r="13" style="fill:var(--panel)"/>
+        <circle cx="1185" cy="132" r="13" style="fill:var(--panel)"/>
+        <circle cx="1185" cy="252" r="13" style="fill:var(--panel)"/>
+      </g>
+      <!-- scoping edges -->
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="120" y1="130" x2="145" y2="130" marker-end="url(#ah)"/>
+        <line x1="305" y1="130" x2="330" y2="130" marker-end="url(#ah)"/>
+        <line x1="490" y1="130" x2="515" y2="130" marker-end="url(#ah)"/>
+        <line x1="570" y1="100" x2="570" y2="70" marker-end="url(#ah)"/>
+        <line x1="625" y1="130" x2="660" y2="130" marker-end="url(#ah)"/>
+        <polyline points="735,96 735,72 960,72" marker-end="url(#ah)"/>
+        <line x1="735" y1="164" x2="735" y2="186" marker-end="url(#ah)"/>
+        <line x1="735" y1="234" x2="735" y2="252" marker-end="url(#ah)"/>
+        <polyline points="800,282 930,282 930,132"/>
+        <line x1="930" y1="132" x2="960" y2="132" marker-end="url(#ah)"/>
+        <line x1="930" y1="192" x2="960" y2="192" marker-end="url(#ah)"/>
+        <line x1="930" y1="252" x2="960" y2="252" marker-end="url(#ah)"/>
+        <line x1="1150" y1="72" x2="1172" y2="72" marker-end="url(#ah)"/>
+        <line x1="1150" y1="132" x2="1172" y2="132" marker-end="url(#ah)"/>
+        <line x1="1150" y1="252" x2="1172" y2="252" marker-end="url(#ah)"/>
+      </g>
 
-        <!-- Job B column, spine x=760 -->
-        <rect x="620" y="96" width="280" height="66" rx="6" style="fill:var(--panel)"/>
-        <rect x="620" y="202" width="280" height="66" rx="6" style="fill:var(--panel)"/>
-        <rect x="660" y="308" width="200" height="40" rx="20" style="fill:var(--panel)"/>
-        <rect x="620" y="388" width="280" height="66" rx="6" style="fill:var(--panel)"/>
+      <!-- ===== Baselining ===== -->
+      <g fill="none" stroke-width="1.4" style="stroke:var(--ba)">
+        <circle cx="62" cy="420" r="13" style="fill:var(--panel)"/>
+        <rect x="100" y="396" width="200" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="325" y="396" width="200" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="550" y="396" width="180" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="755" y="396" width="140" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="614" y="372" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="75" y1="420" x2="100" y2="420" marker-end="url(#ah)"/>
+        <line x1="300" y1="420" x2="325" y2="420" marker-end="url(#ah)"/>
+        <line x1="525" y1="420" x2="550" y2="420" marker-end="url(#ah)"/>
+        <line x1="730" y1="420" x2="755" y2="420" marker-end="url(#ah)"/>
+        <polyline points="895,420 1150,420 1150,590" marker-end="url(#ah)"/>
+      </g>
 
+      <!-- ===== Alerting ===== -->
+      <g fill="none" stroke-width="1.4" style="stroke:var(--al)">
+        <rect x="40" y="543" width="80" height="34" rx="17" style="fill:var(--panel)"/>
+        <rect x="145" y="536" width="160" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="330" y="536" width="160" height="48" rx="4" style="fill:var(--panel)"/>
+        <rect x="515" y="536" width="180" height="48" rx="4" style="fill:var(--panel)"/>
+        <polygon points="720,560 780,530 840,560 780,590" style="fill:var(--panel)"/>
+        <rect x="870" y="532" width="160" height="56" rx="4" style="fill:var(--panel)"/>
+        <rect x="924" y="508" width="52" height="16" rx="8" style="fill:var(--panel)" stroke-dasharray="2 2"/>
+      </g>
+      <rect x="745" y="625" width="70" height="26" rx="13" style="fill:var(--panel);stroke:var(--mute)" stroke-width="1.2"/>
+      <!-- kept list: data store -->
+      <g fill="none" stroke-width="1.6" style="stroke:var(--accent)">
+        <path d="M1090,600 v80 a60,10 0 0 0 120,0 v-80" style="fill:var(--panel)"/>
+        <ellipse cx="1150" cy="600" rx="60" ry="10" style="fill:var(--panel)"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="120" y1="560" x2="145" y2="560" marker-end="url(#ah)"/>
+        <line x1="305" y1="560" x2="330" y2="560" marker-end="url(#ah)"/>
+        <line x1="490" y1="560" x2="515" y2="560" marker-end="url(#ah)"/>
+        <line x1="695" y1="560" x2="720" y2="560" marker-end="url(#ah)"/>
+        <line x1="780" y1="590" x2="780" y2="625" marker-end="url(#ah)"/>
+        <line x1="840" y1="560" x2="870" y2="560" marker-end="url(#ah)"/>
+        <polyline points="1030,560 1060,560 1060,640 1090,640" marker-end="url(#ah)"/>
+      </g>
+
+      <!-- ===== text ===== -->
+      <g fill="currentColor" font-size="12" text-anchor="middle">
+        <!-- scoping -->
+        <text x="80" y="134" font-weight="600">Daily</text>
+        <text x="225" y="122">Pull SP sign-ins</text>
+        <text x="225" y="137" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">servicePrincipalId = 0…0</text>
+        <text x="225" y="151" font-size="10.5" style="fill:var(--mute)">not user sign-ins</text>
+        <text x="410" y="126">Group by appId ×</text>
+        <text x="410" y="142" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">appOwnerTenantId</text>
+        <text x="570" y="134">new appId?</text>
+        <text x="570" y="178" font-size="10.5" style="fill:var(--mute)">vs kept list</text>
+        <text x="570" y="61" font-size="11" style="fill:var(--mute)">done</text>
+        <text x="735" y="126">documented</text>
+        <text x="735" y="141">Microsoft?</text>
+        <text x="735" y="206">Look up owner tenant</text>
+        <text x="735" y="222" font-size="10.5" style="fill:var(--mute)">Graph, by tenant ID · name is free text</text>
+        <text x="735" y="279">what came</text>
+        <text x="735" y="293">back?</text>
+        <text x="622" y="286" font-size="9.5" style="fill:var(--sc)">human</text>
         <!-- lanes -->
-        <rect x="50" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l1)" stroke-width="1.8"/>
-        <rect x="260" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--hold)" stroke-width="1.8"/>
-        <rect x="470" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l2)" stroke-width="1.8"/>
-        <rect x="715" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l3)" stroke-width="1.8"/>
-
+        <text x="1055" y="68" font-weight="600" style="fill:var(--l1)">Lane 1 · Microsoft</text>
+        <text x="1055" y="83" font-size="10.5">documented tenant or first-party appId</text>
+        <text x="1055" y="128" font-weight="600" style="fill:var(--l2)">Lane 2 · Vendor</text>
+        <text x="1055" y="143" font-size="10.5">exact domain or published appId</text>
+        <text x="1055" y="188" font-weight="600" style="fill:var(--hold)">Hold · human queue</text>
+        <text x="1055" y="203" font-size="10.5">null, no result, lookalike, MS-named</text>
+        <text x="1055" y="248" font-weight="600" style="fill:var(--l3)">Lane 3 · Nobody</text>
+        <text x="1055" y="263" font-size="10.5">lookup answered · 2nd analyst · disable</text>
+        <text x="1185" y="76" font-size="11" font-weight="600" style="fill:var(--ba)">B</text>
+        <text x="1185" y="136" font-size="11" font-weight="600" style="fill:var(--ba)">B</text>
+        <text x="1185" y="256" font-size="11" font-weight="600" style="fill:var(--ba)">B</text>
         <!-- baselining -->
-        <rect x="300" y="770" width="340" height="50" rx="6" style="fill:var(--panel)"/>
-        <!-- kept list -->
-        <rect x="300" y="870" width="340" height="50" rx="6" style="fill:var(--panel);stroke:var(--accent)" stroke-width="1.8"/>
-
-        <!-- Daily run → jobs -->
-        <polyline points="550,56 550,76 330,76 330,96" marker-end="url(#ah)"/>
-        <polyline points="650,38 760,38 760,96" marker-end="url(#ah)"/>
-
-        <!-- Job A spine -->
-        <line x1="330" y1="162" x2="330" y2="202" marker-end="url(#ah)"/>
-        <line x1="330" y1="242" x2="330" y2="282" marker-end="url(#ah)"/>
-        <line x1="330" y1="322" x2="330" y2="362" marker-end="url(#ah)"/>
-        <line x1="330" y1="414" x2="330" y2="454" marker-end="url(#ah)"/>
-        <line x1="330" y1="506" x2="330" y2="546" marker-end="url(#ah)"/>
-        <!-- G → hold (straight down) -->
-        <line x1="330" y1="586" x2="330" y2="620" marker-end="url(#ah)"/>
-        <!-- E yes → lane 1 -->
-        <polyline points="200,388 100,388 100,620" marker-end="url(#ah)"/>
-        <!-- G → lane 2 and lane 3 along y=566 -->
-        <line x1="410" y1="566" x2="807" y2="566"/>
-        <line x1="567" y1="566" x2="567" y2="620" marker-end="url(#ah)"/>
-        <line x1="807" y1="566" x2="807" y2="620" marker-end="url(#ah)"/>
-        <circle cx="567" cy="566" r="2.5" fill="currentColor" stroke="none"/>
-
-        <!-- Job B spine -->
-        <line x1="760" y1="162" x2="760" y2="202" marker-end="url(#ah)"/>
-        <line x1="760" y1="268" x2="760" y2="308" marker-end="url(#ah)"/>
-        <line x1="760" y1="348" x2="760" y2="388" marker-end="url(#ah)"/>
-        <!-- B3 none → bypass; B4 → kept list; both via x=925 -->
-        <polyline points="860,328 925,328 925,895 640,895" marker-end="url(#ah)"/>
-        <polyline points="760,454 760,480 925,480"/>
-        <circle cx="925" cy="480" r="2.5" fill="currentColor" stroke="none"/>
-
-        <!-- lanes → baselining -->
-        <polyline points="147,730 147,750 350,750 350,770" marker-end="url(#ah)"/>
-        <line x1="357" y1="730" x2="357" y2="770" marker-end="url(#ah)"/>
-        <line x1="567" y1="730" x2="567" y2="770" marker-end="url(#ah)"/>
-        <polyline points="812,730 812,750 600,750 600,770" marker-end="url(#ah)"/>
-        <!-- baselining → kept list -->
-        <line x1="470" y1="820" x2="470" y2="870" marker-end="url(#ah)"/>
-        <!-- kept list is read by the diffs (dashed) -->
-        <polyline points="300,885 40,885 40,302 220,302" stroke-dasharray="4 3" marker-end="url(#ah)"/>
-      </g>
-
-      <!-- the loop, in accent -->
-      <g style="stroke:var(--accent)" stroke-width="1.6" fill="none">
-        <polyline points="470,920 470,930 20,930 20,38 450,38" marker-end="url(#ahA)"/>
-      </g>
-
-      <!-- text -->
-      <g fill="currentColor" font-size="12.5" text-anchor="middle">
-        <text x="550" y="42" font-weight="600">Daily run</text>
-
-        <text x="330" y="115" font-weight="600">Scoping · service-principal sign-ins</text>
-        <text x="330" y="134" font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">servicePrincipalId = all zeros</text>
-        <text x="330" y="152" font-size="11.5" style="fill:var(--mute)">not user sign-ins, not resourceServicePrincipalId</text>
-
-        <text x="330" y="227">group by <tspan font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">appId × appOwnerTenantId</tspan></text>
-
-        <text x="330" y="307">new appId vs kept list?</text>
-
-        <text x="330" y="383">owner in documented Microsoft set,</text>
-        <text x="330" y="401">or appId in Microsoft's first-party table?</text>
-
-        <text x="330" y="475" font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">findTenantInformationByTenantId(owner)</text>
-        <text x="330" y="494" font-size="11.5" style="fill:var(--mute)">→ displayName, defaultDomainName (free text)</text>
-
-        <text x="330" y="571">what came back?</text>
-
-        <text x="760" y="115" font-weight="600">Alerting · baselined appIds</text>
-        <text x="760" y="134">all sign-ins for each baselined appId,</text>
-        <text x="760" y="152" font-size="11.5" style="fill:var(--mute)">zeros or real service principal</text>
-
-        <text x="760" y="221">diff vs kept list: credential keyId,</text>
-        <text x="760" y="239">resources, ASN,</text>
-        <text x="760" y="257">failures and error codes</text>
-
-        <text x="760" y="333">anything new?</text>
-
-        <text x="760" y="407">Investigate. New keyId outranks ASN.</text>
-        <text x="760" y="425" font-size="11.5" style="fill:var(--mute)">Append to the baseline only when</text>
-        <text x="760" y="443" font-size="11.5" style="fill:var(--mute)">the case closes. Never rebuild from raw.</text>
-
-        <text x="147" y="642" font-weight="600" style="fill:var(--l1)">Lane 1 · Microsoft</text>
-        <text x="147" y="662" font-size="11.5">Documented owner tenant,</text>
-        <text x="147" y="680" font-size="11.5">or documented first-party appId.</text>
-        <text x="147" y="700" font-size="11.5" style="fill:var(--mute)">Baseline. Low-priority drift only.</text>
-
-        <text x="357" y="642" font-weight="600" style="fill:var(--hold)">Hold</text>
-        <text x="357" y="662" font-size="11.5">Null owner, lookup failed,</text>
-        <text x="357" y="680" font-size="11.5">Microsoft-named but undocumented,</text>
-        <text x="357" y="698" font-size="11.5">lookalike domain.</text>
-        <text x="357" y="718" font-size="11.5" style="fill:var(--mute)">Not ignored. Not disabled.</text>
-
-        <text x="567" y="642" font-weight="600" style="fill:var(--l2)">Lane 2 · Vendor</text>
-        <text x="567" y="662" font-size="11.5">defaultDomainName equals the</text>
-        <text x="567" y="680" font-size="11.5">vendor's domain, or published appId.</text>
-        <text x="567" y="700" font-size="11.5" style="fill:var(--mute)">Watch. Alerting every day.</text>
-
-        <text x="812" y="642" font-weight="600" style="fill:var(--l3)">Lane 3 · Nobody</text>
-        <text x="812" y="662" font-size="11.5">Lookup answered; nobody claims it.</text>
-        <text x="812" y="680" font-size="11.5">Second analyst. Create SP, disable,</text>
-        <text x="812" y="698" font-size="11.5">record objectId.</text>
-        <text x="812" y="718" font-size="11.5" style="fill:var(--mute)">Undo = delete the SP.</text>
-
-        <text x="470" y="791" font-weight="600">Baselining · on demand, when a lane is assigned</text>
-        <text x="470" y="809" font-size="11.5" style="fill:var(--mute)">90-day baseline, all sign-ins for the appId → one row</text>
-
-        <text x="470" y="891" font-weight="600" style="fill:var(--accent)">Kept list</text>
-        <text x="470" y="909" font-size="11.5">appId · owner · lane · keyIds · resources · ASNs · first seen</text>
+        <text x="62" y="424" font-size="11" font-weight="600" style="fill:var(--ba)">B</text>
+        <text x="200" y="416">Pull 90 d of all sign-ins</text>
+        <text x="200" y="431" font-size="10.5" style="fill:var(--mute)">for the appId, zeros or real SP</text>
+        <text x="425" y="416">Sets: keyIds · resources · ASNs</text>
+        <text x="425" y="431" font-size="10.5" style="fill:var(--mute)">plus first seen</text>
+        <text x="640" y="416">Day one: review the sets</text>
+        <text x="640" y="431" font-size="10.5" style="fill:var(--mute)">the attacker may already be in them</text>
+        <text x="640" y="384" font-size="9.5" style="fill:var(--ba)">human</text>
+        <text x="825" y="424">Append one row</text>
+        <!-- alerting -->
+        <text x="80" y="564" font-weight="600">Daily</text>
+        <text x="225" y="556">Baselined appIds</text>
+        <text x="225" y="571" font-size="10.5" style="fill:var(--mute)">read from the kept list</text>
+        <text x="410" y="556">Pull 2 d of sign-ins</text>
+        <text x="410" y="571" font-size="10.5" style="fill:var(--mute)">per appId, zeros or real SP</text>
+        <text x="605" y="556">Diff vs its row</text>
+        <text x="605" y="571" font-size="10.5" style="fill:var(--mute)">keyId · resource · ASN · failures</text>
+        <text x="780" y="557">anything</text>
+        <text x="780" y="571">new?</text>
+        <text x="780" y="642" font-size="11" style="fill:var(--mute)">done</text>
+        <text x="950" y="552">Investigate</text>
+        <text x="950" y="566" font-size="10.5" style="fill:var(--mute)">new keyId outranks new ASN</text>
+        <text x="950" y="580" font-size="10.5" style="fill:var(--mute)">case closed → append the value</text>
+        <text x="950" y="520" font-size="9.5" style="fill:var(--al)">human</text>
+        <!-- store -->
+        <text x="1150" y="636" font-weight="600" style="fill:var(--accent)">Kept list</text>
+        <text x="1150" y="651" font-size="10.5" style="fill:var(--mute)">one row per appId</text>
       </g>
       <!-- edge labels -->
-      <g font-size="11" style="fill:var(--mute)">
-        <text x="322" y="70" text-anchor="end">daily</text>
-        <text x="770" y="70" text-anchor="start">daily</text>
-        <text x="338" y="346" text-anchor="start">new</text>
-        <text x="130" y="296" text-anchor="middle">none today</text>
-        <text x="150" y="380" text-anchor="middle">yes</text>
-        <text x="338" y="438" text-anchor="start">no</text>
-        <text x="338" y="530" text-anchor="start">null owner too</text>
-        <text x="338" y="607" text-anchor="start">else</text>
-        <text x="488" y="560" text-anchor="middle">vendor, domain-verified</text>
-        <text x="690" y="560" text-anchor="middle">nobody, lookup answered</text>
-        <text x="770" y="372" text-anchor="start">new</text>
-        <text x="892" y="322" text-anchor="middle">none</text>
-        <text x="60" y="560" text-anchor="start" style="fill:var(--mute)">kept list is read by both diffs (dashed)</text>
-        <text x="235" y="926" text-anchor="middle" style="fill:var(--accent)">next day</text>
+      <g font-size="10.5" style="fill:var(--mute)">
+        <text x="578" y="88" text-anchor="start">none</text>
+        <text x="642" y="124" text-anchor="middle">new</text>
+        <text x="745" y="90" text-anchor="start">yes</text>
+        <text x="745" y="180" text-anchor="start">no</text>
+        <text x="788" y="612" text-anchor="start">none</text>
+        <text x="855" y="554" text-anchor="middle">new</text>
+        <text x="1138" y="412" text-anchor="end" style="fill:var(--ba)">writes the row</text>
+        <text x="1062" y="632" text-anchor="end" style="fill:var(--al)">appends</text>
       </g>
     </svg>
     </div>
-    <figcaption>Classification needs no service principal, because an SP-less app has none in your tenant to read; blocking creates one. The owner tenant identifies who registered the app, not who is operating it today, which is why Alerting exists.</figcaption>
+    <div class="legend">
+      <span><b>Pill</b> start or stop</span><span><b>Rectangle</b> a step</span><span><b>Diamond</b> a decision</span><span><b>Cylinder</b> the kept list</span><span><b>human</b> an analyst decides</span><span><b>B</b> continues in Baselining</span><span><b>Band color</b> the job; same color on its query below</span>
+    </div>
+    <figcaption>Scoping classifies without a service principal, because an SP-less app has none in your tenant to read; lane 3 creates one in order to disable it. The owner tenant says who registered the app, not who is operating it today, which is why Alerting exists.</figcaption>
   </figure>
 
   <section>
@@ -264,9 +290,9 @@
     <div class="tw">
     <table>
       <tr><th>Job</th><th>Runs</th><th>Does</th><th>Human gate</th></tr>
-      <tr><td><b>Scoping</b></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
-      <tr><td><b>Baselining</b></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>None. It runs when Scoping assigns a lane. Day one it runs once per app.</td></tr>
-      <tr><td><b>Alerting</b></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>Case close. An analyst appends the new value to the row. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
+      <tr><td class="sc"><span class="job">Scoping</span></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
+      <tr><td class="ba"><span class="job">Baselining</span></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>Day one only: the sets are reviewed by hand before the row is written, because the first 90 days may already contain the attacker.</td></tr>
+      <tr><td class="al"><span class="job">Alerting</span></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>Case close. An analyst appends the new value to the row. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
     </table>
     </div>
   </section>
@@ -286,13 +312,13 @@
     <div class="tw">
     <table>
       <tr><th>Lane</th><th>Evidence required</th><th>What it is not</th></tr>
-      <tr><td><span class="lane l1">Lane 1 · Microsoft</span></td><td>Owner tenant is one Microsoft documents, or the appId appears in Microsoft's published first-party application table.</td><td>Not a tenant whose displayName says Microsoft. Names are free text; a lookup can demote, never promote.</td></tr>
+      <tr><td><span class="lane l1">Lane 1 · Microsoft</span></td><td>Owner tenant is one Microsoft documents, or the appId appears in Microsoft's service principal reference table.</td><td>Not a tenant whose displayName says Microsoft. Names are free text; a lookup can demote, never promote.</td></tr>
       <tr><td><span class="lane hold">Hold</span></td><td>Owner field null; lookup returned nothing (other national cloud, 404); Microsoft-named but undocumented; domain is <code>*.onmicrosoft.com</code> or a lookalike.</td><td>Not ignored, not disabled. Resolve by appId against Microsoft's table and the community list, or ask Microsoft.</td></tr>
       <tr><td><span class="lane l2">Lane 2 · Vendor</span></td><td><code>defaultDomainName</code> exactly equals the vendor's registrable domain, or the appId is one the vendor publishes.</td><td>Not "a name I recognise". Lane 2 is detection only, so it earns Alerting every day.</td></tr>
       <tr><td><span class="lane l3">Lane 3 · Nobody</span></td><td>Lookup answered, nobody claims the app, second analyst agrees. Create a service principal for the appId, disable it, verify via Graph that it exists with <code>accountEnabled=false</code>, record its objectId.</td><td>Not the branch for a failed lookup. Undo is deleting the service principal; re-enabling it leaves a consented app behind.</td></tr>
     </table>
     </div>
-    <p class="note">Day one: the kept list is empty, so every non-Microsoft pair gets the full lookup and a hand review of its Baselining baseline before the row is written. Nothing goes to lane 3 on day one. The first 90 days of data may already contain the attacker.</p>
+    <p class="note">Day one: the kept list is empty, so every non-Microsoft pair gets the full lookup and a hand review of its Baselining sets before the row is written. Nothing goes to lane 3 on day one.</p>
   </section>
 
   <section>
@@ -304,13 +330,13 @@
       <tr><td><code>72f988bf-86f1-41af-91ab-2d7cd011db47</code></td><td>tenant of "Microsoft tenant-owned applications", listed as "some, but not all"</td><td>Graph Explorer, Microsoft Graph Command Line Tools</td></tr>
     </table>
     </div>
-    <p class="note">Two is what Microsoft documents, not a claim that two is all. Microsoft's own first-party application table says it "is not exhaustive and will grow over time". The set grows only by Microsoft documentation.</p>
+    <p class="note">Two is what Microsoft documents, not a claim that two is all. Microsoft's service principal reference table says it "is not exhaustive and will grow over time". The set grows only by Microsoft documentation.</p>
   </section>
 
   <section>
     <h2>Queries</h2>
-    <div class="grid2">
-      <div>
+    <div class="grid3">
+      <div class="sc">
         <h3>Scoping · daily inventory, bucketed in-query</h3>
 <pre>
 
@@ -332,7 +358,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 </pre>
         <p class="note">Bucket is pre-triage, not the lane. "resolve" rows go through the lookup and the admission rules. Add <code>| where NOT [ inputlookup spless_kept.csv | fields app_id ]</code> on the scheduled run so only unbaselined appIds alert.</p>
       </div>
-      <div>
+      <div class="ba">
         <h3>Baselining · once per laned appId</h3>
 <pre>
 
@@ -353,7 +379,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-90d@d
 </pre>
         <p class="note">No zeros filter: the baseline covers the app under a real service principal too. Review the sets by hand before writing on day one; that review is where an attacker already in the 90 days gets caught.</p>
       </div>
-      <div>
+      <div class="al">
         <h3>Alerting · daily drift on baselined appIds</h3>
 <pre>
 
@@ -392,7 +418,7 @@ index=* category=ServicePrincipalSignInLogs earliest=-2d@d
     </ul>
   </section>
 
-  <p class="foot">Sources: Microsoft Learn, <a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Retirement of service principal-less authentication</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reports-faq">Monitoring and health FAQ</a>; <a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">Verify first-party Microsoft applications in sign-in reports</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-service-principal-table">service principal reference table</a> (the first-party application table); <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/aadserviceprincipalsigninlogs">AADServicePrincipalSignInLogs schema</a>; <a href="https://learn.microsoft.com/en-us/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0">findTenantInformationByTenantId</a>; <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog timeline</a>; <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress, Oct 16 2026</a> and <a href="https://www.huntress.com/blog/connectwise-attack-ai">Oct 26 2026</a>; <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber, Oct 19 2026</a>. Companion to the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise verdict card</a>. Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a> · public OSINT only.</p>
+  <p class="foot">Sources: Microsoft Learn, <a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Retirement of service principal-less authentication</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reports-faq">Monitoring and health FAQ</a>; <a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">Verify first-party Microsoft applications in sign-in reports</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-service-principal-table">service principal reference table</a> (the first-party application table); <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/aadserviceprincipalsigninlogs">AADServicePrincipalSignInLogs schema</a>; <a href="https://learn.microsoft.com/en-us/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0">findTenantInformationByTenantId</a>; <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog timeline</a>; <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress, Oct 16 2026</a> and <a href="https://www.huntress.com/blog/connectwise-attack-ai">Oct 26 2026</a>; <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber, Oct 19 2026</a>. Flowchart symbols per ISO 5807. Companion to the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise verdict card</a>. Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a> · public OSINT only.</p>
 </main>
 </body>
 </html>
