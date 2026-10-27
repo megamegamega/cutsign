@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>SP-less Triage Loop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one spine. Title, the two-job loop diagram, then the rules and queries the diagram compresses. */
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f27; --mute: #5c6472; --line: #c7ccd6;
+    --accent: #2f6f9f;            /* the loop and the kept list */
+    --l1: #8a919c; --hold: #6b7fb3; --l2: #b8861b; --l3: #b23a3a;   /* lane semantics, not accent */
+    --sans: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
+    --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #15181e; --panel: #1d2129; --fg: #e6e9ee; --mute: #9aa3b2; --line: #39404c;
+    --accent: #6aa7d8; --l1: #8f98a6; --hold: #93a6d8; --l2: #d9a53a; --l3: #e06060; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans);
+    padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 940px; margin: 0 auto; display: grid; gap: 28px; }
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
+  .sub { color: var(--mute); margin: 0; max-width: 70ch; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute);
+    margin: 0 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  figure { margin: 0; }
+  .wrap { overflow-x: auto; }
+  svg { display: block; width: 100%; max-width: 940px; height: auto; min-width: 680px; font-family: var(--sans); }
+  figcaption { color: var(--mute); font-size: 13px; margin-top: 8px; max-width: 76ch; }
+  ol { margin: 0; padding-left: 22px; max-width: 76ch; }
+  ol li { margin: 6px 0; }
+  ol li::marker { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  code, pre { font-family: var(--mono); font-size: 13px; }
+  code { background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+    overflow-x: auto; margin: 0; line-height: 1.45; white-space: pre; }
+  .note { color: var(--mute); font-size: 13px; margin: 6px 0 0; max-width: 76ch; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid2 > div { min-width: 0; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); }
+  th { font-size: 11px; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; border-top: none; }
+  .tw { overflow-x: auto; }
+  .foot { color: var(--mute); font-size: 12px; border-top: 1px solid var(--line); padding-top: 10px; max-width: 86ch; }
+  a { color: var(--accent); }
+  .lane { font-weight: 600; }
+  .l1 { color: var(--l1); } .hold { color: var(--hold); } .l2 { color: var(--l2); } .l3 { color: var(--l3); }
+  ul { margin: 0; padding-left: 22px; max-width: 76ch; } ul li { margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <h1>SP-less Triage Loop</h1>
+    <p class="sub">Three jobs over service-principal sign-ins whose service principal ID is all zeros. <b>Scoping</b> finds each new app and assigns a lane. <b>Baselining</b> baselines it and writes the row. <b>Alerting</b> re-checks every baselined app for drift, because the ConnectWise case was a baselined vendor whose stolen credential was used from new infrastructure. Public sources only; describes no particular tenant.</p>
+  </header>
+
+  <figure>
+    <div class="wrap">
+    <svg viewBox="0 0 940 940" role="img" aria-label="Daily loop with three jobs. Scoping: pull service-principal sign-ins with the all-zeros ID, group by app ID and owner tenant, and for each new app ID test the owner against Microsoft's documented set, otherwise look the tenant up and route to lane 1 Microsoft, a hold lane, lane 2 vendor, or lane 3 nobody. Baselining: for the laned app, baseline all its sign-ins over 90 days and write one row to the kept list. Alerting: for every baselined app ID, pull all its sign-ins, zeros or real service principal, and diff credential key, resources, ASN and failures against the kept list; anything new is investigated. The loop repeats the next day.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/>
+        </marker>
+      </defs>
+
+      <g stroke="currentColor" stroke-width="1.3" fill="none">
+        <!-- Daily run -->
+        <rect x="450" y="20" width="200" height="36" rx="18" style="fill:var(--panel);stroke:var(--accent)" stroke-width="1.6"/>
+
+        <!-- Job A column, spine x=330 -->
+        <rect x="200" y="96" width="260" height="66" rx="6" style="fill:var(--panel)"/>
+        <rect x="200" y="202" width="260" height="40" rx="6" style="fill:var(--panel)"/>
+        <rect x="220" y="282" width="220" height="40" rx="20" style="fill:var(--panel)"/>
+        <rect x="200" y="362" width="260" height="52" rx="26" style="fill:var(--panel)"/>
+        <rect x="170" y="454" width="320" height="52" rx="6" style="fill:var(--panel)"/>
+        <rect x="250" y="546" width="160" height="40" rx="20" style="fill:var(--panel)"/>
+
+        <!-- Job B column, spine x=760 -->
+        <rect x="620" y="96" width="280" height="66" rx="6" style="fill:var(--panel)"/>
+        <rect x="620" y="202" width="280" height="66" rx="6" style="fill:var(--panel)"/>
+        <rect x="660" y="308" width="200" height="40" rx="20" style="fill:var(--panel)"/>
+        <rect x="620" y="388" width="280" height="66" rx="6" style="fill:var(--panel)"/>
+
+        <!-- lanes -->
+        <rect x="50" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l1)" stroke-width="1.8"/>
+        <rect x="260" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--hold)" stroke-width="1.8"/>
+        <rect x="470" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l2)" stroke-width="1.8"/>
+        <rect x="715" y="620" width="195" height="110" rx="6" style="fill:var(--panel);stroke:var(--l3)" stroke-width="1.8"/>
+
+        <!-- baselining -->
+        <rect x="300" y="770" width="340" height="50" rx="6" style="fill:var(--panel)"/>
+        <!-- kept list -->
+        <rect x="300" y="870" width="340" height="50" rx="6" style="fill:var(--panel);stroke:var(--accent)" stroke-width="1.8"/>
+
+        <!-- Daily run → jobs -->
+        <polyline points="550,56 550,76 330,76 330,96" marker-end="url(#ah)"/>
+        <polyline points="650,38 760,38 760,96" marker-end="url(#ah)"/>
+
+        <!-- Job A spine -->
+        <line x1="330" y1="162" x2="330" y2="202" marker-end="url(#ah)"/>
+        <line x1="330" y1="242" x2="330" y2="282" marker-end="url(#ah)"/>
+        <line x1="330" y1="322" x2="330" y2="362" marker-end="url(#ah)"/>
+        <line x1="330" y1="414" x2="330" y2="454" marker-end="url(#ah)"/>
+        <line x1="330" y1="506" x2="330" y2="546" marker-end="url(#ah)"/>
+        <!-- G → hold (straight down) -->
+        <line x1="330" y1="586" x2="330" y2="620" marker-end="url(#ah)"/>
+        <!-- E yes → lane 1 -->
+        <polyline points="200,388 100,388 100,620" marker-end="url(#ah)"/>
+        <!-- G → lane 2 and lane 3 along y=566 -->
+        <line x1="410" y1="566" x2="807" y2="566"/>
+        <line x1="567" y1="566" x2="567" y2="620" marker-end="url(#ah)"/>
+        <line x1="807" y1="566" x2="807" y2="620" marker-end="url(#ah)"/>
+        <circle cx="567" cy="566" r="2.5" fill="currentColor" stroke="none"/>
+
+        <!-- Job B spine -->
+        <line x1="760" y1="162" x2="760" y2="202" marker-end="url(#ah)"/>
+        <line x1="760" y1="268" x2="760" y2="308" marker-end="url(#ah)"/>
+        <line x1="760" y1="348" x2="760" y2="388" marker-end="url(#ah)"/>
+        <!-- B3 none → bypass; B4 → kept list; both via x=925 -->
+        <polyline points="860,328 925,328 925,895 640,895" marker-end="url(#ah)"/>
+        <polyline points="760,454 760,480 925,480"/>
+        <circle cx="925" cy="480" r="2.5" fill="currentColor" stroke="none"/>
+
+        <!-- lanes → baselining -->
+        <polyline points="147,730 147,750 350,750 350,770" marker-end="url(#ah)"/>
+        <line x1="357" y1="730" x2="357" y2="770" marker-end="url(#ah)"/>
+        <line x1="567" y1="730" x2="567" y2="770" marker-end="url(#ah)"/>
+        <polyline points="812,730 812,750 600,750 600,770" marker-end="url(#ah)"/>
+        <!-- baselining → kept list -->
+        <line x1="470" y1="820" x2="470" y2="870" marker-end="url(#ah)"/>
+        <!-- kept list is read by the diffs (dashed) -->
+        <polyline points="300,885 40,885 40,302 220,302" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+      </g>
+
+      <!-- the loop, in accent -->
+      <g style="stroke:var(--accent)" stroke-width="1.6" fill="none">
+        <polyline points="470,920 470,930 20,930 20,38 450,38" marker-end="url(#ahA)"/>
+      </g>
+
+      <!-- text -->
+      <g fill="currentColor" font-size="12.5" text-anchor="middle">
+        <text x="550" y="42" font-weight="600">Daily run</text>
+
+        <text x="330" y="115" font-weight="600">Scoping · service-principal sign-ins</text>
+        <text x="330" y="134" font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">servicePrincipalId = all zeros</text>
+        <text x="330" y="152" font-size="11.5" style="fill:var(--mute)">not user sign-ins, not resourceServicePrincipalId</text>
+
+        <text x="330" y="227">group by <tspan font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">appId × appOwnerTenantId</tspan></text>
+
+        <text x="330" y="307">new appId vs kept list?</text>
+
+        <text x="330" y="383">owner in documented Microsoft set,</text>
+        <text x="330" y="401">or appId in Microsoft's first-party table?</text>
+
+        <text x="330" y="475" font-family="IBM Plex Mono, Menlo, monospace" font-size="11.5">findTenantInformationByTenantId(owner)</text>
+        <text x="330" y="494" font-size="11.5" style="fill:var(--mute)">→ displayName, defaultDomainName (free text)</text>
+
+        <text x="330" y="571">what came back?</text>
+
+        <text x="760" y="115" font-weight="600">Alerting · baselined appIds</text>
+        <text x="760" y="134">all sign-ins for each baselined appId,</text>
+        <text x="760" y="152" font-size="11.5" style="fill:var(--mute)">zeros or real service principal</text>
+
+        <text x="760" y="221">diff vs kept list: credential keyId,</text>
+        <text x="760" y="239">resources, ASN,</text>
+        <text x="760" y="257">failures and error codes</text>
+
+        <text x="760" y="333">anything new?</text>
+
+        <text x="760" y="407">Investigate. New keyId outranks ASN.</text>
+        <text x="760" y="425" font-size="11.5" style="fill:var(--mute)">Append to the baseline only when</text>
+        <text x="760" y="443" font-size="11.5" style="fill:var(--mute)">the case closes. Never rebuild from raw.</text>
+
+        <text x="147" y="642" font-weight="600" style="fill:var(--l1)">Lane 1 · Microsoft</text>
+        <text x="147" y="662" font-size="11.5">Documented owner tenant,</text>
+        <text x="147" y="680" font-size="11.5">or documented first-party appId.</text>
+        <text x="147" y="700" font-size="11.5" style="fill:var(--mute)">Baseline. Low-priority drift only.</text>
+
+        <text x="357" y="642" font-weight="600" style="fill:var(--hold)">Hold</text>
+        <text x="357" y="662" font-size="11.5">Null owner, lookup failed,</text>
+        <text x="357" y="680" font-size="11.5">Microsoft-named but undocumented,</text>
+        <text x="357" y="698" font-size="11.5">lookalike domain.</text>
+        <text x="357" y="718" font-size="11.5" style="fill:var(--mute)">Not ignored. Not disabled.</text>
+
+        <text x="567" y="642" font-weight="600" style="fill:var(--l2)">Lane 2 · Vendor</text>
+        <text x="567" y="662" font-size="11.5">defaultDomainName equals the</text>
+        <text x="567" y="680" font-size="11.5">vendor's domain, or published appId.</text>
+        <text x="567" y="700" font-size="11.5" style="fill:var(--mute)">Watch. Alerting every day.</text>
+
+        <text x="812" y="642" font-weight="600" style="fill:var(--l3)">Lane 3 · Nobody</text>
+        <text x="812" y="662" font-size="11.5">Lookup answered; nobody claims it.</text>
+        <text x="812" y="680" font-size="11.5">Second analyst. Create SP, disable,</text>
+        <text x="812" y="698" font-size="11.5">record objectId.</text>
+        <text x="812" y="718" font-size="11.5" style="fill:var(--mute)">Undo = delete the SP.</text>
+
+        <text x="470" y="791" font-weight="600">Baselining · on demand, when a lane is assigned</text>
+        <text x="470" y="809" font-size="11.5" style="fill:var(--mute)">90-day baseline, all sign-ins for the appId → one row</text>
+
+        <text x="470" y="891" font-weight="600" style="fill:var(--accent)">Kept list</text>
+        <text x="470" y="909" font-size="11.5">appId · owner · lane · keyIds · resources · ASNs · first seen</text>
+      </g>
+      <!-- edge labels -->
+      <g font-size="11" style="fill:var(--mute)">
+        <text x="322" y="70" text-anchor="end">daily</text>
+        <text x="770" y="70" text-anchor="start">daily</text>
+        <text x="338" y="346" text-anchor="start">new</text>
+        <text x="130" y="296" text-anchor="middle">none today</text>
+        <text x="150" y="380" text-anchor="middle">yes</text>
+        <text x="338" y="438" text-anchor="start">no</text>
+        <text x="338" y="530" text-anchor="start">null owner too</text>
+        <text x="338" y="607" text-anchor="start">else</text>
+        <text x="488" y="560" text-anchor="middle">vendor, domain-verified</text>
+        <text x="690" y="560" text-anchor="middle">nobody, lookup answered</text>
+        <text x="770" y="372" text-anchor="start">new</text>
+        <text x="892" y="322" text-anchor="middle">none</text>
+        <text x="60" y="560" text-anchor="start" style="fill:var(--mute)">kept list is read by both diffs (dashed)</text>
+        <text x="235" y="926" text-anchor="middle" style="fill:var(--accent)">next day</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Classification needs no service principal, because an SP-less app has none in your tenant to read; blocking creates one. The owner tenant identifies who registered the app, not who is operating it today, which is why Alerting exists.</figcaption>
+  </figure>
+
+  <section>
+    <h2>Three jobs, two human gates</h2>
+    <div class="tw">
+    <table>
+      <tr><th>Job</th><th>Runs</th><th>Does</th><th>Human gate</th></tr>
+      <tr><td><b>Scoping</b></td><td>Daily, scheduled</td><td>Pulls all-zeros service-principal sign-ins, groups by appId and owner tenant, alerts on any appId not in the kept list. The lookup is one Graph call per owner tenant and can be scripted.</td><td>Lane assignment. The Microsoft-set test and the exact-domain match are mechanical; "this vendor is ours" and the lane 3 second analyst are not.</td></tr>
+      <tr><td><b>Baselining</b></td><td>On demand, once per laned appId</td><td>Baselines 90 days of <i>all</i> that app's sign-ins, zeros or real service principal, and appends one row to the kept list: lane, credential key IDs, resources, ASNs, first seen.</td><td>None. It runs when Scoping assigns a lane. Day one it runs once per app.</td></tr>
+      <tr><td><b>Alerting</b></td><td>Daily, scheduled</td><td>Reads the kept list, pulls the last two days of sign-ins for every baselined appId, and alerts on any credential key ID, resource or ASN outside the stored sets, and on failures.</td><td>Case close. An analyst appends the new value to the row. Nothing rebuilds the baseline from raw data, so an attacker's ASN is never baselined the day after first use.</td></tr>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>What this loop can and cannot see</h2>
+    <ul>
+      <li><b>Scope.</b> The all-zeros filter shows apps that have <i>no</i> service principal in your tenant. A vendor app you consented to has a real one and never appears here. For ConnectWise Cloud Backup that means Scoping sees the exposure in tenants that never used the product; in customer tenants only Alerting, keyed on appId regardless of service principal ID, sees the stolen credential being used from new infrastructure.</li>
+      <li><b>Prior.</b> Microsoft announced a block on SP-less authentication for non-Microsoft multitenant apps for March 31, 2026, and its FAQ still says tokens are issued "except for a few Microsoft and non-Microsoft applications". A non-Microsoft owner with all-zeros successes after that date is a Microsoft-granted exception. Treat it as rare and high-prior, not routine.</li>
+      <li><b>No preventive layer.</b> Workload-identity Conditional Access cannot target an app with no service principal. Lanes 1 and 2 are detection only; lane 3 is the only control.</li>
+      <li><b>Expected gaps.</b> Microsoft's FAQ says some first-party app-only tokens are not published to the service-principal sign-in log, so Graph activity you cannot match to a sign-in is not evidence either way.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Admission rules</h2>
+    <div class="tw">
+    <table>
+      <tr><th>Lane</th><th>Evidence required</th><th>What it is not</th></tr>
+      <tr><td><span class="lane l1">Lane 1 · Microsoft</span></td><td>Owner tenant is one Microsoft documents, or the appId appears in Microsoft's published first-party application table.</td><td>Not a tenant whose displayName says Microsoft. Names are free text; a lookup can demote, never promote.</td></tr>
+      <tr><td><span class="lane hold">Hold</span></td><td>Owner field null; lookup returned nothing (other national cloud, 404); Microsoft-named but undocumented; domain is <code>*.onmicrosoft.com</code> or a lookalike.</td><td>Not ignored, not disabled. Resolve by appId against Microsoft's table and the community list, or ask Microsoft.</td></tr>
+      <tr><td><span class="lane l2">Lane 2 · Vendor</span></td><td><code>defaultDomainName</code> exactly equals the vendor's registrable domain, or the appId is one the vendor publishes.</td><td>Not "a name I recognise". Lane 2 is detection only, so it earns Alerting every day.</td></tr>
+      <tr><td><span class="lane l3">Lane 3 · Nobody</span></td><td>Lookup answered, nobody claims the app, second analyst agrees. Create a service principal for the appId, disable it, verify via Graph that it exists with <code>accountEnabled=false</code>, record its objectId.</td><td>Not the branch for a failed lookup. Undo is deleting the service principal; re-enabling it leaves a consented app behind.</td></tr>
+    </table>
+    </div>
+    <p class="note">Day one: the kept list is empty, so every non-Microsoft pair gets the full lookup and a hand review of its Baselining baseline before the row is written. Nothing goes to lane 3 on day one. The first 90 days of data may already contain the attacker.</p>
+  </section>
+
+  <section>
+    <h2>The Microsoft set</h2>
+    <div class="tw">
+    <table>
+      <tr><th>Owner tenant</th><th>What Microsoft calls it</th><th>Examples Microsoft lists</th></tr>
+      <tr><td><code>f8cdef31-a31e-4b4a-93e4-5f571e91255a</code></td><td>"the Microsoft Service's Microsoft Entra tenant ID"</td><td>None named on the page; it appears as a screenshot caption.</td></tr>
+      <tr><td><code>72f988bf-86f1-41af-91ab-2d7cd011db47</code></td><td>tenant of "Microsoft tenant-owned applications", listed as "some, but not all"</td><td>Graph Explorer, Microsoft Graph Command Line Tools</td></tr>
+    </table>
+    </div>
+    <p class="note">Two is what Microsoft documents, not a claim that two is all. Microsoft's own first-party application table says it "is not exhaustive and will grow over time". The set grows only by Microsoft documentation.</p>
+  </section>
+
+  <section>
+    <h2>Queries</h2>
+    <div class="grid2">
+      <div>
+        <h3>Scoping · daily inventory, bucketed in-query</h3>
+<pre>index=* category=ServicePrincipalSignInLogs earliest=-90d@d
+    properties.servicePrincipalId="00000000-0000-0000-0000-000000000000"
+| rename properties.appOwnerTenantId as owner_tenant,
+    properties.appId as app_id, properties.appDisplayName as app_name
+| fillnull value="-" owner_tenant app_name
+| eval bucket=case(
+    in(owner_tenant, "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+                     "72f988bf-86f1-41af-91ab-2d7cd011db47"), "microsoft",
+    owner_tenant="-", "hold: no owner on record",
+    true(), "resolve")
+| stats count min(_time) as first max(_time) as last
+    values(properties.resourceDisplayName) as resources
+    by bucket owner_tenant app_id app_name
+| sort bucket</pre>
+        <p class="note">Bucket is pre-triage, not the lane. "resolve" rows go through the lookup and the admission rules. Add <code>| where NOT [ inputlookup spless_kept.csv | fields app_id ]</code> on the scheduled run so only unbaselined appIds alert.</p>
+      </div>
+      <div>
+        <h3>Baselining · once per laned appId</h3>
+<pre>index=* category=ServicePrincipalSignInLogs earliest=-90d@d
+    properties.appId="&lt;appId being baselined&gt;"
+| rename properties.appId as app_id,
+    properties.servicePrincipalCredentialKeyId as key_id,
+    properties.resourceDisplayName as resource,
+    properties.autonomousSystemNumber as asn
+| fillnull value="-" key_id resource asn
+| stats values(key_id) as key_ids values(resource) as resources
+    values(asn) as asns min(_time) as first_seen by app_id
+| eval owner_tenant="&lt;owner tenant&gt;", lane="&lt;1|hold|2|3&gt;",
+    key_ids=mvjoin(key_ids,"|"), resources=mvjoin(resources,"|"),
+    asns=mvjoin(asns,"|")
+| outputlookup append=true spless_kept.csv</pre>
+        <p class="note">No zeros filter: the baseline covers the app under a real service principal too. Review the sets by hand before writing on day one; that review is where an attacker already in the 90 days gets caught.</p>
+      </div>
+      <div>
+        <h3>Alerting · daily drift on baselined appIds</h3>
+<pre>index=* category=ServicePrincipalSignInLogs earliest=-2d@d
+    [ inputlookup spless_kept.csv | fields app_id | rename app_id as properties.appId ]
+| rename properties.appId as app_id,
+    properties.servicePrincipalCredentialKeyId as key_id,
+    properties.resourceDisplayName as resource,
+    properties.autonomousSystemNumber as asn, resultType as result
+| fillnull value="-" key_id resource asn result
+| dedup properties.id
+| stats count by app_id key_id resource asn result
+| lookup spless_kept.csv app_id OUTPUT key_ids resources asns
+| eval why=mvappend(
+    if(isnull(mvfind(split(key_ids,"|"), "^".key_id."$")), "new keyId", null()),
+    if(isnull(mvfind(split(asns,"|"),    "^".asn."$")),    "new ASN",   null()),
+    if(isnull(mvfind(split(resources,"|"),"^".resource."$")),"new resource", null()),
+    if(result!="0", "failure ".result, null()))
+| where isnotnull(why)
+| table app_id why key_id resource asn result count</pre>
+        <p class="note">The kept list stores each set pipe-delimited. No success filter: a failed sign-in for a baselined vendor appId from a new ASN is the signal, and error-code shifts (invalid or expired secret) mean someone is testing credentials. Two-day window with dedupe covers export lag. Same cloud provider as the vendor is not clearance.</p>
+      </div>
+    </div>
+    <p class="note">Microsoft's own inventory call, from its reports FAQ: <code>GET https://graph.microsoft.com/beta/auditLogs/signIns?$filter=signInEventTypes/any(t: t eq 'servicePrincipal') and servicePrincipalId eq '00000000-0000-0000-0000-000000000000'</code>. Beta is required; v1.0 returns no service-principal sign-ins and no owner field. Field names above follow the Azure Monitor export shape; the Log Analytics columns are documented, the exact event-hub keys are inferred from them, so tune to your add-on.</p>
+  </section>
+
+  <section>
+    <h2>Prerequisites</h2>
+    <ul>
+      <li>Lookup: <code>CrossTenantInformation.ReadBasic.All</code>; no directory role required.</li>
+      <li>Lane 3: Application Administrator or Cloud Application Administrator; <code>New-MgServicePrincipal -AppId</code> needs <code>Application.ReadWrite.All</code>. The creation emits an "Add service principal" audit event; allow-list the loop's own creations in consent alerting.</li>
+      <li>Retention: 90 days where your export keeps it; the Entra portal keeps 30.</li>
+      <li>Never apply lane 3 to anything that appears in the preview <code>MicrosoftServicePrincipalSignInLogs</code> stream; Microsoft warns that disabling those can lock a tenant out.</li>
+    </ul>
+  </section>
+
+  <p class="foot">Sources: Microsoft Learn, <a href="https://learn.microsoft.com/en-us/entra/identity-platform/retire-service-principal-less-authentication">Retirement of service principal-less authentication</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reports-faq">Monitoring and health FAQ</a>; <a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in">Verify first-party Microsoft applications in sign-in reports</a>; <a href="https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-service-principal-table">service principal reference table</a> (the first-party application table); <a href="https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/aadserviceprincipalsigninlogs">AADServicePrincipalSignInLogs schema</a>; <a href="https://learn.microsoft.com/en-us/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0">findTenantInformationByTenantId</a>; <a href="https://techcommunity.microsoft.com/blog/microsoft-entra-blog/service-principal-required-for-microsoft-entra-id/4405796">Entra blog timeline</a>; <a href="https://www.huntress.com/blog/vendor-credential-enables-unauthorized-access">Huntress, Oct 16 2026</a> and <a href="https://www.huntress.com/blog/connectwise-attack-ai">Oct 26 2026</a>; <a href="https://www.choruscyber.com/resources/security-advisory-connectwise-cloud-backup-formerly-skykick-compromise/">Chorus Cyber, Oct 19 2026</a>. Companion to the <a href="https://cutsign.vercel.app/cards/connectwise-m365-2026.html">ConnectWise verdict card</a>. Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a> · public OSINT only.</p>
+</main>
+</body>
+</html>
