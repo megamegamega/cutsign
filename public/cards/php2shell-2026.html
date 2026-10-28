@@ -89,19 +89,22 @@ a{color:var(--ink)}
   <div class="lane">
     <span class="tag">Patch now + hunt</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Exploited in the wild</span>
+    <span class="tag">CISA KEV · federal due Oct 29</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Mass probing underway</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">EOL lines: source-only backports</span>
-    <span class="asof">as of 2026-10-26</span>
+    <span class="asof">as of 2026-10-28</span>
   </div>
   <div class="inner">
     <h1>PHP2Shell emergency release</h1>
-    <p class="sub">Two unauthenticated RCE flaws in the PHP engine — <span class="v">CVE-2026-109618</span> / <span class="v">CVE-2026-109619</span>, CVSS 4.0 9.2 — leaked ahead of coordinated disclosure, patched in an emergency release October 21. Cloudflare has observed millions of exploitation attempts, some delivering the Mirai-derived <b>Potassium</b> botnet; watchTowr has observed in-the-wild exploitation of both CVEs. <b>As of Oct 26 exploitation is confirmed working, not just scanning:</b> researchers took over an Apache mod_php honeypot, a European government entity was compromised with agentic-AI post-exploitation, and Mirai operators plus ASLR-bypass exploits have joined.</p>
+    <p class="sub">Two unauthenticated RCE flaws in the PHP engine — <span class="v">CVE-2026-109618</span> / <span class="v">CVE-2026-109619</span>, CVSS 4.0 9.2 — leaked ahead of coordinated disclosure, patched in an emergency release October 21. Cloudflare has observed millions of exploitation attempts, some delivering the Mirai-derived <b>Potassium</b> botnet; watchTowr has observed in-the-wild exploitation of both CVEs. <b>As of Oct 26 exploitation is confirmed working, not just scanning:</b> researchers took over an Apache mod_php honeypot, a European government entity was compromised with agentic-AI post-exploitation, and Mirai operators plus ASLR-bypass exploits have joined. <b>CISA listed both CVEs in KEV on Oct 26</b> (federal remediation due Oct 29, forensic-triage flag set); on Oct 27 industrial vendors — Siemens, Schneider Electric, ABB, Johnson Controls, Belden, HMS, Wibu-Systems — confirmed PHP-based OT/ICS products affected, Belden NetModule NRSW without a patch.</p>
 
     <div class="cl">
       <span>On Cutsign:</span>
       <a href="/?d=2026-10-21&view=analyst#s-de24631e">leak story 10-21</a>
       <a href="/?d=2026-10-22&view=analyst#s-85470616">patch update 10-22</a>
       <a href="/?d=2026-10-23&view=analyst#s-d3d16df5">mass exploitation 10-23</a>
+      <a href="/?d=2026-10-27&view=analyst#s-38300b3a">KEV listing 10-27</a>
+      <a href="/?d=2026-10-27&view=analyst#s-ada89980">OT/ICS vendors 10-27</a>
       <a href="/?d=2026-10-23&view=ciso#s-d3d16df5">CISO card</a>
       <a href="/?view=iocs#s-d3d16df5">IoC card (20)</a>
       <a href="/?q=php2shell">news &amp; updates (live)</a>
@@ -171,7 +174,7 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
       <li>Outbound fetches to <span class="v">92.118.112[.]100</span> and the campaign infrastructure — raw values on the <a href="/?view=iocs#s-d3d16df5">IoC card</a> (20 indicators)</li>
     </ul>
 
-    <h2>Detection coverage — as of Oct 26</h2>
+    <h2>Detection coverage — as of Oct 28</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
       <tr><td>Vendor</td><td><a href="https://www.php.net/archive/2026.php#2026-10-21-5">PHP project</a></td><td><span class="ok">Emergency release + mitigations</span> — fixed versions Oct 21 14:00 UTC; <b>official interim mitigations published</b> (section below); minimal source-backport branches for EOL 7.4/8.0/8.1; distros and LTS vendors received patches in advance; GHSA advisories for <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">-109618</a> / <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">-109619</a>; follow-up advisory CVE-2026-115560 issued Oct 23</td></tr>
@@ -183,7 +186,7 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
       <tr><td><a href="https://community.emergingthreats.net/t/detection-coverage-php2shell-cve-2026-109618-and-cve-2026-109619/3488">Emerging Threats</a></td><td><span class="ok">IDS signatures published</span> for both CVEs (Suricata/Snort rule coverage thread)</td></tr>
       <tr><td>Exposure</td><td><a href="https://censys.com/advisory/cve-2026-109618-cve-2026-109619/">Censys</a></td><td><span class="ok">Live advisory</span> with exposure search for internet-facing PHP</td></tr>
       <tr><td>Vendor impact</td><td><a href="https://security.paloaltonetworks.com/CVE-2026-109618">Palo Alto</a></td><td><span class="ok">Statement</span>: not aware of exploitation against PAN products</td></tr>
-      <tr><td>KEV</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA</a></td><td><span class="bad">No KEV entry found</span> as of Oct 23 — notable given ITW reports; watch for it</td></tr>
+      <tr><td>KEV</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA</a></td><td><span class="ok">Listed Oct 26</span> — both CVEs (<a href="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json">catalog entries</a>: "PHP Memory Corruption" / "PHP Stale Internal Request-State"); federal due date <b>Oct 29</b> under BOD 26-04; <b>forensic-triage flag: Yes</b> (CISA expects triage of exposed hosts, not patch-and-forget); ransomware use: unknown. CISA's <a href="https://www.cisa.gov/news-events/alerts/2026/10/21/critical-vulnerabilities-php-require-immediate-patching">Oct 21 alert</a> (revised Oct 23 and 26) adds a <b>Sigma rule</b> and says organizations that cannot patch, or still run PHP ≤8.1, should take PHP systems offline until patched</td></tr>
     </table>
 
     <div class="cols">
@@ -194,6 +197,7 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
           <li>Run the hunt list against web-server logs and EDR for the window since Oct 20 (details leaked pre-patch)</li>
           <li>Inventory where session upload-progress is enabled and where mod_php still runs</li>
           <li>Container images bundling PHP need rebuilds, same as any runtime flaw</li>
+          <li>OT/ICS: check Siemens, Schneider Electric, ABB, Johnson Controls, Belden, HMS and Wibu-Systems advisories for PHP-based products; PHP is often embedded and not visible to a version scan</li>
         </ul>
       </div>
       <div>
@@ -201,7 +205,8 @@ post_max_size = 8M                    ; (32M if uploads needed); upload_max_file
         <ul>
           <li>Any hit on the hunt behaviors or campaign infrastructure → incident lane immediately</li>
           <li>Confirmed successful compromises — <b>triggered Oct 24–26</b> (honeypot takeover, European government entity); unpatched internet-facing PHP is now a presumed-targeted asset, not a patch-cycle item</li>
-          <li>CISA KEV listing for either CVE</li>
+          <li>CISA KEV listing — <b>triggered Oct 26</b>, both CVEs; federal due date Oct 29, forensic-triage flag set</li>
+          <li>Confirmed exploitation of a PHP-based OT/ICS product (vendor advisories now list affected products; Belden NetModule NRSW has no patch — vendor says disable its web interface)</li>
           <li>Potassium botnet capability reports beyond Mirai-standard DDoS</li>
         </ul>
       </div>
@@ -278,6 +283,8 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
       <li><span class="d">Oct 22</span><span>Patch-focused advisories; exploitation reported for miners and a Linux proxy backdoor</span></li>
       <li><span class="d">Oct 23</span><span>Mass exploitation attempts (Cloudflare: millions), Potassium botnet delivery attempts; no confirmed successful compromises reported. PHP issues a follow-up advisory: <span class="v">CVE-2026-115560</span>, another session-upload-progress flaw needing a specific <code>serialize_handler</code> runtime-switch setup — keep <code>session.upload_progress.enabled=0</code> until the next bugfix release</span></li>
       <li><span class="d">Oct 24–26</span><span><b>Exploitation confirmed working:</b> researchers compromise an Apache mod_php honeypot; a European government entity is reported compromised via PHP2Shell with agentic-AI post-exploitation; Mirai botnet operators join and ASLR-bypass exploits emerge (SecurityWeek, BleepingComputer, The Hacker News). CVE-2026-115560 remains unpatched — the <code>session.upload_progress.enabled=0</code> mitigation stands</span></li>
+      <li><span class="d">Oct 26</span><span><b>CISA adds both CVEs to KEV</b> (due Oct 29, forensic-triage flag) and revises its alert: patch now, take unpatchable or ≤8.1 PHP systems offline, Sigma rule attached</span></li>
+      <li><span class="d">Oct 27</span><span>Industrial vendors (Siemens, Schneider Electric, ABB, Johnson Controls, Belden, HMS, Wibu-Systems) publish advisories listing affected PHP-based OT/ICS products; Belden NetModule NRSW has no patch (SecurityWeek). CVE-2026-115560 still mitigation-only</span></li>
     </ul>
 
     <h2>Sources</h2>
@@ -290,14 +297,17 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
       <a href="https://thehackernews.com/2026/10/php2shell-exploit-attempts-hit-millions.html">The Hacker News — mass attempts, Oct 23</a> ·
       <a href="https://www.wiz.io/blog/php2shell-php-rce">Wiz — behaviors</a> ·
       <a href="https://www.tenable.com/blog/php2shell-cve-2026-109618-cve-2026-109619-frequently-asked-questions-about-critical-php-remote">Tenable FAQ</a> ·
-      <a href="https://censys.com/advisory/cve-2026-109618-cve-2026-109619/">Censys live advisory</a>
+      <a href="https://censys.com/advisory/cve-2026-109618-cve-2026-109619/">Censys live advisory</a> ·
+      <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA KEV catalog — both CVEs, added Oct 26</a> ·
+      <a href="https://www.cisa.gov/news-events/alerts/2026/10/21/critical-vulnerabilities-php-require-immediate-patching">CISA alert — revised Oct 26, Sigma rule</a> ·
+      <a href="https://www.securityweek.com/industrial-vendors-check-products-for-php2shell-vulnerabilities/">SecurityWeek — OT/ICS vendor advisories, Oct 27</a>
     </p>
   </div>
   <div class="foot">
     <span>Public OSINT only — contains no internal data</span>
     <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
     <span>Lane and triggers per CIRT triage-flow draft</span>
-    <span>Tracked story: Cutsign 10-21 → 10-22 → 10-23 (mass exploitation)</span>
+    <span>Tracked story: Cutsign 10-21 → 10-22 → 10-23 → 10-26 → 10-27 (KEV, OT/ICS vendors)</span>
   </div>
 </div>
 <script>
@@ -305,7 +315,7 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-10-26', QUERY = 'php2shell';
+  const AS_OF = '2026-10-28', QUERY = 'php2shell';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
