@@ -1,5 +1,5 @@
 // Public, read-only web view of recent briefs. "/" (rewritten here in vercel.json) renders
-// the latest sent run from the same buildDigestData the email uses, but with its own chrome:
+// the CISO view of the latest sent run (?view=analyst for the full analyst body) from the same buildDigestData the email uses, but with its own chrome:
 // dark/light theme, sticky header with a 14-day picker (?d=YYYY-MM-DD), stat tiles, and the
 // last 48 h of watch events whether or not they were already emailed. The email-only banner
 // and reply-footer are stripped — content is public-OSINT-only by construction (the one rule),
@@ -30,7 +30,7 @@ const updateChip = (s) => {
   if (!u) return '';
   const date = u.brief_date || String(u.created_at || '').slice(0, 10);
   const exec = u.selected || (u.priority ?? 3) <= 2;
-  const href = `/?d=${encodeURIComponent(date)}${exec ? '&view=ciso' : ''}#s-${esc(String(u.id).slice(0, 8))}`;
+  const href = `/?d=${encodeURIComponent(date)}&view=${exec ? 'ciso' : 'analyst'}#s-${esc(String(u.id).slice(0, 8))}`;
   return `<a class="c" href="${href}">update to ${esc(date)}</a>`;
 };
 
@@ -200,7 +200,7 @@ function searchBody(q, stories, iocs) {
     for (const s of stories) {
       const a = sid(s.id);
       parts.push(`<div class="card"><div class="chead"><span class="pri p${s.priority ?? 3}">P${s.priority ?? '?'}</span><h3>${esc(s.title || '(untitled)')}</h3></div>`,
-        `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}#${a}">brief ${esc(s.brief_date)}</a>` : ''}`
+        `<div>${s.brief_date ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}&view=analyst#${a}">brief ${esc(s.brief_date)}</a>` : ''}`
         + (s.brief_date && (s.selected || (s.priority ?? 3) <= 2) ? `<a class="c" href="/?d=${encodeURIComponent(s.brief_date)}&view=ciso#${a}">CISO card</a>` : '')
         + (s.ioc_count ? `<a class="c" href="/?view=iocs#${a}">IoC card (${s.ioc_count})</a>` : '')
         + verdictChip(s)
@@ -214,7 +214,7 @@ function searchBody(q, stories, iocs) {
       const first = (i.stories || [])[0];
       const card = first ? `/?view=iocs#${sid(first.id)}` : '/?view=iocs#s-unattributed';
       const links = (i.stories || []).filter((s) => s.date)
-        .map((s) => `<a href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}" title="${esc(s.title || '')}">${esc(s.date)}</a>`).join(' ');
+        .map((s) => `<a href="/?d=${encodeURIComponent(s.date)}&view=analyst#${sid(s.id)}" title="${esc(s.title || '')}">${esc(s.date)}</a>`).join(' ');
       parts.push(`<tr><td>${esc(i.type)}</td><td class="v"><a href="${card}" title="IoC corpus card">${esc(defang(i.type, i.value_norm))}</a></td>`
         + `<td>seen ${i.seen_count}×, first ${esc(ts(i.first_seen_at))}</td><td class="x">${esc(i.context || '')}${links ? ` · ${links}` : ''}</td></tr>`);
     }
@@ -476,7 +476,7 @@ export default async function handler(req, res) {
       let row = null;
       try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
-      const tabsDraft = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
         `<div class="w">${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
     }
@@ -494,7 +494,7 @@ export default async function handler(req, res) {
           candidates: drafts.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
-      const tabsCards = '<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
+      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
       const candidates = drafts.length ? `<h3 style="border:none">AI drafts awaiting review (${drafts.length})</h3>`
         + drafts.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
           + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready for review</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
@@ -539,8 +539,8 @@ export default async function handler(req, res) {
     const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
     const want = String(req.query.d || '').slice(0, 10);
     const pick = days.find((x) => x.date === want) || days[0];
-    const view = ['ciso', 'agent', 'iocs'].includes(req.query.view) ? req.query.view : '';
-    const q = (date) => `/?d=${encodeURIComponent(date)}${view ? `&view=${view}` : ''}`;
+    const view = ['ciso', 'agent', 'iocs', 'analyst'].includes(req.query.view) ? req.query.view : 'ciso'; // root = CISO
+    const q = (date) => `/?d=${encodeURIComponent(date)}&view=${view}`;
 
     // Cumulative IoC corpus: day-independent union of every stored indicator (iocs table)
     // and every watch-event IoC (which live only in event assessments). Human view defangs;
@@ -609,7 +609,7 @@ export default async function handler(req, res) {
         const behs = behaviors.filter((b) => b.story_id === s.id);
         const guid = evidence.filter((e) => e.story_id === s.id && e.kind === 'guidance');
         parts.push(`<div class="card" id="${sid(s.id)}"><div class="chead"><span class="pri p${p}">P${p}</span><h3>${esc(s.title)}</h3></div>`,
-          `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}#${sid(s.id)}">brief ${esc(s.date)}</a>` : ''}`
+          `<div>${s.date ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=analyst#${sid(s.id)}">brief ${esc(s.date)}</a>` : ''}`
           + (s.date && ((s.priority ?? 3) <= 2 || s.selected) ? `<a class="c" href="/?d=${encodeURIComponent(s.date)}&view=ciso#${sid(s.id)}">CISO card</a>` : '')
           + verdictChip(s)
           + `<span class="c">${uniq.length} IoC${uniq.length === 1 ? '' : 's'}</span>`
@@ -629,7 +629,7 @@ export default async function handler(req, res) {
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
-      const tabsIocs = `<nav class="tabs"><a href="/">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=cards">Cards</a></nav>`;
+      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=cards">Cards</a></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
         'Cutsign · public OSINT digest · cumulative IoC corpus'));
@@ -675,8 +675,8 @@ export default async function handler(req, res) {
 
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
-      : `<a href="/?d=${encodeURIComponent(pick.date)}${v ? `&view=${v}` : ''}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>`;
+      : `<a href="/?d=${encodeURIComponent(pick.date)}&view=${v}">${label}</a>`;
+    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;
@@ -693,14 +693,14 @@ export default async function handler(req, res) {
     const iocStories = d.analyzed.filter((s) => s.newIocs.length)
       .map((s) => `<li><a href="/?d=${encodeURIComponent(pick.date)}&view=agent#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· ${s.newIocs.length} new IoC${s.newIocs.length === 1 ? '' : 's'} (raw, agent view)</span></li>`);
     const behStories = d.analyzed.map((s) => ({ s, n: s.behaviors.filter((b) => b.novel).length })).filter((x) => x.n)
-      .map(({ s, n }) => `<li><a href="/?d=${encodeURIComponent(pick.date)}#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· ${n} novel behavior${n === 1 ? '' : 's'}</span></li>`);
+      .map(({ s, n }) => `<li><a href="/?d=${encodeURIComponent(pick.date)}&view=analyst#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· ${n} novel behavior${n === 1 ? '' : 's'}</span></li>`);
     const updStories = d.analyzed.filter((s) => s.updateOf)
-      .map((s) => `<li><a href="/?d=${encodeURIComponent(pick.date)}#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· updates ${esc(s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10))}'s story</span></li>`);
+      .map((s) => `<li><a href="/?d=${encodeURIComponent(pick.date)}&view=analyst#${sid8(s.id)}">${esc(s.title)}</a> <span class="s">· updates ${esc(s.updateOf.brief_date || String(s.updateOf.created_at).slice(0, 10))}'s story</span></li>`);
 
     const hero = `<div class="hero"><h1>${esc(d.date)}${d.run.dry ? ' <span class="s">(dry run)</span>' : ''}</h1>
       <p class="sub">${d.analyzed.length} stories analyzed · ${deep} deep reads · brief: “${esc(d.brief.subject)}”</p>
       <p class="sub">received ${esc(ts(d.brief.received_at))}${d.run.finished_at ? ` · emailed ${esc(ts(d.run.finished_at))}` : ''}</p></div>
-      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0, '#t-ioc')}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0, '#t-beh')}${tile(d.updateCount, 'story updates', false, '#t-upd')}${tile(matWatch, 'watch devs 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'), `/?d=${encodeURIComponent(pick.date)}#watch`)}${cardsToday ? tile(cardsToday, 'verdict cards', true, '/?view=cards') : ''}</div>`
+      <div class="tiles">${tile(d.newIocCount, 'new IoCs', d.newIocCount > 0, '#t-ioc')}${tile(d.novelBehaviorCount, 'novel behaviors', d.novelBehaviorCount > 0, '#t-beh')}${tile(d.updateCount, 'story updates', false, '#t-upd')}${tile(matWatch, 'watch devs 48h', (d.watchEvents || []).some((e) => e.level === 'HIGH'), `/?d=${encodeURIComponent(pick.date)}&view=analyst#watch`)}${cardsToday ? tile(cardsToday, 'verdict cards', true, '/?view=cards') : ''}</div>`
       + tstrip('t-ioc', `New IoCs (${d.newIocCount}) — by story`, iocStories)
       + tstrip('t-beh', `Novel behaviors (${d.novelBehaviorCount}) — by story`, behStories)
       + tstrip('t-upd', `Story updates (${d.updateCount}) — developments of earlier briefs' stories`, updStories);
@@ -708,7 +708,7 @@ export default async function handler(req, res) {
     const foot = `Cutsign · public OSINT digest · run ${esc(String(d.run.id).slice(0, 8))} · rendered ${new Date().toISOString().slice(0, 16)}Z`;
     const strip = view !== 'agent' && pick.date === days[0].date ? sinceStrip(d) : '';
     const jump = view === 'ciso' ? '<p class="s" style="margin:10px 0 0"><a href="#cards">↓ Jump to brief cards</a></p>'
-      : view === '' ? '<p class="s" style="margin:10px 0 0"><a href="#brief">↓ Jump to brief</a></p>' : '';
+      : view === 'analyst' ? '<p class="s" style="margin:10px 0 0"><a href="#brief">↓ Jump to brief</a></p>' : '';
     const body = view === 'ciso' ? cisoBody(d) : view === 'agent' ? agentBody(d, days) : analystBody();
     const inner = `${hero}${jump}${strip}<div class="w">${body}</div>`;
     const viewTag = view === 'ciso' ? ' — CISO view' : view === 'agent' ? ' — Agent view' : '';

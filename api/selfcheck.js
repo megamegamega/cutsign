@@ -24,9 +24,11 @@ export default async function handler(req, res) {
   const check = (cond, label) => { if (!cond) failures.push(label); };
 
   try {
-    // analyst day page: renders, story anchors present (search deep links + jump anchor depend on them)
-    const home = await get('/');
-    check(home.status === 200, 'GET / -> ' + home.status);
+    // root = CISO view; analyst day page renders with story anchors (search deep links + jump anchor depend on them)
+    const root = await get('/');
+    check(root.status === 200 && root.text.includes('<span>CISO</span>'), 'GET / -> ' + root.status + ' (expected CISO view)');
+    const home = await get('/?view=analyst');
+    check(home.status === 200, 'GET /?view=analyst -> ' + home.status);
     check(/<h1>20\d\d-\d\d-\d\d/.test(home.text), '/ missing day <h1>');
     check(home.text.includes('id="s-'), '/ missing story anchors (search deep links broken)');
 

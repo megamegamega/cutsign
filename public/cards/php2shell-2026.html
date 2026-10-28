@@ -99,9 +99,9 @@ a{color:var(--ink)}
 
     <div class="cl">
       <span>On Cutsign:</span>
-      <a href="/?d=2026-10-21#s-de24631e">leak story 10-21</a>
-      <a href="/?d=2026-10-22#s-85470616">patch update 10-22</a>
-      <a href="/?d=2026-10-23#s-d3d16df5">mass exploitation 10-23</a>
+      <a href="/?d=2026-10-21&view=analyst#s-de24631e">leak story 10-21</a>
+      <a href="/?d=2026-10-22&view=analyst#s-85470616">patch update 10-22</a>
+      <a href="/?d=2026-10-23&view=analyst#s-d3d16df5">mass exploitation 10-23</a>
       <a href="/?d=2026-10-23&view=ciso#s-d3d16df5">CISO card</a>
       <a href="/?view=iocs#s-d3d16df5">IoC card (20)</a>
       <a href="/?q=php2shell">news &amp; updates (live)</a>
@@ -316,7 +316,7 @@ index=* earliest=-30d@d (dest=92.118.112.100 OR src=92.118.112.100 OR url="*92.1
   if (newer.length) {
     const el = document.getElementById('since');
     el.innerHTML = '<b>Since this card</b> \u2014 verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
-      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
     el.hidden = false;
   }
   try {

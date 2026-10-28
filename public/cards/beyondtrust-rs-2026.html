@@ -99,8 +99,8 @@ a{color:var(--ink)}
 
     <div class="cl">
       <span>On Cutsign:</span>
-      <a href="/?d=2026-10-16#s-10ee4006">brief stories 10-16</a>
-      <a href="/?d=2026-10-19#s-0534fe69">KEV story 10-19</a>
+      <a href="/?d=2026-10-16&view=analyst#s-10ee4006">brief stories 10-16</a>
+      <a href="/?d=2026-10-19&view=analyst#s-0534fe69">KEV story 10-19</a>
       <a href="/?d=2026-10-16&view=ciso#s-10ee4006">CISO card</a>
       <a href="/?view=iocs#s-10ee4006">IoC cards</a>
       <a href="/?q=CVE-2026-102764">news &amp; updates (live)</a>
@@ -246,7 +246,7 @@ index=* "&lt;appliance log signature&gt;" earliest=-30d@d
   if (newer.length) {
     const el = document.getElementById('since');
     el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
-      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
     el.hidden = false;
   }
   try {
