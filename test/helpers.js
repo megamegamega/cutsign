@@ -112,7 +112,8 @@ export function installFakeLLM(responder) {
 }
 
 /** Default responder: NetScaler story gets the rich extraction, everything else a thin one. */
-export const defaultResponder = (user) => (/nsppe|NetScaler ADC post-exploitation/.test(user) ? NETSCALER_EXTRACTION : emptyExtraction('Other story'));
+export const defaultResponder = (user, n, req) => (req?.schemaName === 'proposal' ? { proposed_queries: [] }
+  : /nsppe|NetScaler ADC post-exploitation/.test(user) ? NETSCALER_EXTRACTION : emptyExtraction('Other story'));
 
 export function captureOutputs() {
   const emails = []; const discord = [];

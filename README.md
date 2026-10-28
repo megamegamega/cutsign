@@ -98,6 +98,23 @@ by CVE when the update chain misses, and every card page corrects its KEV row fr
 (the cards JSON carries `kev` per card). The draft call itself survives the API refusing a wide
 schema's grammar: it is retried without the grammar and validated locally.
 
+**Hunt-query proposals, the `queried` stage** (`lib/queries.js`, `lib/lint.js`,
+`prompts/propose.system.md`): for each deep-read P1/P2 story a model reads the story record and
+proposes the *shape* of a hunt — stages over the closed log-source vocabulary, with a join when the
+activity spans two telemetry families (token issuance → use, exploit → shell), rendered once as SPL
+and once as ES|QL over `index=<key>` / `FROM <key>` placeholders. Proposals are candidates, never
+detections: each carries a hypothesis, a required `noise_hint`, `from` citations into the record,
+an honest `confidence` (`stated` / `derived` / `speculative`) and `params` holding every
+story-specific literal, so a consumer can re-parameterise it. Every proposal passes a deterministic
+linter or is dropped with the reason recorded: the only index form is the placeholder, no literal
+sourcetype, data stream, host, user or email, read-only commands only, and no literal the story
+record does not print. A story whose telemetry is `other` only gets no call. The proposer runs on
+its own model tier (`LLM_MODEL_PROPOSE`, Claude Fable 5.1) and falls back to the deep tier once
+month-to-date spend passes 80% of `MAX_MONTHLY_USD`, marking the proposal `model_tier: deep`.
+Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), collapsed in the web
+analyst view, and by name in search results; never in the email or the CISO view. Nothing here runs
+against any SIEM.
+
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
 `/?view=cards&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
 vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
@@ -125,10 +142,16 @@ addresses.
 `supabase/migrations/` — paste into the Supabase SQL editor. RLS on for every table, no policies; only
 the service-role key (server-side) can touch data.
 
-## Companion: bluesign (planned)
+## Companion: bluesign
 
 A blue-team detection-validation tool that consumes Cutsign's agent JSON: constructs synthetic log
 events from a story's signal fields, runs them through the SIEM vendors' own public ingestion
 pipelines in a local Docker lab, asserts the detection fires on signal and stays silent on noise,
 and measures telemetry coverage ("today's brief needed six log sources; you can see four").
 Adversary emulation is out of scope and never initiated by the system.
+
+**Proposal handoff.** bluesign's `lib/cutsign.js` reads `proposed_queries[]` from the agent JSON;
+a proposal becomes a lab candidate; one that passes the lab and is admitted by a person
+(`bluesign admit <id>`) is copied into bluesign's template library with `tier: constructed`.
+Cutsign never learns the outcome: the flow is one-way, and nothing about the consumer's
+environment ever comes back.

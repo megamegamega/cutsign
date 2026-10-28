@@ -9,6 +9,7 @@ import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
 import { CARDS, cardForStory } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
+import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
 import { fetchKevEntries } from '../lib/hype.js';
 
@@ -345,7 +346,7 @@ function agentJson(d, days) {
     note: 'Public OSINT only. IoC values are raw (not defanged) for direct query use.',
     days: days.map((x) => x.date),
     endpoints: { brief: '/?view=agent&format=json&d=YYYY-MM-DD', search: '/?q=TERM&format=json' },
-    vocab: { log_source_keys: LOG_SOURCE_KEYS },
+    vocab: { log_source_keys: LOG_SOURCE_KEYS, proposal_shapes: PROPOSAL_SHAPES, proposal_tiers: ['proposed'] },
     stories: d.analyzed.map((s) => ({
       id: s.id,
       updates_story_id: s.updates_story_id || null,
@@ -382,6 +383,8 @@ function agentJson(d, days) {
         seen_count: i.seen_count ?? null, first_seen: i.first_seen_at || null,
       })),
       sources: (s.sources || []).map((x) => ({ url: x.url, publisher: x.publisher || null, published_at: x.published_at || null, outcome: x.outcome || null })),
+      // AI-proposed hunt shapes (lib/queries.js): tier `proposed`, placeholders only, candidates for a lab
+      proposed_queries: s.raw_iocs?.proposed_queries || [],
     })),
     watch_events_48h: (d.watchEvents || []).map((e) => ({
       at: e.created_at, level: e.level, kind: e.kind, watch: e.watch_title,
@@ -466,6 +469,7 @@ export default async function handler(req, res) {
             id: s.id, title: s.title, brief_date: s.brief_date || null, priority: s.priority ?? 3, deep_read: !!s.selected,
             severity: s.severity || null, cves: s.cves || [], threat_actor: s.threat_actor || null,
             malware_family: s.malware_family || null, summary: s.summary || '', ioc_count: s.ioc_count || 0,
+            proposals: (s.proposed_queries || []).map((p) => ({ id: p.id, name: p.name, shape: p.shape, confidence: p.confidence })),
           })),
           iocs: iocs.map((i) => ({
             type: i.type, value: i.value_norm, seen_count: i.seen_count,
@@ -676,7 +680,7 @@ export default async function handler(req, res) {
       return html.slice(0, start) + region + html.slice(end);
     };
     const analystBody = () => {
-      const full = renderHtml(d, 0);
+      const full = renderHtml(d, 0, { proposals: true });
       return collapseWatch(full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>')))
         .replace('<h3>Developments on tracked stories', '<h3 id="watch">Developments on tracked stories') // tile deep-link target
         .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner

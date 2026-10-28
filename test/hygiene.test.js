@@ -22,14 +22,24 @@ test('Gmail scope is gmail.readonly only', () => {
   assert.ok(!/gmail\.(modify|send|compose|insert|labels|settings)|mail\.google\.com\/"/.test(auth), 'no write scope requested');
 });
 
+// The repo-wide rules. `index=*` and the proposer's placeholder form `index=<key>` are the only index
+// forms allowed anywhere in tracked code; a sourcetype may only be a placeholder.
+const RULES = [
+  /\bindex\s*=\s*"?(?![*<])[a-z_]/i,                      // literal index=<name>, quoted or not (index=* and index=<key> allowed)
+  /\b[a-z0-9-]+\.(corp|internal|intranet|lan)\.[a-z]{2,}\b/i, // host.corp.example.com style
+  /\b(sourcetype)\s*=\s*"?[a-z]+:[a-z]/i,                  // concrete internal sourcetypes
+];
+
+test('the index rule accepts the wildcard and the placeholder form, and nothing else', () => {
+  const [index] = RULES;
+  for (const ok of ['index=*', 'index = *', 'index=<entra_signin>', 'index = <web_access>', 'FROM <entra_signin>']) assert.ok(!index.test(ok), ok);
+  for (const bad of [['index', '=main'], ['index', '= prod_web'], ['index', '="corp"'], ['INDEX', '=Sec']]) assert.ok(index.test(bad.join('')), bad.join(''));
+});
+
 test('no internal-looking hostnames, index names, or usernames in tracked code', () => {
   const files = (git('ls-files') || '').split('\n').filter((f) => /\.(js|json|md|yml|yaml|sql)$/.test(f))
     .filter((f) => !f.startsWith('fixtures/') && f !== 'test/hygiene.test.js' && f !== 'lib/attack-ids.json');
-  const bad = [
-    /\bindex\s*=\s*(?!\*)[a-z_]/i,                          // literal index=<name> (index=* allowed)
-    /\b[a-z0-9-]+\.(corp|internal|intranet|lan)\.[a-z]{2,}\b/i, // host.corp.example.com style
-    /\b(sourcetype)\s*=\s*"?[a-z]+:[a-z]/i,                  // concrete internal sourcetypes
-  ];
+  const bad = RULES;
   for (const f of files) {
     const text = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     for (const re of bad) assert.ok(!re.test(text), `${f} matches ${re}`);
