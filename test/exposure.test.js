@@ -43,6 +43,20 @@ test('exposureQueries: a CVE query per CVE, three product queries per CPE, a sco
   assert.doesNotMatch(text, /\b(net|org|hostname):(?!<)/, 'no scope filter is ever generated');
   assert.doesNotMatch(text, /\d{1,3}(\.\d{1,3}){3}/, 'no IP address');
 
+  // NVD lists the library first and every embedder after it: the product the campaign names leads, platforms are skipped, four at most
+  const many = nvdCpes(nvd([
+    { vulnerable: true, criteria: 'cpe:2.3:a:lib:brotlish:*:*:*:*:*:*:*:*' },
+    { vulnerable: true, criteria: 'cpe:2.3:o:debian:debian_linux:12.0:*:*:*:*:*:*:*' },
+    { vulnerable: true, criteria: 'cpe:2.3:a:widgetry:widget_server:*:*:*:*:*:*:*:*', versionEndExcluding: '24.3.1' },
+    { vulnerable: true, criteria: 'cpe:2.3:a:v3:embedder_three:*:*:*:*:*:*:*:*' },
+    { vulnerable: true, criteria: 'cpe:2.3:a:v4:embedder_four:*:*:*:*:*:*:*:*' },
+    { vulnerable: true, criteria: 'cpe:2.3:a:v5:embedder_five:*:*:*:*:*:*:*:*' },
+  ]));
+  const ranked = exposureQueries({ cves: [CVE], cpes: many, terms: ['Widget-Server', 'Nothing'] });
+  assert.deepEqual(ranked.products, ['widgetry:widget_server', 'lib:brotlish', 'v3:embedder_three', 'v4:embedder_four']);
+  assert.match(ranked.note, /1 more affected product \(/);
+  assert.ok(!JSON.stringify(ranked).includes('debian'), 'operating systems are the platform, not the service');
+
   const noCpe = exposureQueries({ cves: [CVE], cpes: [] });
   assert.equal(noCpe.items.length, 1); assert.match(noCpe.note, /NVD has not published CPE/);
   const noCve = exposureQueries({ cves: [], cpes: [] });

@@ -122,8 +122,9 @@ test('diff, staleness and the rendered table', () => {
   assert.deepEqual(diffCoverage(null, b), []);
   assert.deepEqual(diffCoverage({ ...a, exposure: { products: [] } }, { ...b, lanes: a.lanes, exposure: { products: ['widgetry:widget_server'] } }), ['Exposure queries: NVD now names widgetry:widget_server (Shodan and Censys product queries added)']);
   assert.equal(coverageStale(null), true);
-  assert.equal(coverageStale(b, Date.parse('2026-10-28T13:00:00Z')), false);
-  assert.equal(coverageStale(b, Date.parse('2026-10-28T12:00:00Z') + RECHECK_MS), true);
+  assert.equal(coverageStale(b, Date.parse('2026-10-28T13:00:00Z')), true, 'a check stored before the exposure block existed is re-asked');
+  assert.equal(coverageStale({ ...b, exposure: null }, Date.parse('2026-10-28T13:00:00Z')), false);
+  assert.equal(coverageStale({ ...b, exposure: null }, Date.parse('2026-10-28T12:00:00Z') + RECHECK_MS), true);
   const html = coverageTable({ ...b, lanes: [{ id: 'x', category: 'WAF / edge', name: 'Cloudflare', status: 'published', detail: 'rule <7>', url: 'https://cf.example.test/' }, { id: 'q', category: 'VM scanners', name: 'Qualys', status: 'nothing found', detail: 'none', url: 'https://q.example.test/' }] });
   assert.match(html, /<a href="https:\/\/cf\.example\.test\/">Cloudflare<\/a>/);
   assert.match(html, /rule &lt;7&gt;/);
