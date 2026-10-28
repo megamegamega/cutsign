@@ -394,3 +394,25 @@ test('coverage: a hand-written card gets the same daily check, stored on its man
   assert.equal(c3.coverage_checked, 1);
   assert.ok(out.discord.some((l) => l.startsWith(`Cutsign ▣ coverage changed for card ${card.slug}`)), out.discord.join('\n'));
 });
+
+test('coverage: cards and published drafts whose campaign is not in today\'s brief are still checked daily', async (t) => {
+  t.after(off);
+  const { store, run, out } = await published();
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  // a hand-written card whose manifest row exists but belongs to an older run (not analyzed today)
+  const card = CARDS[1];
+  store._tables.stories.push(story(9, { id: card.story_ids[0], run_id: 'old-run', cves: card.cves, source_urls: ['https://www.cisa.gov/news-events/alerts/x'] }));
+  // a published AI card from an earlier day, its check a day old
+  const old = await store.insertCardDraft({ story_id: uuid(8), thread_ids: [uuid(8)], title: 'Older published card', score: 10, reasons: [], draft: { ...DRAFT, cves: ['CVE-2026-8'], coverage: { checked_at: '2026-10-27T12:00:00Z', lanes: [{ id: 'cloudflare_waf', name: 'Cloudflare WAF managed-ruleset changelog', status: 'nothing found', detail: '' }] } }, version: 1, status: 'promoted', promoted_slug: 'older-2026', surfaced_at: '2026-10-27T12:00:00Z' });
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': '<rss><channel><item><title>WAF Release - CVE-2026-8</title><link>https://developers.cloudflare.com/waf/change-log/z/</link></item></channel></rss>' } });
+  const c = await hypeSweep(store, { run, fetchImpl: net, now });
+  // today's story (1) + the older AI card + the untouched hand card
+  assert.equal(c.coverage_checked, 3, JSON.stringify(c)); assert.equal(c.errors, 0);
+  assert.ok((await store.getStory(card.story_ids[0])).raw_iocs.hype.card_coverage.lanes.length, 'hand card checked and stored on its manifest row');
+  const re = await store.getCardDraft(old.id);
+  assert.equal(re.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ coverage changed for AI card older-2026')));
+  // same day again: nothing is re-asked
+  const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
+});
