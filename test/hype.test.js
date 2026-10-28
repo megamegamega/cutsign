@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable } from '../lib/hype.js';
+import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS } from '../lib/cards.js';
 import { installFakeLLM, captureOutputs } from './helpers.js';
@@ -199,6 +199,48 @@ test('sweep: with the drafts table missing, nominations still post and the count
   assert.equal(c.nominated, 1); assert.equal(c.drafted, 0); assert.equal(calls.length, 0);
   assert.match(c.drafts_disabled, /0004_card_drafts/);
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▲ card candidate')));
+});
+
+test('sweep: a carded thread with a KEV listing after the card date is raised once and gets a re-issue draft', async () => {
+  const { out, store, run, calls, hot } = await world({ carded: true });
+  const card = CARDS[0];
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  // the catalog lists the thread's CVE the day after the card was written
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevLate, now });
+  assert.equal(c1.carded, 1); assert.equal(c1.stale, 1); assert.equal(c1.drafted, 1); assert.equal(c1.nominated, 0); assert.equal(c1.errors, 0, JSON.stringify(c1));
+  const nudge = out.discord.find((l) => l.startsWith(`Cutsign ▲ card ${card.slug}`));
+  assert.ok(nudge, out.discord.join('\n')); assert.match(nudge, /CISA KEV listed CVE-2026-1 on 2026-10-24 \(federal due 2026-10-27\)/); assert.match(nudge, /Re-issue the card/);
+  assert.ok(out.discord.some((l) => l.includes(`AI re-issue draft for card ${card.slug}`)));
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].messages[0].content, new RegExp(`<existing_card slug="${card.slug}" as_of="${card.date}">`));
+  assert.match(calls[0].messages[0].content, /<changes>CISA KEV listed CVE-2026-1/);
+  const [d] = await store.listCardDrafts();
+  assert.ok(d.surfaced_at, 're-issue drafts are always surfaced'); assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-1 on 2026-10-24 (federal due 2026-10-27)']);
+  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-1']);
+  // next tick: the same development is not raised or drafted again
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevLate, now: now + 3600_000 });
+  assert.equal(c2.stale, 0); assert.equal(c2.drafted + c2.revised, 0); assert.equal(calls.length, 1);
+  // a HIGH watch development after the card date is a second, separate development: raised and revised
+  const w = { id: 'w1', story_id: hot.id, title: hot.title, status: 'active' };
+  store._tables.watches.push(w);
+  store._tables.watch_events.push({ id: 'ev1', watch_id: w.id, created_at: '2026-10-28T09:00:00Z', kind: 'kev_added', level: 'HIGH', summary: 'A second product is named.', assessment: { material: true, summary: 'A second product is named.' } });
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevLate, now: now + 7200_000 });
+  assert.equal(c3.stale, 1); assert.equal(c3.revised, 1); assert.equal(calls.length, 2);
+  assert.match(calls[1].messages[0].content, /<prior_draft version="1">/);
+  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-1', 'event:ev1']);
+});
+
+test('cardDevelopments: nothing before the card date, KEV and HIGH events after it', () => {
+  const card = { slug: 'x', date: '2026-10-23', cves: ['CVE-2026-1'] };
+  const thread = [{ id: 's1', cves: ['CVE-2026-2'] }];
+  const kev = new Map([['CVE-2026-1', '2026-10-20'], ['CVE-2026-2', { dateAdded: '2026-10-25', dueDate: null }]]);
+  const events = [
+    { id: 'a', watch_story_id: 's1', level: 'HIGH', created_at: '2026-10-22T00:00:00Z', kind: 'kev_added' },
+    { id: 'b', watch_story_id: 's1', level: 'LOW', created_at: '2026-10-26T00:00:00Z', kind: 'poc_repo' },
+    { id: 'c', watch_story_id: 's1', level: 'HIGH', created_at: '2026-10-26T00:00:00Z', kind: 'page_change', summary: 'Vendor confirms exploitation.' },
+  ];
+  assert.deepEqual(cardDevelopments({ card, thread, kev, events }).map((x) => x.key), ['kev:CVE-2026-2', 'event:c']);
 });
 
 test('draft input carries only stored facts; the schema has no slot for a coverage claim', () => {

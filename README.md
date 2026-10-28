@@ -88,8 +88,15 @@ Over `HYPE_SURFACE` (9) a draft is surfaced: an "AI draft" chip on its story in 
 Drafts live in `card_drafts` (migrations 0004, 0005), render at `/?view=draft&id=…` behind an
 "AI-generated, unreviewed" banner, never claim product coverage, and are scrubbed with the repo's
 hygiene rules. Publishing one is a human edit to `public/cards/` and the manifest, where the analyst
-fills the coverage table; a dismissed or promoted draft stops the loop for its thread, and threads
-that already have a card are skipped.
+fills the coverage table; a dismissed or promoted draft stops the loop for its thread.
+
+A thread that already has a card is not scored, but it is kept honest: each sweep compares the
+card's as-of date with what happened after it (a CISA KEV listing of a CVE the card names, a HIGH
+watch development). Each development is raised once on Discord and folded into an AI re-issue draft;
+re-issuing the card clears them. Two things need no re-issue at all: a story is linked to its card
+by CVE when the update chain misses, and every card page corrects its KEV row from the live catalog
+(the cards JSON carries `kev` per card). The draft call itself survives the API refusing a wide
+schema's grammar: it is retried without the grammar and validated locally.
 
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
 `/?view=cards&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed

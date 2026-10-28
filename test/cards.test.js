@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, STATUSES, cardByStory, cardForStory, activeCards, archiveCandidates } from '../lib/cards.js';
+import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates } from '../lib/cards.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -44,6 +44,17 @@ test('a card is found through a story\'s update chain, not only on the row the m
   const loopA = { id: 'a0a0a0a0-0000-4000-8000-00000000000a', updates_story_id: 'b0b0b0b0-0000-4000-8000-00000000000b' };
   const loopB = { id: loopA.updates_story_id, updates_story_id: loopA.id };
   assert.equal(cardForStory(loopA, (id) => (id === loopB.id ? loopB : loopA)), null);
+});
+
+test('a story whose chain misses the card is still linked when it names a CVE the card names', () => {
+  const card = CARDS.find((c) => c.cves.length);
+  // the matcher linked today's row to a sibling thread that never reaches the card (what happened
+  // to the PHP2Shell KEV story, whose parent was the separate CVE-2026-115560 story)
+  const sibling = { id: 'f1f1f1f1-0000-4000-8000-0000000000f1', updates_story_id: null };
+  const today = { id: 'f2f2f2f2-0000-4000-8000-0000000000f2', updates_story_id: sibling.id, cves: [card.cves[0], 'CVE-2026-99999'] };
+  assert.equal(cardForStory(today, (id) => (id === sibling.id ? sibling : null)).slug, card.slug);
+  assert.equal(cardForStory({ id: today.id, updates_story_id: null, cves: ['CVE-2026-99999'] }), null, 'an unrelated CVE links nothing');
+  assert.equal(cardByCve(['CVE-2026-99999']), null);
 });
 
 test('every card page keeps the blocks the live scripts and format depend on', () => {

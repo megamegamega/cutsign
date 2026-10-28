@@ -10,6 +10,16 @@ import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.
 import { CARDS, cardForStory } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { draftBody } from '../lib/carddraft.js';
+import { fetchKevEntries } from '../lib/hype.js';
+
+// CISA KEV, fetched at most hourly per instance; an empty result never replaces a good one
+let kevCache = { at: 0, map: new Map() };
+async function kevEntries() {
+  if (Date.now() - kevCache.at < 3600_000) return kevCache.map;
+  const m = await fetchKevEntries();
+  if (m.size) kevCache = { at: Date.now(), map: m };
+  return kevCache.map;
+}
 
 // The card a story belongs to, following its update chain (today's row → the row it updates → …);
 // `d.priorById` (from buildDigestData) supplies the earlier rows. Search and corpus rows carry
@@ -488,9 +498,12 @@ export default async function handler(req, res) {
       try { drafts = (await store.listCardDrafts({ status: 'draft', limit: 10 })).sort((a, b) => (b.surfaced_at ? 1 : 0) - (a.surfaced_at ? 1 : 0)); } catch { drafts = []; }
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        // live KEV status per card CVE: the card pages read it and correct a stale "not listed" row
+        const kev = await kevEntries();
+        const kevOf = (c) => Object.fromEntries((c.cves || []).filter((v) => kev.has(v)).map((v) => [v, { date_added: kev.get(v).dateAdded, due_date: kev.get(v).dueDate || null }]));
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.cards', generated: new Date().toISOString(),
-          cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html` })),
+          cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html`, kev: kevOf(c) })),
           candidates: drafts.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
