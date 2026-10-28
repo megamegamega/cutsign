@@ -115,6 +115,16 @@ re-asked daily for every published card and every hand-written card (stored on t
 story row, rendered under the hand-written table by the card page's script), and a lane that moved
 is posted to Discord.
 
+**Exposure queries, generated automatically** (`lib/exposure.js`). The same check writes the
+generic half of an external-attack-surface alert for every card: Shodan's `vuln:` query per CVE,
+and, from the CPE configurations NVD publishes for the CVE, a Shodan `cpe:` query, a Shodan
+`product:` query and a Censys `software.product` query per vulnerable product, each with NVD's
+affected version ranges. The other half, the ranges, org name and domains that scope a query to one
+estate, is never generated, stored or rendered: the section carries placeholders and tells the
+reader to add the scope in Shodan Monitor or their EASM product, where that inventory already lives.
+A CPE that NVD publishes later appears at the next daily re-check and is posted to Discord with the
+coverage changes.
+
 A thread that already has a hand-written card is not scored, but it is kept honest: each sweep
 compares the card's as-of date with what happened after it (a CISA KEV listing of a CVE the card
 names, a HIGH watch development). Each development is raised once on Discord and folded into an AI

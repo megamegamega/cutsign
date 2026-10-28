@@ -46,7 +46,7 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     const u = String(url); calls.push(u);
     const ok = (body, type = 'text/plain') => new Response(body, { status: 200, headers: { 'content-type': type } });
     const miss = () => new Response('nope', { status: 404 });
-    if (u.includes('services.nvd.nist.gov')) return nvd ? ok(JSON.stringify({ vulnerabilities: [{ cve: { id: CVE, published: '2026-10-22T00:00:00', metrics: { cvssMetricV31: [{ cvssData: { baseScore: 9.8 } }] } } }] })) : ok(JSON.stringify({ vulnerabilities: [] }));
+    if (u.includes('services.nvd.nist.gov')) return nvd ? ok(JSON.stringify({ vulnerabilities: [{ cve: { id: CVE, published: '2026-10-22T00:00:00', metrics: { cvssMetricV31: [{ cvssData: { baseScore: 9.8 } }] }, configurations: [{ nodes: [{ cpeMatch: [{ vulnerable: true, criteria: 'cpe:2.3:a:widgetry:widget_server:*:*:*:*:*:*:*:*', versionEndExcluding: '24.3.1' }] }] }] } }] })) : ok(JSON.stringify({ vulnerabilities: [] }));
     if (u.includes('rapid7.com/db/vulnerabilities')) return rapid7 === 'none' ? ok('<title>Rapid7 Vulnerability Database</title>') : ok(`<title>Thing: ${CVE} | Rapid7</title><script>{\\"has_rapid7_vm_coverage\\":${rapid7 === 'covered'},\\"msf_module_count\\":0}</script>`);
     if (u.includes('access.redhat.com')) return redhat === 'errata' ? ok(JSON.stringify({ threat_severity: 'Important', affected_release: [{ advisory: 'RHSA-2026:7' }] })) : redhat === 'none' ? miss() : ok(JSON.stringify({ package_state: [{ fix_state: 'Affected' }] }));
     if (u.includes('security-tracker.debian.org')) return ok(`<html><title>${CVE}</title><td>fixed</td></html>`);
@@ -90,6 +90,18 @@ test('checkCoverage: every lane answers with an honest status; feeds match the C
   assert.equal(cov.lanes[0].category, 'Vendor');
   // the three Emerging Threats files were fetched once each, not once per lane
   assert.equal(net.calls.filter((u) => u.includes('emergingthreats')).length, 3);
+  // the exposure queries ride on the same check, built from the NVD record it already fetched
+  assert.deepEqual(cov.exposure.products, ['widgetry:widget_server']);
+  assert.ok(cov.exposure.items.some((i) => i.query === `vuln:${CVE}`));
+  assert.ok(cov.exposure.items.some((i) => i.query === 'cpe:"cpe:/a:widgetry:widget_server"'));
+  assert.equal(net.calls.filter((u) => u.includes('services.nvd.nist.gov')).length, 1, 'NVD is asked once');
+});
+
+test('checkCoverage: without NVD CPEs the exposure block says so and carries only the CVE query', async () => {
+  const cov = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ nvd: false }), githubToken: '' });
+  assert.deepEqual(cov.exposure.products, []);
+  assert.equal(cov.exposure.items.length, 1);
+  assert.match(cov.exposure.note, /NVD has not published CPE/);
 });
 
 test('checkCoverage: a no-CVE campaign is matched by name; a token unlocks the rule-repo lanes; QIDs are read from Qualys posts', async () => {
@@ -108,6 +120,7 @@ test('diff, staleness and the rendered table', () => {
   const b = { checked_at: '2026-10-28T12:00:00Z', lanes: [{ id: 'x', name: 'X', status: 'published', detail: 'rule 7' }, { id: 'y', name: 'Y', status: 'nothing found', detail: '' }, { id: 'z', name: 'Z', status: 'published', detail: '' }], summary: { published: 2, nothing: 1, failed: 0, unchecked: 0 } };
   assert.deepEqual(diffCoverage(a, b), ['X: nothing found → published (rule 7)'], 'a lane recovering from a failed check is not a change');
   assert.deepEqual(diffCoverage(null, b), []);
+  assert.deepEqual(diffCoverage({ ...a, exposure: { products: [] } }, { ...b, lanes: a.lanes, exposure: { products: ['widgetry:widget_server'] } }), ['Exposure queries: NVD now names widgetry:widget_server (Shodan and Censys product queries added)']);
   assert.equal(coverageStale(null), true);
   assert.equal(coverageStale(b, Date.parse('2026-10-28T13:00:00Z')), false);
   assert.equal(coverageStale(b, Date.parse('2026-10-28T12:00:00Z') + RECHECK_MS), true);

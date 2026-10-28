@@ -3,7 +3,9 @@
 // reads as current advice; (2) when an AI re-issue draft exists for this card (the pipeline saw
 // developments after the card's as-of date), links it at the top; (3) appends the automated
 // detection-coverage check under the hand-written coverage table; (4) when CISA KEV lists a CVE
-// the card names, corrects the card's KEV row from the live catalog.
+// the card names, corrects the card's KEV row from the live catalog; (5) appends the generated
+// external-attack-surface queries (generic Shodan/Censys filters; the reader scopes them in their
+// own tool) after that table.
 (async function () {
   try {
     const slug = (location.pathname.match(/\/cards\/([a-z0-9-]+)\.html$/) || [])[1];
@@ -42,6 +44,18 @@
       if (h) { let el = h.nextElementSibling; while (el && el.tagName !== 'TABLE' && el.tagName !== 'H2') el = el.nextElementSibling; if (el && el.tagName === 'TABLE') anchor = el; }
       if (anchor) anchor.insertAdjacentHTML('afterend', html);
       else document.body.insertAdjacentHTML('beforeend', html);
+    }
+
+    const ex = me.coverage && me.coverage.exposure;
+    if (ex && ((ex.items && ex.items.length) || ex.note)) {
+      const rows = (ex.items || []).map((i) => `<tr><td>${esc(i.engine)}</td><td><pre style="margin:0">${esc(i.query)}</pre></td><td class="src">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</td></tr>`).join('');
+      const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>`
+        + (rows ? `<table><tr><th>Engine</th><th>Query</th><th>Reads</th></tr>${rows}</table>` : '')
+        + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '')
+        + `<p class="src">Scope every query in your own tool, never in a shared document: Shodan <code>net:&lt;your_ranges&gt;</code>, <code>org:"&lt;your_org&gt;"</code> or <code>hostname:&lt;your_domain&gt;</code> (or a Shodan Monitor network alert, which applies the scope for you); Censys <code>host.ip</code> or <code>host.dns.names</code>. Then compare the banner version with the affected range. Built ${esc(String(ex.built_at).slice(0, 16).replace('T', ' '))}Z from the CVE ids and NVD's CPE configurations; re-built daily with the coverage check.</p>`;
+      const live = document.getElementById('coverage-live');
+      let anchor = live; if (live) { let el = live.nextElementSibling; while (el && el.tagName !== 'TABLE' && el.tagName !== 'H2') el = el.nextElementSibling; if (el && el.tagName === 'TABLE') anchor = el; }
+      if (anchor) anchor.insertAdjacentHTML('afterend', html); else document.body.insertAdjacentHTML('beforeend', html);
     }
 
     const listed = Object.entries(me.kev || {});
