@@ -67,10 +67,15 @@ development that falsifies a title's outcome claim ("no confirmed compromises") 
 its watch in place. HIGH events alert immediately; everything appears in the next morning's email under
 "Developments on tracked stories".
 
-**Verdict cards** (`public/cards/`, manifest in `lib/cards.js`): one per campaign, re-issued in place
-(the as-of date and the manifest date move together — a test enforces it), with a lifecycle of
-`active → archived → superseded`. Every card ends with inferred, tool-neutral detections and a
-runnable Splunk block over `index=*`; every bare identifier printed is labeled.
+**Verdict cards** come two ways. Hand-written ones live in `public/cards/` (manifest in
+`lib/cards.js`): one per campaign, re-issued in place (the as-of date and the manifest date move
+together — a test enforces it), with a lifecycle of `active → archived → superseded`. Every card
+ends with inferred, tool-neutral detections and a runnable Splunk block over `index=*`; every bare
+identifier printed is labeled. The pipeline's own cards are published automatically from the draft
+loop below at `/cards/<slug>` and carry an "AI-generated, published automatically" banner. Both
+kinds carry an **automated detection-coverage check** (next section) and both are kept current
+without a hand: a hand-written card's page links the AI re-issue draft the pipeline writes when
+something develops after its as-of date, and corrects its KEV row from the live catalog.
 
 **AI drafts, the card loop** (`lib/hype.js`, `lib/carddraft.js`): after each brief is sent, and
 again from the hourly watch tick when something developed, every story thread is scored on what the
@@ -85,20 +90,39 @@ Each draft records the evidence fingerprint it was built from; when the evidence
 is revised from the prior version as a new row with a change list, the old one marked superseded.
 A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
 lint-clean and in both dialects, and the model writes only what a hit means.
-Over `HYPE_SURFACE` (9) a draft is surfaced: an "AI draft" chip on its story in the CISO view, an
-`ai_draft` link in the agent JSON, first place on the Cards tab, and a "ready for review" email.
-Drafts live in `card_drafts` (migrations 0004, 0005), render at `/?view=draft&id=…` behind an
-"AI-generated, unreviewed" banner, never claim product coverage, and are scrubbed with the repo's
-hygiene rules. Publishing one is a human edit to `public/cards/` and the manifest, where the analyst
-fills the coverage table; a dismissed or promoted draft stops the loop for its thread.
+Over `HYPE_SURFACE` (9) the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
+an AI verdict card at `/cards/<slug>`, with a "Verdict card" chip on its story in the CISO view,
+`verdict_card` in the agent JSON, a place on the Cards tab, and a "published" email. Revisions
+re-issue it in place (same URL, old version superseded); dismissing the draft unpublishes it. No
+person is in the loop: the banner says what it is. Drafts live in `card_drafts` (migrations 0004,
+0005), render at `/?view=draft&id=…` behind an "AI-generated, unreviewed" banner until published,
+and are scrubbed with the repo's hygiene rules.
 
-A thread that already has a card is not scored, but it is kept honest: each sweep compares the
-card's as-of date with what happened after it (a CISA KEV listing of a CVE the card names, a HIGH
-watch development). Each development is raised once on Discord and folded into an AI re-issue draft;
-re-issuing the card clears them. Two things need no re-issue at all: a story is linked to its card
-by CVE when the update chain misses, and every card page corrects its KEV row from the live catalog
-(the cards JSON carries `kev` per card). The draft call itself survives the API refusing a wide
-schema's grammar: it is retried without the grammar and validated locally.
+**Detection coverage, checked automatically** (`lib/coverage.js`). The model never claims product
+coverage; the pipeline asks the public sources instead and prints what each one said. Every draft
+and every published card carries a table built from: the impacted vendor's own page (a primary
+source among the thread's sources), CISA KEV, NVD (CVSS), Rapid7's vulnerability database (its
+own InsightVM coverage flag), Qualys ThreatPROTECT posts (QIDs when printed), Red Hat security data
+(errata), the Debian tracker, the Nuclei template tree, Emerging Threats open rules (Suricata
+sids), and the feeds and changelogs of CrowdStrike, Microsoft Security, SentinelOne, Cloudflare's
+WAF managed ruleset, Akamai, Wiz, Talos, Elastic Security Labs, Unit 42, Huntress, Sophos, Arctic
+Wolf and Rapid7. Each lane ends in one of four statuses — `published` (with the link), `nothing
+found` (the source answered and had nothing; itself a finding), `not checkable` (Tenable's plugin
+list renders only in a browser; the SigmaHQ, Elastic and Splunk rule repositories need
+`GITHUB_TOKEN` for GitHub code search) or `check failed` — so a dead feed never reads as "nothing
+published". Feeds match on CVE id, or on stated names only when a campaign has no CVE. The check is
+re-asked daily for every published card and every hand-written card (stored on the card's manifest
+story row, rendered under the hand-written table by the card page's script), and a lane that moved
+is posted to Discord.
+
+A thread that already has a hand-written card is not scored, but it is kept honest: each sweep
+compares the card's as-of date with what happened after it (a CISA KEV listing of a CVE the card
+names, a HIGH watch development). Each development is raised once on Discord and folded into an AI
+re-issue draft, which the card page links at the top until the card is re-issued. Two things need
+no re-issue at all: a story is linked to its card by CVE when the update chain misses, and every
+card page corrects its KEV row from the live catalog (the cards JSON carries `kev`, `coverage` and
+`reissue` per card). The draft call itself survives the API refusing a wide schema's grammar: it is
+retried without the grammar and validated locally.
 
 **Hunt-query proposals, the `queried` stage** (`lib/queries.js`, `lib/lint.js`,
 `prompts/propose.system.md`): for each deep-read P1/P2 story a model reads the story record and

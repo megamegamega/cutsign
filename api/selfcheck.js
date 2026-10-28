@@ -70,6 +70,17 @@ export default async function handler(req, res) {
         `card ${c.slug} missing live sections (pubguid/since)`);
       check(page.text.includes('Public OSINT only'), `card ${c.slug} missing OSINT footer`);
     }
+    // cards the pipeline published: listed in the cards JSON with a coverage check, served at /cards/<slug>
+    try {
+      const cj = JSON.parse((await get('/?view=cards&format=json')).text);
+      check(cj.kind === 'cutsign.cards' && Array.isArray(cj.cards), 'cards json: wrong shape');
+      for (const c of (cj.cards || []).filter((x) => x.source === 'ai')) {
+        const page = await get(c.url);
+        check(page.status === 200, `AI card ${c.slug} -> ${page.status}`);
+        check(page.text.includes('published automatically'), `AI card ${c.slug} missing its AI banner`);
+        check(!!c.coverage?.lanes?.length, `AI card ${c.slug} has no coverage check`);
+      }
+    } catch { failures.push('cards json: not parseable'); }
   } catch (e) {
     failures.push('selfcheck crashed: ' + String(e?.message || e).slice(0, 200));
   }

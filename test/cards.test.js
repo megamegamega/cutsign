@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates } from '../lib/cards.js';
+import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor } from "../lib/cards.js";
 
 const dir = new URL('../public/cards/', import.meta.url);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -103,4 +103,27 @@ test('archive candidates: quiet, watch-expired, 30+ day old cards only', () => {
   ];
   assert.deepEqual(archiveCandidates(cards, rows, now).map((c) => c.slug), ['old-quiet']);
   assert.match(archiveCandidates(cards, rows, now)[0].reason, /all watches expired/);
+});
+
+test('cardIndex: a published AI draft row is a card beside the manifest, found by thread id and by CVE', () => {
+  const row = {
+    id: 'aaaaaaaa-0000-4000-8000-000000000001', status: 'promoted', promoted_slug: 'widgetry-rce-2026', version: 2, created_at: '2026-10-28T13:00:00Z', title: 'Widgetry RCE exploited',
+    thread_ids: ['bbbbbbbb-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'],
+    draft: { lane: 'Patch now', verdict: 'Patch today.', cves: ['CVE-2026-424242'], coverage: { checked_at: '2026-10-28T13:00:00Z', lanes: [] } },
+  };
+  const idx = cardIndex([row, { ...row, id: 'x', status: 'draft', promoted_slug: null }, { ...row, id: 'y', promoted_slug: CARDS[0].slug }]);
+  assert.equal(idx.cards.length, CARDS.length + 1, 'unpublished rows and a slug clashing with the manifest are not cards');
+  const ai = idx.cards.at(-1);
+  assert.equal(ai.source, 'ai'); assert.equal(ai.url, '/cards/widgetry-rce-2026'); assert.equal(ai.date, '2026-10-28'); assert.equal(ai.lane, 'Patch now'); assert.equal(ai.version, 2);
+  assert.equal(idx.cardForStory({ id: 'cccccccc-0000-4000-8000-000000000001', updates_story_id: row.thread_ids[1] }).slug, 'widgetry-rce-2026');
+  assert.equal(idx.cardByCve(['CVE-2026-424242']).slug, 'widgetry-rce-2026');
+  assert.equal(idx.cardForStory({ id: CARDS[0].story_ids[0] }).slug, CARDS[0].slug, 'the manifest still resolves');
+  assert.equal(cardForStory({ id: 'cccccccc-0000-4000-8000-000000000001', updates_story_id: row.thread_ids[1] }), null, 'the manifest-only index knows nothing of AI cards');
+});
+
+test('slugFor: title words plus the year, unique against the manifest and the slugs in use', () => {
+  assert.equal(slugFor('Widgetry RCE (CVE-2026-424242) exploited in the wild; patch now', '2026'), 'widgetry-rce-exploited-in-the-2026');
+  assert.equal(slugFor('Node.js October security releases', '2026', new Set(['node-js-october-security-releases-2026'])), 'node-js-october-security-releases-2026-2');
+  assert.notEqual(slugFor(CARDS[0].title, CARDS[0].date.slice(0, 4)), CARDS[0].slug);
+  assert.equal(slugFor('', '2026'), 'card-2026');
 });

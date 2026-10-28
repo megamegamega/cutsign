@@ -7,11 +7,16 @@
 
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
-import { CARDS, cardForStory } from '../lib/cards.js';
+import { CARDS, cardIndex } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
 import { fetchKevEntries } from '../lib/hype.js';
+
+// Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
+// AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
+// so an interleaved request overwriting it changes nothing.
+let IDX = cardIndex([]);
 
 // CISA KEV, fetched at most hourly per instance; an empty result never replaces a good one
 let kevCache = { at: 0, map: new Map() };
@@ -25,11 +30,11 @@ async function kevEntries() {
 // The card a story belongs to, following its update chain (today's row → the row it updates → …);
 // `d.priorById` (from buildDigestData) supplies the earlier rows. Search and corpus rows carry
 // only updates_story_id, so they resolve one hop back.
-const cardOf = (s, d) => cardForStory(s, (id) => d?.priorById?.get(id) || null);
-// "Verdict card" chip for a story that has a hand-written card in public/cards/
+const cardOf = (s, d) => IDX.cardForStory(s, (id) => d?.priorById?.get(id) || null);
+// "Verdict card" chip for a story that has a card: hand-written in public/cards/, or published by the pipeline
 const verdictChip = (s, d) => {
   const c = cardOf(s, d);
-  return c ? `<a class="c" href="/cards/${esc(c.slug)}.html">Verdict card</a>` : '';
+  return c ? `<a class="c" href="${esc(c.url)}">${c.source === 'ai' ? 'AI verdict card' : 'Verdict card'}</a>` : '';
 };
 // surfaced AI draft for a story (its thread includes the story or the row it updates)
 const draftOf = (s, d) => (d?.drafts || []).find((x) => (x.thread_ids || []).some((id) => id === s.id || id === s.updates_story_id)) || null;
@@ -278,7 +283,7 @@ GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${da
 GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief + watch event, all time
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)
 GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, lane, cves, story_ids, url)
-GET /cards/&lt;slug&gt;.html                 a verdict card; stories here carry verdict_card when one exists
+GET /cards/&lt;slug&gt;.html                 a hand-written verdict card; /cards/&lt;slug&gt; one the pipeline published; stories here carry verdict_card when one exists
 
 Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
 (see vocab.log_source_keys) for mapping to your own data. evidence_samples are the exact strings the
@@ -351,7 +356,7 @@ function agentJson(d, days) {
       id: s.id,
       updates_story_id: s.updates_story_id || null,
       brief_date: d.date,
-      verdict_card: cardOf(s, d) ? `/cards/${cardOf(s, d).slug}.html` : null,
+      verdict_card: cardOf(s, d)?.url || null,
       ai_draft: draftOf(s, d) ? `/?view=draft&id=${draftOf(s, d).id}` : null,
       title: s.title,
       priority: s.priority ?? 3,
@@ -456,6 +461,10 @@ export default async function handler(req, res) {
     const store = supabaseStore();
 
     const json = req.query.format === 'json';
+    // published AI cards (table may not exist before migration 0004)
+    let aiRows = [];
+    try { aiRows = await store.listCardDrafts({ status: 'promoted', limit: 50 }); } catch { aiRows = []; }
+    IDX = cardIndex(aiRows);
 
     const qraw = String(req.query.q || '').trim().slice(0, 80);
     if (qraw) {
@@ -491,15 +500,37 @@ export default async function handler(req, res) {
       try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
       const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      if (row.status === 'promoted' && row.promoted_slug) { res.setHeader('Location', `/cards/${row.promoted_slug}`); return res.status(302).send(''); }
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
         `<div class="w">${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
+    }
+
+    // A card the pipeline published: /cards/<slug> (vercel.json rewrites it here; the static
+    // .html files are the hand-written cards and are served before any rewrite)
+    if (req.query.view === 'card') {
+      const slug = String(req.query.slug || '').toLowerCase();
+      const row = aiRows.find((r) => r.promoted_slug === slug) || null;
+      if (!row) return res.status(404).send(doc('Cutsign — card', '', '<div class="w"><p class="s">No such card. <a href="/?view=cards">All cards</a></p></div>', 'Cutsign'));
+      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+      return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
+        `<div class="w">${draftBody(row, { published: true })}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
     }
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
     if (req.query.view === 'cards') {
       // AI drafts awaiting a human, surfaced ones first (table may not exist before migration 0004)
       let drafts = [];
-      try { drafts = (await store.listCardDrafts({ status: 'draft', limit: 10 })).sort((a, b) => (b.surfaced_at ? 1 : 0) - (a.surfaced_at ? 1 : 0)); } catch { drafts = []; }
+      try { drafts = (await store.listCardDrafts({ status: 'draft', limit: 30 })).sort((a, b) => (b.surfaced_at ? 1 : 0) - (a.surfaced_at ? 1 : 0)); } catch { drafts = []; }
+      // a hand-written card's automated coverage check rides on its manifest story rows
+      // (lib/hype.js writes raw_iocs.hype.card_coverage); its AI re-issue draft is a draft row that names it
+      const handIds = CARDS.flatMap((c) => c.story_ids);
+      let handRows = [];
+      try { handRows = await store.getStories(handIds); } catch { handRows = []; }
+      const coverageOf = (c) => c.source === 'ai' ? c.coverage || null
+        : handRows.filter((r) => c.story_ids.includes(r.id) && r.raw_iocs?.hype?.card_coverage).map((r) => r.raw_iocs.hype.card_coverage).sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)))[0] || null;
+      const reissueOf = (c) => { const x = drafts.find((r) => (r.reasons || []).includes(`re-issue of card ${c.slug}`)); return x ? { id: x.id, version: x.version || 1, created_at: x.created_at, url: `/?view=draft&id=${x.id}` } : null; };
+      const candidates = drafts.filter((x) => !(x.reasons || []).some((r) => r.startsWith('re-issue of card ')));
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         // live KEV status per card CVE: the card pages read it and correct a stale "not listed" row
@@ -507,27 +538,30 @@ export default async function handler(req, res) {
         const kevOf = (c) => Object.fromEntries((c.cves || []).filter((v) => kev.has(v)).map((v) => [v, { date_added: kev.get(v).dateAdded, due_date: kev.get(v).dueDate || null }]));
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.cards', generated: new Date().toISOString(),
-          cards: CARDS.map((c) => ({ ...c, url: `/cards/${c.slug}.html`, kev: kevOf(c) })),
-          candidates: drafts.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
+          cards: IDX.cards.map((c) => ({ ...c, kev: kevOf(c), coverage: coverageOf(c), reissue: c.source === 'hand' ? reissueOf(c) : null })),
+          candidates: candidates.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
       const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
-      const candidates = drafts.length ? `<h3 style="border:none">AI drafts awaiting review (${drafts.length})</h3>`
-        + drafts.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
-          + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready for review</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
+      const candHtml = candidates.length ? `<h3 style="border:none">AI drafts below the publish bar (${candidates.length})</h3>`
+        + candidates.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
+          + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready to publish</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
           + `<p class="s" style="margin:8px 0 0">AI-generated, unreviewed. ${esc(x.draft?.verdict || '')}</p></div>`).join('\n') : '';
-      const active = CARDS.filter((c) => c.status === 'active');
-      const retired = CARDS.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
-      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${retired.length ? ` · ${retired.length} archived` : ''} · hand-written one-page verdicts with lane, exposure, detection coverage and escalation triggers · print to PDF from the card</p></div>`;
+      const active = IDX.cards.filter((c) => c.status === 'active');
+      const retired = IDX.cards.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
+      const aiN = active.filter((c) => c.source === 'ai').length;
+      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${aiN ? ` (${aiN} AI-published)` : ''}${retired.length ? ` · ${retired.length} archived` : ''} · one-page verdicts with lane, exposure, detection coverage (checked automatically from public sources) and escalation triggers · print to PDF from the card</p></div>`;
       // newest day first; within a day, urgency order (hunt/IR, patch-now, patch, prepare)
       const laneRank = (l) => /hunt|ir/i.test(l) && !/patch/i.test(l) ? 0 : /now/i.test(l) ? 1 : /patch/i.test(l) ? 2 : 3;
       const sorted = [...active].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
-      const cardHtml = (c) => `<div class="card"><div class="chead"><h3><a href="/cards/${esc(c.slug)}.html">${esc(c.title)}</a></h3></div>`
+      const cardHtml = (c) => `<div class="card"><div class="chead"><h3><a href="${esc(c.url)}">${esc(c.title)}</a></h3></div>`
         + `<div><span class="c">${esc(c.lane)}</span><span class="c">as of ${esc(c.date)}</span>`
+        + (c.source === 'ai' ? `<span class="c" style="color:var(--acc)">AI-published v${esc(String(c.version || 1))}</span>` : '')
         + (c.status !== 'active' ? `<span class="c">${esc(c.status)}${c.archived_on ? ` ${esc(c.archived_on)}` : ''}</span>` : '')
         + (c.superseded_by ? `<a class="c" href="/cards/${esc(c.superseded_by)}.html">↳ superseded by ${esc(c.superseded_by)}</a>` : '')
         + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
-        + `<a class="c" href="/cards/${esc(c.slug)}.html">open card</a></div>`
+        + (reissueOf(c) && c.source === 'hand' ? `<a class="c" style="color:var(--bad)" href="${esc(reissueOf(c).url)}">AI re-issue draft v${esc(String(reissueOf(c).version))}</a>` : '')
+        + `<a class="c" href="${esc(c.url)}">open card</a></div>`
         + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`;
       const parts = [];
       let day = '';
@@ -538,7 +572,7 @@ export default async function handler(req, res) {
       if (retired.length) {
         parts.push(`<details><summary class="s">Archived (${retired.length}) — no longer tracked; pages stay at their URLs</summary>${retired.map(cardHtml).join('\n')}</details>`);
       }
-      const partsHtml = candidates + parts.join('\n');
+      const partsHtml = candHtml + parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
         `${hero}<div class="w">${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }

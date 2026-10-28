@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/", "destination": "/api/page" },
-    { "source": "/cards", "destination": "/api/page?view=cards" }
+    { "source": "/cards", "destination": "/api/page?view=cards" },
+    { "source": "/cards/:slug([a-z0-9-]+)", "destination": "/api/page?view=card&slug=:slug" }
   ],
   "functions": {
     "api/cron.js": {

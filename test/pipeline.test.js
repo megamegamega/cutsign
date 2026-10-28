@@ -81,6 +81,20 @@ test('non-allowlisted sender: stored as rejected, Discord warning, nothing else'
   assert.ok(out.discord.some((l) => /rejected .* mallory@evil\.test/.test(l)));
 });
 
+test('ordinary mail from an allowlisted sender (no date in the subject) is ignored, not run and retried', async () => {
+  const store = memoryStore();
+  const calls = installFakeLLM(defaultResponder);
+  const m = withHeaders('netscaler-style.eml', { 'Message-ID': '<note-1@x>', Subject: 'Changes to the daily threat brief' });
+  const c = await intake(store, { messages: [m] });
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  assert.equal(c.ignored, 1); assert.equal(c.accepted, 0);
+  assert.equal(store._tables.briefs[0].status, 'ignored');
+  assert.match(store._tables.briefs[0].status_reason, /not a brief/);
+  assert.equal(store._tables.runs.length, 0); assert.equal(calls.length, 0);
+  assert.ok(out.discord.some((l) => /ignored mail .* not a brief/.test(l)));
+  assert.ok(!out.discord.some((l) => /parsed 0 items/.test(l)));
+});
+
 test('[TEST] sends and second brief for the same date are ignored', async () => {
   const store = memoryStore();
   installFakeLLM(defaultResponder);

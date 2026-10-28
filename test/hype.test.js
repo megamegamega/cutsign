@@ -7,8 +7,13 @@ import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
-import { CARDS } from '../lib/cards.js';
+import { CARDS, cardIndex } from '../lib/cards.js';
+import { RECHECK_MS } from '../lib/coverage.js';
 import { installFakeLLM, captureOutputs } from './helpers.js';
+
+// The draft-loop tests below predate auto-publishing and read the loop with it off; the
+// publishing tests at the end turn it on explicitly.
+process.env.CARD_AUTOPUBLISH = '0';
 
 const uuid = (n) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
 const story = (n, over = {}) => ({
@@ -108,10 +113,23 @@ async function world({ carded = false, actionableStory = true } = {}) {
     source_urls: ['https://www.cisa.gov/news-events/alerts/x', 'https://a.example.test/1', 'https://b.example.test/2'], raw_iocs: { exposure: { only_if: ['internet-exposed'] } } });
   const quiet = story(2, { run_id: run.id, priority: 3, selected: false });
   t.stories.push(hot, quiet);
-  const kevFetch = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }] }), { status: 200 });
+  // KEV from the catalog URL; every coverage source is unreachable in this world unless a test routes it
+  const kevFetch = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }] });
   const calls = installFakeLLM(() => DRAFT);
   return { out, store, run, kevFetch, calls, hot };
 }
+/** A fake network: the KEV catalog, optional canned responses by URL substring, 404 for the rest. */
+function routed({ kev = [], routes = {} } = {}) {
+  const impl = async (url) => {
+    const u = String(url); impl.calls.push(u);
+    if (u.includes('cisa.gov/sites/default/files/feeds')) return new Response(JSON.stringify({ vulnerabilities: kev }), { status: 200 });
+    for (const [k, body] of Object.entries(routes)) if (u.includes(k)) return new Response(typeof body === 'function' ? body() : body, { status: 200 });
+    return new Response('nope', { status: 404 });
+  };
+  impl.calls = [];
+  return impl;
+}
+const CF_FEED = (hit) => `<rss><channel>${hit ? '<item><title>WAF Release - Emergency - CVE-2026-1</title><link>https://developers.cloudflare.com/waf/change-log/x/</link></item>' : '<item><title>routine</title><link>https://developers.cloudflare.com/waf/change-log/y/</link></item>'}</channel></rss>`;
 
 test('sweep: nominates, writes an AI draft when actionable, emails and posts it, and does not repeat on unchanged evidence', async () => {
   const { out, store, run, kevFetch, calls, hot } = await world();
@@ -120,8 +138,8 @@ test('sweep: nominates, writes an AI draft when actionable, emails and posts it,
   // P1 2, deep 1, KEV 3, 3 publishers 1, primary 1, exposure 1, actor 1 = 10 → nominated and surfaced
   assert.equal(c1.scored, 2); assert.equal(c1.nominated, 1); assert.equal(c1.drafted, 1); assert.equal(c1.surfaced, 1); assert.equal(c1.errors, 0, JSON.stringify(c1));
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▲ card candidate') && l.includes('KEV CVE-2026-1 +3')));
-  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI draft ready for review')));
-  assert.equal(out.emails.length, 1); assert.match(out.emails[0].subject, /AI draft ready for review/);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI draft ready to publish')));
+  assert.equal(out.emails.length, 1); assert.match(out.emails[0].subject, /AI draft ready to publish/);
   const drafts = await store.listCardDrafts();
   assert.equal(drafts.length, 1); assert.equal(drafts[0].status, 'draft'); assert.equal(drafts[0].version, 1); assert.ok(drafts[0].surfaced_at);
   assert.deepEqual(drafts[0].thread_ids, [hot.id]);
@@ -210,7 +228,7 @@ test('sweep: a carded thread with a KEV listing after the card date is raised on
   const c1 = await hypeSweep(store, { run, fetchImpl: kevLate, now });
   assert.equal(c1.carded, 1); assert.equal(c1.stale, 1); assert.equal(c1.drafted, 1); assert.equal(c1.nominated, 0); assert.equal(c1.errors, 0, JSON.stringify(c1));
   const nudge = out.discord.find((l) => l.startsWith(`Cutsign ▲ card ${card.slug}`));
-  assert.ok(nudge, out.discord.join('\n')); assert.match(nudge, /CISA KEV listed CVE-2026-1 on 2026-10-24 \(federal due 2026-10-27\)/); assert.match(nudge, /Re-issue the card/);
+  assert.ok(nudge, out.discord.join('\n')); assert.match(nudge, /CISA KEV listed CVE-2026-1 on 2026-10-24 \(federal due 2026-10-27\)/); assert.match(nudge, /AI re-issue draft follows/);
   assert.ok(out.discord.some((l) => l.includes(`AI re-issue draft for card ${card.slug}`)));
   assert.equal(calls.length, 1);
   assert.match(calls[0].messages[0].content, new RegExp(`<existing_card slug="${card.slug}" as_of="${card.date}">`));
@@ -273,4 +291,106 @@ test('draft input carries only stored facts; the schema has no slot for a covera
   const { text, sources } = buildDraftInput({ story: s, thread: [s], data: { date: '2026-10-16' }, score: 7, reasons: ['P1 +2'] });
   assert.equal(sources.length, 1); assert.match(text, /<published_guidance>/);
   assert.ok(!DraftSchema.safeParse({ ...DRAFT, coverage_checks: [{ vendor: 'x', status: 'covered' }] }).success);
+});
+
+// ---- auto-publishing and the automated coverage check -------------------------------------------
+
+const published = async () => { process.env.CARD_AUTOPUBLISH = '1'; const w = await world(); return w; };
+const off = () => { process.env.CARD_AUTOPUBLISH = '0'; };
+
+test('publish: a draft over the surface bar is published as an AI card with its coverage check, and the site indexes it', async (t) => {
+  t.after(off);
+  const { out, store, run, calls, hot } = await published();
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': CF_FEED(true) } });
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c1.published, 1); assert.equal(c1.drafted, 1); assert.equal(c1.coverage_checked, 1); assert.equal(c1.errors, 0, JSON.stringify(c1));
+  const [row] = await store.listCardDrafts();
+  assert.equal(row.status, 'promoted'); assert.equal(row.promoted_slug, 'vendor-appliance-zero-day-exploited-2026'); assert.ok(row.surfaced_at);
+  assert.deepEqual(row.draft.cves, ['CVE-2026-1']);
+  const cov = row.draft.coverage;
+  assert.ok(cov?.lanes?.length, 'coverage stored on the draft');
+  assert.equal(cov.lanes.find((l) => l.id === 'kev:CVE-2026-1').status, 'published');
+  assert.equal(cov.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
+  assert.equal(cov.lanes.find((l) => l.id === 'crowdstrike').status, 'check failed');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card published') && l.includes('/cards/vendor-appliance-zero-day-exploited-2026') && l.includes('coverage:')), out.discord.join('\n'));
+  assert.match(out.emails[0].subject, /AI verdict card published/);
+  assert.equal(calls.length, 1, 'coverage is fetches, not model calls');
+  // the site: the row is a card, found from the story thread; its page says what it is
+  const idx = cardIndex(await store.listCardDrafts({ status: 'promoted' }));
+  assert.equal(idx.cardForStory(hot).url, '/cards/vendor-appliance-zero-day-exploited-2026');
+  const page = draftBody(row, { published: true });
+  assert.match(page, /published automatically by the pipeline/); assert.match(page, /Detection coverage — checked automatically/); assert.match(page, /Cloudflare WAF/);
+  assert.doesNotMatch(page, /human edit/);
+  // an hour later: nothing new, coverage not yet stale, no second publish
+  const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.published, 0); assert.equal(c2.coverage_checked, 0); assert.equal(calls.length, 1);
+});
+
+test('publish: a revision re-issues the published card in place (same slug, old version superseded); dismissing unpublishes', async (t) => {
+  t.after(off);
+  const { store, run, kevFetch, calls, hot, out } = await published();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
+  assert.equal(c.revised, 1); assert.equal(c.published, 1); assert.equal(calls.length, 2);
+  const all = (await store.listCardDrafts()).sort((a, b) => a.version - b.version);
+  assert.equal(all[0].status, 'superseded'); assert.equal(all[1].status, 'promoted'); assert.equal(all[1].promoted_slug, all[0].promoted_slug);
+  assert.equal(cardIndex(all).cards.filter((x) => x.source === 'ai').length, 1, 'one card, the current version');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card re-issued (v2)')));
+  // a person dismisses it: the loop stops and the card is gone from the index
+  await store.updateCardDraft(all[1].id, { status: 'dismissed' });
+  store._tables.evidence.push({ id: 'e2', story_id: hot.id, kind: 'guidance', raw: 'Hunt for Y', url: 'https://v.example.test/g', publisher_tier: 'B' });
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 8 * 3600_000 });
+  assert.equal(c3.drafted + c3.revised + c3.published, 0); assert.equal(calls.length, 2);
+  assert.equal(cardIndex(await store.listCardDrafts()).cards.filter((x) => x.source === 'ai').length, 0);
+});
+
+test('publish: with autopublish off the draft waits; turning it on publishes it on the next sweep without a new model call', async (t) => {
+  t.after(off);
+  const { store, run, kevFetch, calls } = await world();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal((await store.listCardDrafts())[0].status, 'draft');
+  process.env.CARD_AUTOPUBLISH = '1';
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
+  assert.equal(c.published, 1); assert.equal(calls.length, 1);
+  const [row] = await store.listCardDrafts();
+  assert.equal(row.status, 'promoted'); assert.ok(row.promoted_slug);
+});
+
+test('coverage: the published card is re-checked daily and a lane that moved is posted', async (t) => {
+  t.after(off);
+  const { store, run, out } = await published();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': CF_FEED(false) } }), now });
+  let [row] = await store.listCardDrafts();
+  assert.equal(row.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'nothing found');
+  // the next day Cloudflare ships a rule: the daily re-check sees it
+  const later = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': CF_FEED(true) } });
+  const c = await hypeSweep(store, { run, fetchImpl: later, now: now + RECHECK_MS + 1 });
+  assert.equal(c.coverage_checked, 1, JSON.stringify(c)); assert.equal(c.coverage_changed, 1); assert.equal(c.published, 0);
+  [row] = await store.listCardDrafts();
+  assert.equal(row.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ coverage changed for AI card') && l.includes('Cloudflare WAF managed-ruleset changelog: nothing found → published')));
+});
+
+test('coverage: a hand-written card gets the same daily check, stored on its manifest story row for the card page', async () => {
+  const { store, run, hot, out } = await world({ carded: true });
+  const card = CARDS[0];
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const net = routed({ kev: [{ cveID: card.cves[0] || 'CVE-2026-1', dateAdded: '2026-10-16' }], routes: { 'developers.cloudflare.com': CF_FEED(false) } });
+  const c1 = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c1.carded, 1); assert.equal(c1.coverage_checked, 1);
+  const row = await store.getStory(hot.id);
+  const cov = row.raw_iocs.hype.card_coverage;
+  assert.ok(cov?.lanes?.length);
+  assert.ok(cov.cves.includes(card.cves[0] || 'CVE-2026-1'), 'the CVEs the card names are checked');
+  // same day: not re-asked; next day: re-asked, and a change is posted
+  const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.coverage_checked, 0);
+  const c3 = await hypeSweep(store, { run, fetchImpl: routed({ kev: [], routes: { 'developers.cloudflare.com': CF_FEED(true) } }), now: now + RECHECK_MS + 1 });
+  assert.equal(c3.coverage_checked, 1);
+  assert.ok(out.discord.some((l) => l.startsWith(`Cutsign ▣ coverage changed for card ${card.slug}`)), out.discord.join('\n'));
 });
