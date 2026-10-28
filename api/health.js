@@ -21,5 +21,15 @@ export default async function handler(req, res) {
       tables[t] = !error ? 'ok' : /does not exist|could not find|schema cache/i.test(error.message) ? 'missing' : 'error';
     }
   } catch { for (const t of OPTIONAL_TABLES) tables[t] = 'unknown'; }
-  return res.json({ ok: true, service: 'cutsign', version: 'v0', inbound: source, paused: process.env.PAUSED === '1', missing_env: missing, tables });
+  // optional integrations, verified live: GitHub code search for the coverage check (lib/coverage.js)
+  // needs a read-only token; the rate-limit endpoint says whether the one set is accepted, never what it is
+  let github = 'unset';
+  if (process.env.GITHUB_TOKEN) {
+    try {
+      const r = await fetch('https://api.github.com/rate_limit', { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
+      github = r.status === 200 ? 'ok' : r.status === 401 ? 'unauthorized' : `http ${r.status}`;
+    } catch { github = 'unreachable'; }
+  }
+  const optional = { github, card_autopublish: process.env.CARD_AUTOPUBLISH === '0' ? 'off' : 'on' };
+  return res.json({ ok: true, service: 'cutsign', version: 'v0', inbound: source, paused: process.env.PAUSED === '1', missing_env: missing, tables, optional });
 }
