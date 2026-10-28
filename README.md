@@ -83,6 +83,8 @@ AI-generated draft from one Opus call, shaped on the DAIR model (Detect, Verify 
 Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic Incident Response*).
 Each draft records the evidence fingerprint it was built from; when the evidence changes, the draft
 is revised from the prior version as a new row with a change list, the old one marked superseded.
+A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
+lint-clean and in both dialects, and the model writes only what a hit means.
 Over `HYPE_SURFACE` (9) a draft is surfaced: an "AI draft" chip on its story in the CISO view, an
 `ai_draft` link in the agent JSON, first place on the Cards tab, and a "ready for review" email.
 Drafts live in `card_drafts` (migrations 0004, 0005), render at `/?view=draft&id=…` behind an
@@ -108,7 +110,9 @@ an honest `confidence` (`stated` / `derived` / `speculative`) and `params` holdi
 story-specific literal, so a consumer can re-parameterise it. Every proposal passes a deterministic
 linter or is dropped with the reason recorded: the only index form is the placeholder, no literal
 sourcetype, data stream, host, user or email, read-only commands only, and no literal the story
-record does not print. A story whose telemetry is `other` only gets no call. The proposer runs on
+record does not print. A story whose telemetry is `other` only, or names a single family, gets no
+call: single-source hunts are template territory for the consumer, and the proposer earns its cost
+only where a hunt has to cross families. The proposer runs on
 its own model tier (`LLM_MODEL_PROPOSE`, Claude Fable 5.1) and falls back to the deep tier once
 month-to-date spend passes 80% of `MAX_MONTHLY_USD`, marking the proposal `model_tier: deep`.
 Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), collapsed in the web

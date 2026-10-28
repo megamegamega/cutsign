@@ -93,26 +93,34 @@ test('at or past 80% of the monthly cap the proposer runs on the deep tier and s
   assert.equal(r2.model_tier, 'propose');
 });
 
-test('a story whose telemetry is other only gets no call and an empty list', async () => {
+test('a story whose telemetry is other only, or one family only, gets no call and an empty list', async () => {
   const calls = installFakeLLM(() => PROPOSAL());
   const r = await generateQueries({ ...CW, behaviors: CW.behaviors.map((b) => ({ ...b, log_source: 'unspecified' })), guidance: [], samples: [] });
   assert.equal(calls.length, 0); assert.deepEqual(r.proposals, []); assert.match(r.skipped, /other only/);
+  // one family: template territory, the proposer stays out
+  const one = await generateQueries({ ...CW, behaviors: CW.behaviors.map((b) => ({ ...b, log_source: 'Entra ID sign-in logs' })), guidance: [], samples: [] });
+  assert.equal(calls.length, 0); assert.match(one.skipped, /one telemetry family \(entra_signin\)/);
   assert.ok(eligible({ selected: true, status: 'extracted', priority: 2 }));
   assert.ok(!eligible({ selected: true, status: 'extracted', priority: 3 }));
   assert.ok(!eligible({ selected: false, status: 'extracted', priority: 1 }));
 });
 
 const NS_PROPOSAL = { proposed_queries: [{
-  shape: 'single_source', name: 'nsppe_spawns_shell', hypothesis: 'The packet engine spawns an interactive shell.',
-  stages: [{ log_source_key: 'appliance_logs', predicate: 'child of nsppe is a shell or interpreter', fields: ['parent', 'child'] }], join: null,
-  splunk: 'index=<appliance_logs> parent=nsppe | stats count by child', elastic: 'FROM <appliance_logs> | WHERE process.parent.name == "nsppe" | STATS c = COUNT(*) BY process.name',
-  params: [], noise_hint: 'vendor maintenance scripts run as root from the same parent; exclude the documented script paths', from: ['behaviors[0]'], confidence: 'stated',
+  shape: 'correlation', name: 'nsppe_shell_then_download', hypothesis: 'The packet engine spawns a shell that then fetches a payload.',
+  stages: [{ log_source_key: 'appliance_logs', predicate: 'child of nsppe is a shell or interpreter', fields: ['parent', 'child'] },
+    { log_source_key: 'endpoint_process', predicate: 'that shell runs curl or wget', fields: ['process.parent.name', 'process.name'] }], join: { on: 'host', window: '5m' },
+  splunk: 'index=<appliance_logs> parent=nsppe | join type=inner host [ search index=<endpoint_process> process.name=curl | fields host ] | stats count by child',
+  elastic: 'FROM <appliance_logs> | WHERE process.parent.name == "nsppe" | LOOKUP JOIN <endpoint_process> ON host | STATS c = COUNT(*) BY process.name',
+  params: [], noise_hint: 'vendor maintenance scripts run as root from the same parent; exclude the documented script paths', from: ['behaviors[0]', 'behaviors[1]'], confidence: 'derived',
 }] };
+// the NetScaler fixture names one telemetry family; give its guidance a second so the proposer has a correlation to make
+const NS_TWO = { ...NETSCALER_EXTRACTION, detection_guidance: NETSCALER_EXTRACTION.detection_guidance.map((g, i) => (i ? g : { ...g, log_source: 'EDR process events and appliance logs' })) };
+const nsTwoResponder = (user, n, req) => (req.schemaName === 'proposal' ? NS_PROPOSAL : /nsppe|NetScaler ADC post-exploitation/.test(user) ? NS_TWO : defaultResponder(user, n, req));
 
 test('stage queried: proposals for the deep P1 story, the ✔ line counts them, the email omits them, a resumed stage does not propose twice', async () => {
   const out = captureOutputs();
   const store = memoryStore();
-  const calls = installFakeLLM((user, n, req) => (req.schemaName === 'proposal' ? NS_PROPOSAL : defaultResponder(user, n, req)));
+  const calls = installFakeLLM(nsTwoResponder);
   await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
   await driveRuns(store, { fetchImpl: fakeFetch() });
   const run = store._tables.runs[0];
@@ -137,6 +145,18 @@ test('stage queried: proposals for the deep P1 story, the ✔ line counts them, 
   assert.equal(store._tables.stories.find((s) => s.id === ns.id).raw_iocs.proposed_queries.length, 1, 'no duplicate proposals');
 });
 
+test('stage queried: a deep story with one telemetry family is skipped without a call (template territory)', async () => {
+  captureOutputs();
+  const store = memoryStore();
+  const calls = installFakeLLM((user, n, req) => (req.schemaName === 'proposal' ? NS_PROPOSAL : defaultResponder(user, n, req)));
+  await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  const ns = store._tables.stories.find((s) => s.title.startsWith('NetScaler ADC post-exploitation'));
+  assert.ok(ns.selected);
+  assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 0);
+  assert.deepEqual(ns.raw_iocs.proposed_queries, []); assert.match(ns.raw_iocs.proposals.skipped, /one telemetry family \(appliance_logs\)/);
+});
+
 test('stage queried: a deep story with other-only telemetry yields an empty list and no model call', async () => {
   captureOutputs();
   const store = memoryStore();
@@ -157,7 +177,7 @@ test('stage queried: a deep story with other-only telemetry yields an empty list
 test('stage queried: a proposal that fails validation twice is recorded on the story and never fails the run', async () => {
   const out = captureOutputs();
   const store = memoryStore();
-  installFakeLLM((user, n, req) => (req.schemaName === 'proposal' ? { nonsense: true } : defaultResponder(user, n, req)));
+  installFakeLLM((user, n, req) => (req.schemaName === 'proposal' ? { nonsense: true } : nsTwoResponder(user, n, req)));
   await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
   await driveRuns(store, { fetchImpl: fakeFetch() });
   const run = store._tables.runs[0];

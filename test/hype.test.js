@@ -231,6 +231,31 @@ test('sweep: a carded thread with a KEV listing after the card date is raised on
   assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-1', 'event:ev1']);
 });
 
+test('a draft takes its Detect section from the thread\'s proposer hunts instead of inventing queries', async () => {
+  const { store, run, kevFetch, calls, hot } = await world();
+  const hunt = {
+    id: 'p1', name: 'sp_token_then_mail_access', shape: 'correlation', confidence: 'derived', hypothesis: 'A listed appId obtains a token and then reads mail.',
+    stages: [{ log_source_key: 'entra_signin', predicate: 'x', fields: [] }, { log_source_key: 'm365_ual', predicate: 'y', fields: [] }], join: { on: 'appId', window: '1h' },
+    splunk: 'index=<entra_signin> | join appId [ search index=<m365_ual> | fields appId ] | table appId', elastic: 'FROM <entra_signin> | LOOKUP JOIN <m365_ual> ON appId | KEEP appId',
+    params: {}, noise_hint: 'the backup job reads mail on a schedule', from: ['behaviors[0]'], tier: 'proposed', model_tier: 'propose', model: 'm', cost_usd: 0.2,
+  };
+  const row = store._tables.stories.find((s) => s.id === hot.id);
+  row.raw_iocs = { ...(row.raw_iocs || {}), proposed_queries: [hunt] };
+  // the model writes its own (unlinted) hunt plus a hit_means for the proposer's; only the latter survives
+  const draftCalls = installFakeLLM(() => ({ ...DRAFT, detect: [{ name: 'sp_token_then_mail_access', log_source: 'x', spl: 'index=* ignored', hit_means: 'a listed app read a mailbox it never touched before' }, { name: 'invented', log_source: 'y', spl: 'index=* parent=x', hit_means: 'z' }] }));
+  assert.equal(calls.length, 0, 'the fixture fake was replaced before any call');
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-16T13:00:00Z') });
+  assert.equal(c.drafted, 1, JSON.stringify(c));
+  const [d] = await store.listCardDrafts();
+  assert.equal(d.draft.detect.length, 1);
+  assert.equal(d.draft.detect[0].spl, hunt.splunk); assert.equal(d.draft.detect[0].esql, hunt.elastic); assert.equal(d.draft.detect[0].proposal_id, 'p1');
+  assert.equal(d.draft.detect[0].log_source, 'entra_signin → m365_ual'); assert.equal(d.draft.detect[0].hit_means, 'a listed app read a mailbox it never touched before');
+  const input = draftCalls.at(-1).messages[0].content;
+  assert.match(input, /<proposed_hunts>\n- sp_token_then_mail_access \[entra_signin → m365_ual\] derived:/);
+  const page = draftBody(d);
+  assert.match(page, /proposer hunt, derived/); assert.match(page, /LOOKUP JOIN &lt;m365_ual&gt;/); assert.match(page, /Noise: the backup job/);
+});
+
 test('cardDevelopments: nothing before the card date, KEV and HIGH events after it', () => {
   const card = { slug: 'x', date: '2026-10-23', cves: ['CVE-2026-1'] };
   const thread = [{ id: 's1', cves: ['CVE-2026-2'] }];
