@@ -529,7 +529,16 @@ export default async function handler(req, res) {
       try { handRows = await store.getStories(handIds); } catch { handRows = []; }
       const coverageOf = (c) => c.source === 'ai' ? c.coverage || null
         : handRows.filter((r) => c.story_ids.includes(r.id) && r.raw_iocs?.hype?.card_coverage).map((r) => r.raw_iocs.hype.card_coverage).sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)))[0] || null;
-      const reissueOf = (c) => { const x = drafts.find((r) => (r.reasons || []).includes(`re-issue of card ${c.slug}`)); return x ? { id: x.id, version: x.version || 1, created_at: x.created_at, url: `/?view=draft&id=${x.id}` } : null; };
+      // the re-issue draft is folded into the hand-written card page by lifecycle.js: the new lane and
+      // verdict, what changed since the card's as-of date, the timeline after it; the draft page has the rest
+      const reissueOf = (c) => {
+        const x = drafts.find((r) => (r.reasons || []).includes(`re-issue of card ${c.slug}`));
+        if (!x) return null;
+        const d = x.draft || {};
+        return { id: x.id, version: x.version || 1, created_at: x.created_at, as_of: String(x.created_at).slice(0, 10), url: `/?view=draft&id=${x.id}`,
+          lane: d.lane || null, priority: d.triage?.priority || null, confidence: d.confidence || null, verdict: d.verdict || null,
+          changes: (d.changes_since_prior || []).slice(0, 10), timeline: (d.timeline || []).filter((t) => String(t.date || '') > c.date).slice(0, 10) };
+      };
       const candidates = drafts.filter((x) => !(x.reasons || []).some((r) => r.startsWith('re-issue of card ')));
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -560,7 +569,7 @@ export default async function handler(req, res) {
         + (c.status !== 'active' ? `<span class="c">${esc(c.status)}${c.archived_on ? ` ${esc(c.archived_on)}` : ''}</span>` : '')
         + (c.superseded_by ? `<a class="c" href="/cards/${esc(c.superseded_by)}.html">↳ superseded by ${esc(c.superseded_by)}</a>` : '')
         + c.cves.map((v) => `<a class="c" href="/?q=${encodeURIComponent(v)}">${esc(v)}</a>`).join('')
-        + (reissueOf(c) && c.source === 'hand' ? `<a class="c" style="color:var(--bad)" href="${esc(reissueOf(c).url)}">AI re-issue draft v${esc(String(reissueOf(c).version))}</a>` : '')
+        + (reissueOf(c) && c.source === 'hand' ? `<a class="c" style="color:var(--bad)" href="${esc(c.url)}">re-issued ${esc(reissueOf(c).as_of)} (AI v${esc(String(reissueOf(c).version))})${reissueOf(c).lane && reissueOf(c).lane !== c.lane ? ` · ${esc(reissueOf(c).lane)}` : ''}</a>` : '')
         + `<a class="c" href="${esc(c.url)}">open card</a></div>`
         + `<p style="margin:8px 0 0">${esc(c.summary)}</p></div>`;
       const parts = [];

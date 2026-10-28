@@ -29,8 +29,27 @@
         + ' <a href="/?view=cards">All cards</a>');
     }
 
+    // the pipeline's re-issue, folded in: new lane and verdict first, then what changed and the
+    // timeline after the card's date; the hand-written verdict below stays as of its own date
     if (me.reissue && me.reissue.url) {
-      banner('reissue', `Developments after this card's as-of date (${esc(me.date)}): the pipeline wrote an <a href="${esc(me.reissue.url)}">AI re-issue draft (v${esc(me.reissue.version)}, ${esc(String(me.reissue.created_at).slice(0, 10))})</a> that folds them in. AI-generated and unreviewed; the card below is the human-written verdict as of its date.`);
+      const r = me.reissue;
+      const asOf = esc(r.as_of || String(r.created_at).slice(0, 10));
+      const laneLine = r.lane && r.lane !== me.lane ? `<p style="margin:6px 0 0"><b>Lane:</b> ${esc(me.lane)} → <b>${esc(r.lane)}</b>${r.priority ? ` · ${esc(r.priority)}` : ''}${r.confidence ? ` · confidence ${esc(r.confidence)}` : ''}</p>` : (r.priority ? `<p style="margin:6px 0 0"><b>Lane:</b> ${esc(r.lane || me.lane)} · ${esc(r.priority)}</p>` : '');
+      const changes = (r.changes || []).length ? `<p style="margin:8px 0 2px"><b>Changed since ${esc(me.date)}</b></p><ul style="margin:0;padding-left:20px;font-weight:400">${r.changes.map((x) => `<li>${esc(x).replace(/\[(S\d+)\]/g, '<span class="src">[$1]</span>')}</li>`).join('')}</ul>` : '';
+      const tl = (r.timeline || []).length ? `<p style="margin:8px 0 2px"><b>Since the card</b></p><table style="font-weight:400">${r.timeline.map((t) => `<tr><td>${esc(t.date)}</td><td>${esc(t.event)}</td></tr>`).join('')}</table>` : '';
+      banner('reissue', `<b>Re-issued automatically as of ${asOf}</b> (AI-generated v${esc(r.version)}, written by the pipeline from the stored public sources after developments on or after the card's as-of date, ${esc(me.date)}). `
+        + (r.verdict ? `<span style="font-weight:400">${esc(r.verdict)}</span>` : '')
+        + laneLine + changes + tl
+        + `<p style="margin:8px 0 0;font-weight:400">The hand-written verdict below is as of ${esc(me.date)}. The <a href="${esc(r.url)}">full AI re-issue</a> has the hunts, scope, containment and sources behind this; its detection coverage and exposure queries are the automated ones on this page.</p>`);
+      const asofEl = document.querySelector('.asof');
+      if (asofEl) asofEl.insertAdjacentHTML('beforeend', ` <span class="src">· re-issued ${asOf} (AI)</span>`);
+      const laneEl = document.querySelector('.card .lane');
+      if (laneEl && r.lane && r.lane !== me.lane) laneEl.insertAdjacentHTML('beforeend', ` <span class="src">· re-issued: ${esc(r.lane)}</span>`);
+      // a header tag the re-issue contradicts is struck, not deleted: the card stays legible as of its date
+      const exploited = /actively exploited|in[- ]the[- ]wild|exploitation (observed|confirmed)/i.test((r.changes || []).join(' ') + ' ' + (r.verdict || ''));
+      for (const tag of document.querySelectorAll('.card .lane .tag')) {
+        if (exploited && /^no (known )?exploitation/i.test(tag.textContent.trim())) { tag.style.textDecoration = 'line-through'; tag.title = 'superseded by the re-issue'; }
+      }
     }
 
     if (me.coverage && me.coverage.lanes && me.coverage.lanes.length) {
@@ -60,6 +79,9 @@
 
     const listed = Object.entries(me.kev || {});
     if (!listed.length) return;
+    for (const tag of document.querySelectorAll('.card .lane .tag')) {
+      if (/^not in kev$/i.test(tag.textContent.trim())) { tag.textContent = 'In KEV (live)'; tag.removeAttribute('style'); tag.title = 'corrected from the live CISA KEV catalog'; }
+    }
     const text = listed.map(([cve, k]) => `${cve} listed ${k.date_added}${k.due_date ? ', federal due ' + k.due_date : ''}`).join('; ');
     const live = `<span class="src">(live from the CISA KEV catalog)</span>`;
     const row = [...document.querySelectorAll('tr')].find((tr) => tr.firstElementChild && tr.firstElementChild.tagName === 'TD' && tr.firstElementChild.textContent.trim() === 'KEV');

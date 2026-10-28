@@ -128,7 +128,10 @@ coverage changes.
 A thread that already has a hand-written card is not scored, but it is kept honest: each sweep
 compares the card's as-of date with what happened after it (a CISA KEV listing of a CVE the card
 names, a HIGH watch development). Each development is raised once on Discord and folded into an AI
-re-issue draft, which the card page links at the top until the card is re-issued. Two things need
+re-issue draft, which the card page folds in automatically: the re-issue's lane, verdict, change
+list and post-card timeline render at the top of the hand-written card (its header tags corrected
+where the re-issue or the live KEV catalog contradicts them), the Cards tab shows the re-issued date
+and lane, and the hand-written verdict below stays as of its own date. Two things need
 no re-issue at all: a story is linked to its card by CVE when the update chain misses, and every
 card page corrects its KEV row from the live catalog (the cards JSON carries `kev`, `coverage` and
 `reissue` per card). The draft call itself survives the API refusing a wide schema's grammar: it is
