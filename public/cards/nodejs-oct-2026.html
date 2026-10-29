@@ -64,6 +64,7 @@ th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color
 a{color:var(--ink)}
 .num{font-variant-numeric:tabular-nums}
 @media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
   /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
      the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
   :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e4b65a;--lane-bg:#2b2416;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
