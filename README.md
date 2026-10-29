@@ -110,7 +110,10 @@ QID knowledge base itself needs a login, so a hand card's "nothing published" sc
 corrected on the page the day Qualys prints one), Red Hat security data
 (errata), Tenable's plugin search (plugin ids and names), the Debian tracker, the Nuclei template
 tree, Emerging Threats open rules (Suricata sids), the SigmaHQ, Elastic and Splunk rule
-repositories (one GitHub code search per term, spaced to the API's limit), and the feeds and
+repositories (one GitHub code search per term — the legacy parser ANDs terms whatever "OR" says —
+the campaign name first, then the CVE ids, three a card, spaced 7 s apart so a sweep over every
+card stays under the API's ten a minute; a stated name's bracketed aliases are split into terms,
+since whole they are a parser error), and the feeds and
 changelogs of CrowdStrike, Microsoft Security, SentinelOne (Labs and the product blog), Cloudflare's
 WAF managed ruleset, Akamai, Wiz, Talos, Elastic Security Labs, Unit 42, Huntress, Sophos, Arctic
 Wolf and Rapid7. Each lane ends in one of four statuses — `published` (with the link), `nothing
@@ -118,8 +121,9 @@ found` (the source answered and had nothing; itself a finding), `not checkable` 
 repositories need `GITHUB_TOKEN` for GitHub code search) or `check failed` — so a dead feed never
 reads as "nothing published". `GITHUB_TOKEN` must be a classic token (no scopes; the rule
 repositories are public): GitHub's code search refuses a fine-grained token for any repository it
-was not granted (HTTP 422), the lane prints GitHub's reason, and `/api/health` reports `github` from
-a one-result code search so a token that cannot search never reads as `ok`. Feeds match on the CVE id anywhere in the item, or on the campaign's
+was not granted (HTTP 422). A failed search prints GitHub's own reason (a parser error names the
+term; a token refusal names the token kind), and `/api/health` reports `github` from a one-result
+code search so a token that cannot search never reads as `ok`. Feeds match on the CVE id anywhere in the item, or on the campaign's
 nickname or product name in the title inside the campaign window (vendor feeds say "PHP2Shell" and
 never print the CVE id); a plain capitalised word never matches. The check is
 re-asked daily for every published card and every hand-written card (stored on the card's manifest

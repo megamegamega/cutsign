@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   nicknameTerms, tenablePlugins,
   feedItems, matchItems, qids, rapid7Flags, redhatSummary, nvdSummary, etSids, coverageTerms,
-  checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS, ghFailure,
+  checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS, ghFailure, ghTerm, aliases,
 } from '../lib/coverage.js';
 
 const CVE = 'CVE-2026-424242';
@@ -39,6 +39,10 @@ test('parsers: QIDs, Rapid7 flags, Red Hat errata, NVD score, Emerging Threats s
 test('coverage terms: stated names plus product-looking words from the title, never generic ones', () => {
   assert.deepEqual(coverageTerms({ title: 'ConnectWise Cloud Backup supply chain compromise', threat_actor: 'Storm-0940' }), ['Storm-0940', 'ConnectWise', 'Backup']);
   assert.deepEqual(coverageTerms({ title: 'Microsoft October security updates' }), []);
+  assert.deepEqual(coverageTerms({ title: 'UAT-11473 exploits Cisco SD-WAN', malware_family: 'KeyDrift (PolyFlame, LittleFilch)' }), ['KeyDrift', 'PolyFlame', 'LittleFilch', 'UAT-11473', 'Cisco', 'SD-WAN'], 'a bracketed alias list becomes one term per alias');
+  assert.deepEqual(aliases('Storm-0940 / Water Curse aka Lemon Sandstorm'), ['Storm-0940', 'Water Curse', 'Lemon Sandstorm']);
+  assert.equal(ghTerm('KeyDrift (PolyFlame, LittleFilch)'), '"KeyDrift PolyFlame LittleFilch"', 'operators stripped, spaces quoted');
+  assert.equal(ghTerm('UAT-11473'), 'UAT-11473'); assert.equal(ghTerm('Node.js'), 'Node.js'); assert.equal(ghTerm('(,)'), '');
 });
 
 /** Fake network: a router over the URLs the lanes ask. */
@@ -190,10 +194,25 @@ test('GitHub code search: a 403 with retry-after is waited out once and retried;
   assert.deepEqual(waits, [2000], 'slept for the retry-after the API asked for');
   assert.equal(byId(cov, 'sigma').status, 'published');
   const q = net.calls.filter((u) => u.includes('api.github.com/search/code')).map((u) => decodeURIComponent(u));
-  assert.equal(q.length, 3, 'the rate-limited call, its retry, then the nickname term');
-  assert.ok(q[0].includes(`${CVE} repo:SigmaHQ/sigma repo:elastic/detection-rules repo:splunk/security_content`), q[0]);
-  assert.ok(q[2].includes('Widget2Shell repo:'), 'the nickname is searched too (Splunk and Elastic name rules by the campaign, not the CVE)');
+  assert.equal(q.length, 3, 'the rate-limited call, its retry, then the CVE term');
+  assert.ok(q[0].includes(`Widget2Shell repo:SigmaHQ/sigma repo:elastic/detection-rules repo:splunk/security_content`), 'the nickname is searched first (Splunk and Elastic name rules by the campaign, not the CVE; a three-CVE card must not push it out)');
+  assert.ok(q[2].includes(`${CVE} repo:`), q[2]);
   assert.ok(!q.some((u) => u.includes('Remote repo:')), 'a plain word is not searched');
+  assert.match(byId(cov, 'sigma').detail, /^1 file names Widget2Shell: rules\/web\/x\.yml/, 'the detail says which term found the files');
+  assert.match(byId(cov, 'elastic_rules').detail, /^no rule file names Widget2Shell \/ CVE-2026-424242/);
+});
+
+test('GitHub code search: a bracketed alias list is split and quoted before it reaches the query parser (whole, it was a 422); at most three terms a card', async () => {
+  const net = fakeNet();
+  const cov = await checkCoverage({ cves: ['CVE-2026-20127'], terms: coverageTerms({ title: 'UAT-11473 exploits Cisco SD-WAN', malware_family: 'KeyDrift (PolyFlame, LittleFilch)' }), fetchImpl: net, githubToken: 'tok', ...quick });
+  const q = net.calls.filter((u) => u.includes('api.github.com/search/code')).map((u) => decodeURIComponent(u).replace(/.*[?&]q=/, '').replace(/&.*/, ''));
+  assert.deepEqual(q.map((s) => s.replace(/ repo:.*/, '')), ['KeyDrift', 'CVE-2026-20127', 'PolyFlame']);
+  assert.ok(!q.some((s) => /[(),]/.test(s)), 'no parser operator in any query');
+  assert.equal(byId(cov, 'sigma').status, 'published');
+});
+
+test('GitHub code search: a 422 from the parser says so rather than blaming the token', () => {
+  assert.match(ghFailure({ status: 422, text: '{"message":"ERROR_TYPE_QUERY_PARSING_FATAL unable to parse query!"}' }), /unable to parse query.*could not parse the query/);
 });
 
 test('GitHub code search: a 422 names GitHub\'s reason and the token kind to fix it, on every rule-repo lane', async () => {
