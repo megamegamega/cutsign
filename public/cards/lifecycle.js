@@ -86,9 +86,9 @@
 
     const ex = me.coverage && me.coverage.exposure;
     if (ex && ((ex.items && ex.items.length) || ex.note)) {
-      const rows = (ex.items || []).map((i) => `<tr><td>${esc(i.engine)}</td><td><pre style="margin:0">${esc(i.query)}</pre></td><td class="src">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</td></tr>`).join('');
-      const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>`
-        + (rows ? `<table><tr><th>Engine</th><th>Query</th><th>Reads</th></tr>${rows}</table>` : '')
+      // one block per query, not a table: a <pre> in a table cell collapses to one character a line on a phone
+      const rows = (ex.items || []).map((i) => `<div style="margin:0 0 10px"><p style="margin:0"><b>${esc(i.engine)}</b> <span class="src">· ${esc(i.kind || '')}${i.for ? ` · ${esc(i.for)}` : ''}</span></p><pre style="margin:4px 0">${esc(i.query)}</pre><p class="src" style="margin:0">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</p></div>`).join('');
+      const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>` + rows
         + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '')
         + `<p class="src">Scope every query in your own tool, never in a shared document: Shodan <code>net:&lt;your_ranges&gt;</code>, <code>org:"&lt;your_org&gt;"</code> or <code>hostname:&lt;your_domain&gt;</code> (or a Shodan Monitor network alert, which applies the scope for you); Censys <code>host.ip</code> or <code>host.dns.names</code>. Then compare the banner version with the affected range. Built ${esc(String(ex.built_at).slice(0, 16).replace('T', ' '))}Z from the CVE ids and NVD's CPE configurations; re-built daily with the coverage check.</p>`;
       const live = document.getElementById('coverage-live');

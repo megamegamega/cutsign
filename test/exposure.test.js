@@ -65,7 +65,8 @@ test('exposureQueries: a CVE query per CVE, three product queries per CPE, a sco
 
 test('exposureTable: queries rendered verbatim, escaped, with the scope note', () => {
   const html = exposureTable(exposureQueries({ cves: [CVE], cpes: [{ part: 'a', vendor: 'v', product: 'p<x>', cpe23: 'cpe:2.3:a:v:p<x>', ranges: [] }], now: Date.parse('2026-10-28T12:00:00Z') }));
-  assert.match(html, /<pre style="margin:0">vuln:CVE-2026-424242<\/pre>/);
+  assert.match(html, /<pre style="margin:4px 0">vuln:CVE-2026-424242<\/pre>/);
+  assert.ok(!/<table>/.test(html), 'queries are blocks, not table cells (a pre in a cell collapses on a phone)');
   assert.match(html, /product:&quot;P&lt;x&gt;&quot;/);
   assert.match(html, /your_ranges/);
   assert.match(html, /2026-10-28 12:00Z/);
