@@ -102,7 +102,9 @@ and are scrubbed with the repo's hygiene rules.
 coverage; the pipeline asks the public sources instead and prints what each one said. Every draft
 and every published card carries a table built from: the impacted vendor's own page (a primary
 source among the thread's sources), CISA KEV, NVD (CVSS), Rapid7's vulnerability database (its
-own InsightVM coverage flag), Qualys ThreatPROTECT posts (QIDs when printed), Red Hat security data
+own InsightVM coverage flag), Qualys ThreatPROTECT and Security Blog posts (the QIDs they print; the
+QID knowledge base itself needs a login, so a hand card's "nothing published" scanner row is
+corrected on the page the day Qualys prints one), Red Hat security data
 (errata), the Debian tracker, the Nuclei template tree, Emerging Threats open rules (Suricata
 sids), and the feeds and changelogs of CrowdStrike, Microsoft Security, SentinelOne, Cloudflare's
 WAF managed ruleset, Akamai, Wiz, Talos, Elastic Security Labs, Unit 42, Huntress, Sophos, Arctic

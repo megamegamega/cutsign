@@ -63,6 +63,20 @@
       if (h) { let el = h.nextElementSibling; while (el && el.tagName !== 'TABLE' && el.tagName !== 'H2') el = el.nextElementSibling; if (el && el.tagName === 'TABLE') anchor = el; }
       if (anchor) anchor.insertAdjacentHTML('afterend', html);
       else document.body.insertAdjacentHTML('beforeend', html);
+
+      // a hand-written scanner row that said "nothing published" is corrected from the live lane, the
+      // way the KEV row is: struck, not deleted, with the QIDs Qualys has printed since the card's date
+      const live = me.coverage.lanes.filter((l) => l.status === 'published' && /^qualys:/.test(l.id));
+      const qidsLive = [...new Set(live.flatMap((l) => (l.detail.match(/^QID ([\d, ]+)/) || ['', ''])[1].split(/,\s*/).filter(Boolean)))];
+      if (qidsLive.length) {
+        const row = [...document.querySelectorAll('tr')].find((tr) => tr.querySelector('.bad') && [...tr.children].slice(0, 2).some((td) => td.tagName === 'TD' && /\bQualys\b/.test(td.textContent)));
+        const cell = row && row.lastElementChild;
+        if (cell && cell.querySelector('.bad') && !cell.querySelector('.qid-live')) {
+          const src = live[0].url ? `<a href="${esc(live[0].url)}">Qualys post</a>` : 'Qualys post';
+          cell.querySelector('.bad').style.textDecoration = 'line-through';
+          cell.insertAdjacentHTML('beforeend', ` <span class="qid-live"><span class="ok">QID ${esc(qidsLive.join(', '))}</span> <span class="src">(live: printed in a ${src} after the card's date; checked ${esc(String(me.coverage.checked_at).slice(0, 10))})</span></span>`);
+        }
+      }
     }
 
     const ex = me.coverage && me.coverage.exposure;

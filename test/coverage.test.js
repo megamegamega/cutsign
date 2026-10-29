@@ -40,7 +40,7 @@ test('coverage terms: stated names plus product-looking words from the title, ne
 });
 
 /** Fake network: a router over the URLs the lanes ask. */
-function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [] } = {}) {
+function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [], qualysBlogItems = [], qualysBlogDown = false } = {}) {
   const calls = [];
   const impl = async (url, opts = {}) => {
     const u = String(url); calls.push(u);
@@ -53,6 +53,7 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     if (u.includes('nuclei-templates')) return nuclei ? ok('id: x') : miss();
     if (u.includes('emergingthreats.net')) return et ? ok(`alert http any any -> any any (msg:"ET EXPLOIT"; reference:cve,${CVE.slice(4)}; sid:2099001;)\n`) : new Response('', { status: 503 });
     if (u.includes('threatprotect.qualys.com')) return ok(rss(qualysItems), 'application/rss+xml');
+    if (u.includes('blog.qualys.com')) return qualysBlogDown ? new Response('', { status: 503 }) : ok(rss(qualysBlogItems), 'application/rss+xml');
     if (u.includes('developers.cloudflare.com')) return ok(rss(cfHit ? [{ title: `WAF Release - Emergency - ${CVE}`, link: 'https://developers.cloudflare.com/waf/change-log/2026-10-25/' }] : [{ title: 'WAF Release - routine', link: 'https://developers.cloudflare.com/waf/change-log/x/' }]), 'application/xml');
     if (u.includes('unit42')) return ok(rss([{ title: 'A post about Widgetry', link: 'https://unit42.example.test/w' }]), 'application/rss+xml');
     if (u.includes('api.github.com/search/code')) return (opts.headers || {}).Authorization ? ok(JSON.stringify({ total_count: 1, items: [{ path: 'rules/web/x.yml' }] })) : new Response('{"message":"Requires authentication"}', { status: 401 });
@@ -112,7 +113,24 @@ test('checkCoverage: a no-CVE campaign is matched by name; a token unlocks the r
   assert.equal(byId(noCve, 'sigma').status, 'published'); assert.match(byId(noCve, 'sigma').detail, /rules\/web\/x\.yml/);
   assert.ok(!noCve.lanes.some((l) => l.id.startsWith('nvd:')), 'no per-CVE lanes without a CVE');
   const withQid = await checkCoverage({ cves: [CVE], fetchImpl: net, githubToken: '' });
-  assert.equal(byId(withQid, `qualys:${CVE}`).status, 'published'); assert.match(byId(withQid, `qualys:${CVE}`).detail, /QID 389117/);
+  assert.equal(byId(withQid, `qualys:${CVE}`).status, 'published'); assert.match(byId(withQid, `qualys:${CVE}`).detail, /^QID 389117 · ThreatPROTECT: Widgetry flaw/);
+});
+
+test('checkCoverage: QIDs printed on the Qualys Security Blog count too, and the row links the post that prints them', async () => {
+  // the knowledge base needs a login; the product blog is where the QIDs for PHP2Shell and Node2Shell were actually printed
+  const blog = [
+    { title: `Can't patch Widgetry yet? (${CVE})`, link: 'https://blog.qualys.com/product-tech/2026/10/25/stopgap', body: 'Build a stopgap with the controls you own.' },
+    { title: `Two Widgetry flaws: find, mitigate, patch (${CVE})`, link: 'https://blog.qualys.com/vulnerabilities-threat-research/2026/10/20/widgetry', body: 'Use QID 45110 for discovery, then QID 389102 and the unauthenticated check, QID 39033. Rescan with QIDs 533086 and 533068.' },
+  ];
+  const cov = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ qualysBlogItems: blog }), githubToken: '' });
+  const q = byId(cov, `qualys:${CVE}`);
+  assert.equal(q.status, 'published');
+  assert.match(q.detail, /^QID 45110, 389102, 39033, 533086, 533068 · Security Blog: Two Widgetry flaws/);
+  assert.match(q.detail, /\(\+1 more post\)/);
+  assert.equal(q.url, 'https://blog.qualys.com/vulnerabilities-threat-research/2026/10/20/widgetry');
+  // one feed down: still 'nothing found' from the other, and the detail says a feed failed
+  const half = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ qualysBlogDown: true }), githubToken: '' });
+  assert.equal(byId(half, `qualys:${CVE}`).status, 'nothing found'); assert.match(byId(half, `qualys:${CVE}`).detail, /one feed failed/);
 });
 
 test('diff, staleness and the rendered table', () => {
