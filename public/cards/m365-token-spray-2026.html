@@ -42,7 +42,9 @@ h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
 h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .cols>div{min-width:0}
-@media (max-width:620px){.cols{grid-template-columns:1fr}}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
 ul{margin:6px 0;padding-left:20px}
 li{margin:5px 0}
 .ok{color:var(--ok);font-weight:600}

@@ -135,6 +135,19 @@ a.c{color:var(--link)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:14px 0}
 .card h3{margin:0;border:none;padding:0;font-size:17px;display:inline}
 .card .ex{background:var(--panel2)}
+/* print / save-PDF: the AI card and draft pages print like the hand cards — site chrome off,
+   dark backgrounds kept, full bleed (phones have no "Margins: None" control) */
+@media print{
+  @page{margin:0}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  header.top,footer,.tabs,.search,.nav{display:none!important}
+  main{max-width:none;padding:14px 18px}
+  body{font-size:12.5px}
+  .card,pre,.ch,.c{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre,.xq{break-inside:avoid}
+  h3{break-after:avoid}
+}
 .chead{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
 .pri{font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;flex:none}
 .pri.p1{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
