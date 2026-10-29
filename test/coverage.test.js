@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   nicknameTerms, tenablePlugins,
   feedItems, matchItems, qids, rapid7Flags, redhatSummary, nvdSummary, etSids, coverageTerms,
-  checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS,
+  checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS, ghFailure,
 } from '../lib/coverage.js';
 
 const CVE = 'CVE-2026-424242';
@@ -42,7 +42,7 @@ test('coverage terms: stated names plus product-looking words from the title, ne
 });
 
 /** Fake network: a router over the URLs the lanes ask. */
-function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [], qualysBlogItems = [], qualysBlogDown = false, tenable = 'plugins', s1BlogItems = [], ghLimit = 0 } = {}) {
+function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [], qualysBlogItems = [], qualysBlogDown = false, tenable = 'plugins', s1BlogItems = [], ghLimit = 0, ghStatus = 0 } = {}) {
   const calls = [];
   const impl = async (url, opts = {}) => {
     const u = String(url); calls.push(u);
@@ -60,6 +60,7 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     if (u.includes('unit42')) return ok(rss([{ title: 'A post about Widgetry', link: 'https://unit42.example.test/w' }]), 'application/rss+xml');
     if (u.includes('api.github.com/search/code')) {
       if (!(opts.headers || {}).Authorization) return new Response('{"message":"Requires authentication"}', { status: 401 });
+      if (ghStatus === 422) return new Response(JSON.stringify({ message: 'Validation Failed', errors: [{ message: 'The listed users and repositories cannot be searched either because the resources do not exist or you do not have permission to view them.' }] }), { status: 422 });
       if (ghLimit && calls.filter((x) => x.includes('api.github.com/search/code')).length <= ghLimit) return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'retry-after': '2' } });
       return ok(JSON.stringify({ total_count: 2, items: [{ path: 'rules/web/x.yml', repository: { full_name: 'SigmaHQ/sigma' } }, { path: 'detections/web/x.yml', repository: { full_name: 'splunk/security_content' } }] }));
     }
@@ -193,6 +194,18 @@ test('GitHub code search: a 403 with retry-after is waited out once and retried;
   assert.ok(q[0].includes(`${CVE} repo:SigmaHQ/sigma repo:elastic/detection-rules repo:splunk/security_content`), q[0]);
   assert.ok(q[2].includes('Widget2Shell repo:'), 'the nickname is searched too (Splunk and Elastic name rules by the campaign, not the CVE)');
   assert.ok(!q.some((u) => u.includes('Remote repo:')), 'a plain word is not searched');
+});
+
+test('GitHub code search: a 422 names GitHub\'s reason and the token kind to fix it, on every rule-repo lane', async () => {
+  const cov = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ ghStatus: 422 }), githubToken: 'tok', ...quick });
+  for (const id of ['sigma', 'elastic_rules', 'splunk_escu']) {
+    const l = byId(cov, id);
+    assert.equal(l.status, 'check failed');
+    assert.match(l.detail, /HTTP 422 — Validation Failed; The listed users and repositories cannot be searched/, l.detail);
+    assert.match(l.detail, /classic token/, 'says what kind of token code search accepts');
+  }
+  assert.equal(ghFailure({ status: 403, text: '{"message":"API rate limit exceeded"}' }), 'HTTP 403 — API rate limit exceeded (code search rate limit; re-asked next sweep)');
+  assert.equal(ghFailure({ status: 500, text: '<html>' }), 'HTTP 500');
 });
 
 test('diff, staleness and the rendered table', () => {

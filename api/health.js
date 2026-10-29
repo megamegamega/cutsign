@@ -21,13 +21,15 @@ export default async function handler(req, res) {
       tables[t] = !error ? 'ok' : /does not exist|could not find|schema cache/i.test(error.message) ? 'missing' : 'error';
     }
   } catch { for (const t of OPTIONAL_TABLES) tables[t] = 'unknown'; }
-  // optional integrations, verified live: GitHub code search for the coverage check (lib/coverage.js)
-  // needs a read-only token; the rate-limit endpoint says whether the one set is accepted, never what it is
+  // optional integrations, verified live: GitHub code search for the coverage check (lib/coverage.js).
+  // The probe is a code search itself (one tiny query against a public rule repository), because any
+  // token passes the rate-limit endpoint while a fine-grained one is refused by code search (HTTP 422).
+  // Says whether the token set is usable, never what it is.
   let github = 'unset';
   if (process.env.GITHUB_TOKEN) {
     try {
-      const r = await fetch('https://api.github.com/rate_limit', { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
-      github = r.status === 200 ? 'ok' : r.status === 401 ? 'unauthorized' : `http ${r.status}`;
+      const r = await fetch('https://api.github.com/search/code?q=' + encodeURIComponent('sigma repo:SigmaHQ/sigma') + '&per_page=1', { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
+      github = r.status === 200 ? 'ok' : r.status === 401 ? 'unauthorized' : r.status === 422 ? 'no code search (fine-grained token? use a classic token)' : r.status === 403 || r.status === 429 ? 'rate limited (token accepted)' : `http ${r.status}`;
     } catch { github = 'unreachable'; }
   }
   const optional = { github, card_autopublish: process.env.CARD_AUTOPUBLISH === '0' ? 'off' : 'on' };
