@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments } from '../lib/hype.js';
+import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, P1_REASON } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
@@ -325,6 +325,37 @@ test('publish: a draft over the surface bar is published as an AI card with its 
   // an hour later: nothing new, coverage not yet stale, no second publish
   const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
   assert.equal(c2.published, 0); assert.equal(c2.coverage_checked, 0); assert.equal(calls.length, 1);
+});
+
+test('publish: a P1 is drafted and published on day one even with a score far below the bar; the banner says it is an early read; CARD_P1_DAY_ONE=0 reverts', async (t) => {
+  t.after(() => { off(); delete process.env.CARD_P1_DAY_ONE; });
+  const { out, store, run, hot } = await published();
+  // day one of a P1 from two secondary outlets: no deep read, no fresh KEV, no primary source, no actor → score 2
+  Object.assign(hot, { selected: false, threat_actor: null, source_urls: ['https://news.example.test/a', 'https://news.example.test/b'], raw_iocs: { exposure: { fixed_in: '2.4.1' } } }); // actionable: a fix version is stated
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2021-01-01' }] });
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c.published, 1, JSON.stringify(c)); assert.equal(c.drafted, 1);
+  const [row] = await store.listCardDrafts();
+  assert.equal(row.status, 'promoted'); assert.ok(row.promoted_slug);
+  assert.ok(row.score < 6, `score ${row.score} is below even the nomination bar`);
+  assert.ok(row.reasons.includes(P1_REASON), row.reasons.join(' | '));
+  const page = draftBody(row, { published: true });
+  assert.match(page, /on day one because the brief rated the story P1/); assert.match(page, /early read from few sources/);
+  assert.ok(out.discord.some((l) => l.includes('card candidate') && l.includes('P1: card on day one')), out.discord.join('\n'));
+  // the knob off: the same story is skipped on score alone
+  process.env.CARD_P1_DAY_ONE = '0';
+  const w2 = await published();
+  Object.assign(w2.hot, { selected: false, threat_actor: null, source_urls: ['https://news.example.test/a'], raw_iocs: { exposure: { fixed_in: '2.4.1' } } });
+  const c2 = await hypeSweep(w2.store, { run: w2.run, fetchImpl: net, now });
+  assert.equal(c2.published, 0); assert.equal(c2.drafted, 0);
+  // a P1 with nothing actionable yet is not drafted, and Discord says what it is waiting for
+  delete process.env.CARD_P1_DAY_ONE;
+  const w3 = await published();
+  Object.assign(w3.hot, { selected: false, threat_actor: null, cves: [], source_urls: ['https://news.example.test/a'], raw_iocs: { exposure: null }, behaviors: [] });
+  const c3 = await hypeSweep(w3.store, { run: w3.run, fetchImpl: net, now });
+  assert.equal(c3.published, 0); assert.equal(c3.waiting, 1, JSON.stringify(c3));
+  assert.ok(w3.out.discord.some((l) => l.includes('P1 without anything actionable yet')), w3.out.discord.join('\n'));
 });
 
 test('publish: a revision re-issues the published card in place (same slug, old version superseded); dismissing unpublishes', async (t) => {

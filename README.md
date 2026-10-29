@@ -90,7 +90,10 @@ Each draft records the evidence fingerprint it was built from; when the evidence
 is revised from the prior version as a new row with a change list, the old one marked superseded.
 A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
 lint-clean and in both dialects, and the model writes only what a hit means.
-Over `HYPE_SURFACE` (9) the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
+Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the
+score measures how a story is developing, and a reader who sees a P1 needs a link that day, not
+after the corroboration arrives — the banner says it is an early read and the card is revised as
+the story develops), the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
 an AI verdict card at `/cards/<slug>`, with a "Verdict card" chip on its story in the CISO view,
 `verdict_card` in the agent JSON, a place on the Cards tab, and a "published" email. Revisions
 re-issue it in place (same URL, old version superseded); dismissing the draft unpublishes it. No
