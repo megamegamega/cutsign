@@ -64,18 +64,23 @@
       if (anchor) anchor.insertAdjacentHTML('afterend', html);
       else document.body.insertAdjacentHTML('beforeend', html);
 
-      // a hand-written scanner row that said "nothing published" is corrected from the live lane, the
-      // way the KEV row is: struck, not deleted, with the QIDs Qualys has printed since the card's date
-      const live = me.coverage.lanes.filter((l) => l.status === 'published' && /^qualys:/.test(l.id));
-      const qidsLive = [...new Set(live.flatMap((l) => (l.detail.match(/^QID ([\d, ]+)/) || ['', ''])[1].split(/,\s*/).filter(Boolean)))];
-      if (qidsLive.length) {
-        const row = [...document.querySelectorAll('tr')].find((tr) => tr.querySelector('.bad') && [...tr.children].slice(0, 2).some((td) => td.tagName === 'TD' && /\bQualys\b/.test(td.textContent)));
-        const cell = row && row.lastElementChild;
-        if (cell && cell.querySelector('.bad') && !cell.querySelector('.qid-live')) {
-          const src = live[0].url ? `<a href="${esc(live[0].url)}">Qualys post</a>` : 'Qualys post';
-          cell.querySelector('.bad').style.textDecoration = 'line-through';
-          cell.insertAdjacentHTML('beforeend', ` <span class="qid-live"><span class="ok">QID ${esc(qidsLive.join(', '))}</span> <span class="src">(live: printed in a ${src} after the card's date; checked ${esc(String(me.coverage.checked_at).slice(0, 10))})</span></span>`);
-        }
+      // a hand-written row that said "nothing published" for a vendor the live check now finds is
+      // corrected the way the KEV row is: struck, not deleted, with what the vendor published since
+      // the card's date (Qualys QIDs, Tenable plugins, a CrowdStrike / Akamai / Wiz post, rule files)
+      const vendorOf = (name) => (name.split(' · ')[0].match(/^(Qualys|Tenable|Rapid7|CrowdStrike|Microsoft|SentinelOne|Cloudflare|Akamai|Wiz|Talos|Elastic|Unit 42|Huntress|Sophos|Arctic Wolf|SigmaHQ|Splunk|Nuclei|Emerging Threats|Red Hat|Debian)/) || [])[1];
+      const livePub = me.coverage.lanes.filter((l) => l.status === 'published' && vendorOf(l.name));
+      const checked = esc(String(me.coverage.checked_at).slice(0, 10));
+      for (const tr of document.querySelectorAll('tr')) {
+        const cell = tr.lastElementChild;
+        if (!cell || !cell.querySelector('.bad') || cell.querySelector('.live-fix')) continue;
+        const label = [...tr.children].slice(0, 2).filter((td) => td.tagName === 'TD').map((td) => td.textContent).join(' ');
+        const hits = livePub.filter((l) => new RegExp(`\\b${vendorOf(l.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(label));
+        if (!hits.length) continue;
+        const seen = new Set();
+        const parts = hits.filter((l) => !seen.has(l.name.split(' · ')[0] + l.detail) && seen.add(l.name.split(' · ')[0] + l.detail)).slice(0, 3)
+          .map((l) => `<b>${esc(vendorOf(l.name))}</b>: ${l.url ? `<a href="${esc(l.url)}">${esc(l.detail.slice(0, 160))}</a>` : esc(l.detail.slice(0, 160))}`);
+        cell.querySelector('.bad').style.textDecoration = 'line-through';
+        cell.insertAdjacentHTML('beforeend', ` <span class="live-fix"><span class="ok">Published since</span> <span class="src">(live check ${checked}) — ${parts.join(' · ')}</span></span>`);
       }
     }
 

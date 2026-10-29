@@ -5,12 +5,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  nicknameTerms, tenablePlugins,
   feedItems, matchItems, qids, rapid7Flags, redhatSummary, nvdSummary, etSids, coverageTerms,
   checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS,
 } from '../lib/coverage.js';
 
 const CVE = 'CVE-2026-424242';
-const rss = (items) => `<?xml version="1.0"?><rss><channel><title>feed</title>${items.map((i) => `<item><title>${i.title}</title><link>${i.link}</link><description><![CDATA[${i.body || ''}]]></description></item>`).join('')}</channel></rss>`;
+const rss = (items) => `<?xml version="1.0"?><rss><channel><title>feed</title>${items.map((i) => `<item><title>${i.title}</title><link>${i.link}</link>${i.date ? `<pubDate>${i.date}</pubDate>` : ''}<description><![CDATA[${i.body || ''}]]></description></item>`).join('')}</channel></rss>`;
+const quick = { ghMinGapMs: 0, sleep: async () => {} }; // no real waits between GitHub calls in the lab
 
 test('feed items, matching on CVE or whole-word terms', () => {
   const items = feedItems(rss([{ title: `Emergency rule for ${CVE}`, link: 'https://feed.example.test/1', body: '<p>added two rules</p>' }, { title: 'Weekly roundup', link: 'https://feed.example.test/2', body: 'Widgetry 2.0 and more' }]));
@@ -40,7 +42,7 @@ test('coverage terms: stated names plus product-looking words from the title, ne
 });
 
 /** Fake network: a router over the URLs the lanes ask. */
-function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [], qualysBlogItems = [], qualysBlogDown = false } = {}) {
+function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = false, et = true, cfHit = true, qualysItems = [], qualysBlogItems = [], qualysBlogDown = false, tenable = 'plugins', s1BlogItems = [], ghLimit = 0 } = {}) {
   const calls = [];
   const impl = async (url, opts = {}) => {
     const u = String(url); calls.push(u);
@@ -56,7 +58,14 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     if (u.includes('blog.qualys.com')) return qualysBlogDown ? new Response('', { status: 503 }) : ok(rss(qualysBlogItems), 'application/rss+xml');
     if (u.includes('developers.cloudflare.com')) return ok(rss(cfHit ? [{ title: `WAF Release - Emergency - ${CVE}`, link: 'https://developers.cloudflare.com/waf/change-log/2026-10-25/' }] : [{ title: 'WAF Release - routine', link: 'https://developers.cloudflare.com/waf/change-log/x/' }]), 'application/xml');
     if (u.includes('unit42')) return ok(rss([{ title: 'A post about Widgetry', link: 'https://unit42.example.test/w' }]), 'application/rss+xml');
-    if (u.includes('api.github.com/search/code')) return (opts.headers || {}).Authorization ? ok(JSON.stringify({ total_count: 1, items: [{ path: 'rules/web/x.yml' }] })) : new Response('{"message":"Requires authentication"}', { status: 401 });
+    if (u.includes('api.github.com/search/code')) {
+      if (!(opts.headers || {}).Authorization) return new Response('{"message":"Requires authentication"}', { status: 401 });
+      if (ghLimit && calls.filter((x) => x.includes('api.github.com/search/code')).length <= ghLimit) return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'retry-after': '2' } });
+      return ok(JSON.stringify({ total_count: 2, items: [{ path: 'rules/web/x.yml', repository: { full_name: 'SigmaHQ/sigma' } }, { path: 'detections/web/x.yml', repository: { full_name: 'splunk/security_content' } }] }));
+    }
+    if (u.includes('tenable.com/plugins/search')) return ok(tenable === 'none' ? '<html><p>No results found.</p></html>' : tenable === 'blank' ? '<html><p>loading</p></html>'
+      : `<html><table><tr><td><a class="no-break" href="/plugins/nessus/369521">369521</a></td><td>GLSA-202610-02 : Widgetry: Multiple Vulnerabilities</td><td>Nessus</td><td><a href="/plugins/nessus/families/x">Gentoo Local Security Checks</a></td><td>10/21/2026</td></tr><tr><td><a class="no-break" href="/plugins/was/114747">114747</a></td><td>Widgetry &lt; 24.3.1 RCE</td><td>Web App Scanning</td><td>x</td></tr></table></html>`);
+    if (u.includes('sentinelone.com/blog/feed')) return ok(rss(s1BlogItems), 'application/rss+xml');
     return miss(); // every other feed: not reachable in the lab
   };
   impl.calls = calls;
@@ -74,7 +83,7 @@ test('checkCoverage: every lane answers with an honest status; feeds match the C
   assert.equal(byId(cov, `kev:${CVE}`).status, 'published'); assert.match(byId(cov, `kev:${CVE}`).detail, /listed 2026-10-27, federal due 2026-11-10/);
   assert.equal(byId(cov, `nvd:${CVE}`).status, 'published'); assert.match(byId(cov, `nvd:${CVE}`).detail, /CVSS 3\.1 9\.8/);
   assert.equal(byId(cov, `rapid7:${CVE}`).status, 'published'); assert.match(byId(cov, `rapid7:${CVE}`).detail, /InsightVM coverage stated/);
-  assert.equal(byId(cov, `tenable:${CVE}`).status, 'not checkable');
+  assert.equal(byId(cov, `tenable:${CVE}`).status, 'published'); assert.match(byId(cov, `tenable:${CVE}`).detail, /^2 plugins: 369521 GLSA-202610-02 : Widgetry: Multiple Vulnerabilities; 114747 Widgetry < 24\.3\.1 RCE$/);
   assert.equal(byId(cov, `qualys:${CVE}`).status, 'nothing found');
   assert.equal(byId(cov, `redhat:${CVE}`).status, 'published'); assert.match(byId(cov, `redhat:${CVE}`).detail, /RHSA-2026:7/);
   assert.equal(byId(cov, `debian:${CVE}`).status, 'published');
@@ -86,7 +95,7 @@ test('checkCoverage: every lane answers with an honest status; feeds match the C
   assert.equal(byId(cov, 'crowdstrike').status, 'check failed', 'an unreachable feed says so');
   assert.equal(byId(cov, 'sigma').status, 'not checkable'); assert.match(byId(cov, 'sigma').detail, /GITHUB_TOKEN/);
   assert.equal(cov.lanes.filter((l) => !['published', 'nothing found', 'not checkable', 'check failed'].includes(l.status)).length, 0);
-  assert.equal(cov.summary.published, 8, JSON.stringify(cov.summary));
+  assert.equal(cov.summary.published, 9, JSON.stringify(cov.summary));
   // categories print vendor first
   assert.equal(cov.lanes[0].category, 'Vendor');
   // the three Emerging Threats files were fetched once each, not once per lane
@@ -107,10 +116,13 @@ test('checkCoverage: without NVD CPEs the exposure block says so and carries onl
 
 test('checkCoverage: a no-CVE campaign is matched by name; a token unlocks the rule-repo lanes; QIDs are read from Qualys posts', async () => {
   const net = fakeNet({ qualysItems: [{ title: `Widgetry flaw (${CVE})`, link: 'https://threatprotect.qualys.com/2026/10/x/', body: `Qualys customers can scan with QID 389117` }] });
-  const noCve = await checkCoverage({ cves: [], terms: ['Widgetry'], fetchImpl: net, githubToken: 'tok' });
+  const noCve = await checkCoverage({ cves: [], terms: ['Widgetry'], fetchImpl: net, githubToken: 'tok', ...quick });
   assert.equal(byId(noCve, 'unit42').status, 'published');
   assert.equal(byId(noCve, 'kev').status, 'not checkable');
   assert.equal(byId(noCve, 'sigma').status, 'published'); assert.match(byId(noCve, 'sigma').detail, /rules\/web\/x\.yml/);
+  assert.equal(byId(noCve, 'splunk_escu').status, 'published'); assert.match(byId(noCve, 'splunk_escu').detail, /detections\/web\/x\.yml/);
+  assert.equal(byId(noCve, 'elastic_rules').status, 'nothing found', 'one search call covers the three repos; a repo with no hit says so');
+  assert.equal(net.calls.filter((u) => u.includes('api.github.com/search/code')).length, 1, 'one code-search call per term, not one per repo');
   assert.ok(!noCve.lanes.some((l) => l.id.startsWith('nvd:')), 'no per-CVE lanes without a CVE');
   const withQid = await checkCoverage({ cves: [CVE], fetchImpl: net, githubToken: '' });
   assert.equal(byId(withQid, `qualys:${CVE}`).status, 'published'); assert.match(byId(withQid, `qualys:${CVE}`).detail, /^QID 389117 · ThreatPROTECT: Widgetry flaw/);
@@ -131,6 +143,56 @@ test('checkCoverage: QIDs printed on the Qualys Security Blog count too, and the
   // one feed down: still 'nothing found' from the other, and the detail says a feed failed
   const half = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ qualysBlogDown: true }), githubToken: '' });
   assert.equal(byId(half, `qualys:${CVE}`).status, 'nothing found'); assert.match(byId(half, `qualys:${CVE}`).detail, /one feed failed/);
+});
+
+test('nicknameTerms keeps campaign nicknames and product names, drops capitalised plain words', () => {
+  assert.deepEqual(nicknameTerms(['PHP2Shell', 'Node.js', 'GitLab', 'BeyondTrust', 'Remote', 'Support', 'LiteLLM', 'ConnectWise', 'Backup', 'Widgetry']), ['PHP2Shell', 'Node.js', 'GitLab', 'BeyondTrust', 'LiteLLM', 'ConnectWise']);
+});
+
+test('feed items match on a nickname in the title inside the campaign window, and say the CVE id was not in the feed', async () => {
+  // CrowdStrike, Akamai, Wiz and SentinelOne all titled their PHP2Shell posts by the nickname and
+  // never printed the CVE id in the feed text: a CVE-only match called every one of them "nothing found"
+  const s1 = [
+    { title: 'Stopping Widget2Shell: how we protect customers', link: 'https://s1.example.test/stop', date: 'Tue, 21 Oct 2026 10:00:00 GMT', body: 'no cve id here' },
+    { title: 'Widget2Shell from 2024, a retrospective', link: 'https://s1.example.test/old', date: 'Mon, 01 Jan 2024 10:00:00 GMT', body: 'old' },
+    { title: 'Weekly roundup', link: 'https://s1.example.test/weekly', date: 'Tue, 21 Oct 2026 10:00:00 GMT', body: 'Widget2Shell mentioned in passing in the body only' },
+  ];
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  const cov = await checkCoverage({ cves: [CVE], terms: ['Widget2Shell', 'Remote'], fetchImpl: fakeNet({ s1BlogItems: s1 }), now, githubToken: '' });
+  const l = byId(cov, 'sentinelone_blog');
+  assert.equal(l.status, 'published');
+  assert.equal(l.url, 'https://s1.example.test/stop');
+  assert.match(l.detail, /^Stopping Widget2Shell: how we protect customers \(names Widget2Shell in the title; the feed text carries no CVE id\)$/, 'the 2024 post and the body-only mention are not coverage of this campaign');
+  // a plain capitalised word from the title never matches by name
+  const plain = await checkCoverage({ cves: [CVE], terms: ['Stopping'], fetchImpl: fakeNet({ s1BlogItems: s1 }), now, githubToken: '' });
+  assert.equal(byId(plain, 'sentinelone_blog').status, 'nothing found');
+  // matchItems: dates are parsed, the window applies to names only, a CVE id matches regardless of date
+  const items = feedItems(rss(s1));
+  assert.equal(items[0].date, '2026-10-21T10:00:00.000Z');
+  assert.deepEqual(matchItems(items, { cves: [], titleTerms: ['Widget2Shell'], since: Date.parse('2026-09-13') }).map((i) => i.how), ['name']);
+  assert.deepEqual(matchItems(feedItems(rss([{ title: `x ${CVE}`, link: 'https://s1.example.test/x', date: 'Mon, 01 Jan 2024 10:00:00 GMT' }])), { cves: [CVE], since: now }).map((i) => i.how), ['cve']);
+});
+
+test('Tenable: the plugin search page is parsed; "No results found" is a finding; a page without the table is a failed check', async () => {
+  assert.deepEqual(tenablePlugins('<p>No results found.</p>'), []);
+  assert.equal(tenablePlugins('<html>spinner</html>'), null);
+  const none = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ tenable: 'none' }), githubToken: '' });
+  assert.equal(byId(none, `tenable:${CVE}`).status, 'nothing found');
+  const blank = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet({ tenable: 'blank' }), githubToken: '' });
+  assert.equal(byId(blank, `tenable:${CVE}`).status, 'check failed'); assert.match(byId(blank, `tenable:${CVE}`).detail, /did not render/);
+});
+
+test('GitHub code search: a 403 with retry-after is waited out once and retried; terms are the CVE ids plus the nickname', async () => {
+  const waits = [];
+  const net = fakeNet({ ghLimit: 1 });
+  const cov = await checkCoverage({ cves: [CVE], terms: ['Widget2Shell', 'Remote'], fetchImpl: net, githubToken: 'tok', ghMinGapMs: 0, sleep: async (ms) => { waits.push(ms); } });
+  assert.deepEqual(waits, [2000], 'slept for the retry-after the API asked for');
+  assert.equal(byId(cov, 'sigma').status, 'published');
+  const q = net.calls.filter((u) => u.includes('api.github.com/search/code')).map((u) => decodeURIComponent(u));
+  assert.equal(q.length, 3, 'the rate-limited call, its retry, then the nickname term');
+  assert.ok(q[0].includes(`${CVE} repo:SigmaHQ/sigma repo:elastic/detection-rules repo:splunk/security_content`), q[0]);
+  assert.ok(q[2].includes('Widget2Shell repo:'), 'the nickname is searched too (Splunk and Elastic name rules by the campaign, not the CVE)');
+  assert.ok(!q.some((u) => u.includes('Remote repo:')), 'a plain word is not searched');
 });
 
 test('diff, staleness and the rendered table', () => {

@@ -105,14 +105,17 @@ source among the thread's sources), CISA KEV, NVD (CVSS), Rapid7's vulnerability
 own InsightVM coverage flag), Qualys ThreatPROTECT and Security Blog posts (the QIDs they print; the
 QID knowledge base itself needs a login, so a hand card's "nothing published" scanner row is
 corrected on the page the day Qualys prints one), Red Hat security data
-(errata), the Debian tracker, the Nuclei template tree, Emerging Threats open rules (Suricata
-sids), and the feeds and changelogs of CrowdStrike, Microsoft Security, SentinelOne, Cloudflare's
+(errata), Tenable's plugin search (plugin ids and names), the Debian tracker, the Nuclei template
+tree, Emerging Threats open rules (Suricata sids), the SigmaHQ, Elastic and Splunk rule
+repositories (one GitHub code search per term, spaced to the API's limit), and the feeds and
+changelogs of CrowdStrike, Microsoft Security, SentinelOne (Labs and the product blog), Cloudflare's
 WAF managed ruleset, Akamai, Wiz, Talos, Elastic Security Labs, Unit 42, Huntress, Sophos, Arctic
 Wolf and Rapid7. Each lane ends in one of four statuses — `published` (with the link), `nothing
-found` (the source answered and had nothing; itself a finding), `not checkable` (Tenable's plugin
-list renders only in a browser; the SigmaHQ, Elastic and Splunk rule repositories need
-`GITHUB_TOKEN` for GitHub code search) or `check failed` — so a dead feed never reads as "nothing
-published". Feeds match on CVE id, or on stated names only when a campaign has no CVE. The check is
+found` (the source answered and had nothing; itself a finding), `not checkable` (the rule
+repositories need `GITHUB_TOKEN` for GitHub code search) or `check failed` — so a dead feed never
+reads as "nothing published". Feeds match on the CVE id anywhere in the item, or on the campaign's
+nickname or product name in the title inside the campaign window (vendor feeds say "PHP2Shell" and
+never print the CVE id); a plain capitalised word never matches. The check is
 re-asked daily for every published card and every hand-written card (stored on the card's manifest
 story row, rendered under the hand-written table by the card page's script), and a lane that moved
 is posted to Discord.
