@@ -156,11 +156,13 @@ ones that match as `discovered` rows labelled with the facet they came from; the
 when Shodan stores the CPE versioned. The totals are kept as one point a day (90 days) on the
 card's coverage check and rendered as a trend table (first, latest, change) once a query has two
 days of counts; a daily count moving is not posted to Discord, a spelling found or the key failing
-is. `vuln:` is a paid-tier filter (Small Business and higher): on a plan without it Shodan answers
-0 rather than an error, so the check reads the key's plan from `/api-info` once an hour and marks a
-`vuln:` zero on a lower plan as unconfirmed rather than as "0 services"; a nonzero total still
-counts, and the product queries are counted either way. A product none of whose queries matched
-also says whether the text search for its name found anything at all. A check made without a key is stale the moment the key exists, and the hourly watch
+is. Whether the key's plan has the `vuln:` filter is learned from Shodan itself, not from its price
+list: a plan without the filter gets total 0 rather than an error, so once an hour the check counts
+`vuln:CVE-2014-0160` (tagged on banners for a decade); a nonzero total means every `vuln:` zero after
+it is a real zero ("Shodan has tagged no banner with this CVE yet"), a zero means the filter is off
+and the CVE rows say so instead of claiming "0 services". The product queries are counted either
+way. A product none of whose queries matched also says whether the text search for its name found
+anything, or that Shodan refused the search. A check made without a key is stale the moment the key exists, and the hourly watch
 tick re-checks stale cards on its own, in a bounded slice before the watches (no scoring, no
 models, the KEV catalog fetched only when a card is actually stale; new cards start for 90 s and
 the rest take the next hour), so no card waits for tomorrow's brief.

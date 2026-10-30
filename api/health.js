@@ -41,8 +41,13 @@ export default async function handler(req, res) {
       const r = await fetch(`https://api.shodan.io/api-info?key=${encodeURIComponent(process.env.SHODAN_API_KEY)}`, { headers: { Accept: 'application/json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
       if (r.status === 200) {
         const j = await r.json().catch(() => ({}));
-        const low = ['oss', 'dev', 'basic'].includes(String(j.plan || '').toLowerCase()); // lib/shodan.js LOW_PLANS
-        shodan = `ok (plan ${j.plan || '?'}, ${j.query_credits ?? '?'} query credits left; counts spend none${low ? '; vuln: filter needs Small Business or higher, its zeros are marked unconfirmed' : ''})`;
+        // whether the plan's vuln: filter answers, learned the way lib/shodan.js does: a count of a CVE tagged for a decade
+        let vuln = 'unknown';
+        try {
+          const p = await fetch(`https://api.shodan.io/shodan/host/count?key=${encodeURIComponent(process.env.SHODAN_API_KEY)}&query=${encodeURIComponent('vuln:CVE-2014-0160')}`, { headers: { Accept: 'application/json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
+          if (p.status === 200) vuln = (Number((await p.json().catch(() => ({}))).total) || 0) > 0 ? 'on' : 'off (not in this plan; its zeros are marked unconfirmed)';
+        } catch { /* stays unknown */ }
+        shodan = `ok (plan ${j.plan || '?'}, ${j.query_credits ?? '?'} query credits left; counts spend none; vuln: filter ${vuln})`;
       }
       else shodan = r.status === 401 ? 'unauthorized (key not accepted)' : r.status === 429 ? 'rate limited (key accepted)' : `http ${r.status}`;
     } catch { shodan = 'unreachable'; }
