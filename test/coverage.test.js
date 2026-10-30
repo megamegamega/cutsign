@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   nicknameTerms, tenablePlugins,
   feedItems, matchItems, qids, rapid7Flags, redhatSummary, nvdSummary, etSids, coverageTerms,
-  checkCoverage, diffCoverage, coverageStale, coverageTable, RECHECK_MS, ghFailure, ghTerm, aliases,
+  checkCoverage, diffCoverage, coverageStale, staleDiscovered, coverageTable, RECHECK_MS, ghFailure, ghTerm, aliases,
 } from '../lib/coverage.js';
 
 const CVE = 'CVE-2026-424242';
@@ -148,6 +148,10 @@ test('checkCoverage: with a Shodan key every Shodan query is counted after NVD n
   assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: { ...noProbe, vuln: null } } }, now + 3600_000, { shodanKey: 'k' }), false);
   const { aliases, ...noAliases } = cov.exposure.shodan;
   assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: noAliases } }, now + 3600_000, { shodanKey: 'k' }), true, 'counted before banner spellings existed');
+  // a discovered spelling the stricter relevance test refuses is re-asked now
+  const junk = { ...cov, exposure: { ...cov.exposure, items: [...cov.exposure.items, { engine: 'shodan', kind: 'discovered', for: 'beyondtrust:remote_support', query: 'product:"Remote Desktop Protocol"', check: 'counted', total: 1769388 }] } };
+  assert.equal(staleDiscovered(junk.exposure), true); assert.equal(staleDiscovered(cov.exposure), false);
+  assert.equal(coverageStale(junk, now + 3600_000, { shodanKey: 'k' }), true); assert.equal(coverageStale(junk, now + 3600_000, { shodanKey: '' }), false);
 });
 
 test('checkCoverage: without NVD CPEs the exposure block says so and carries only the CVE query', async () => {

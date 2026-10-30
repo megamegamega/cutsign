@@ -96,6 +96,12 @@ test('discoveryText / relevant: distinctive words only; a facet value must share
   assert.equal(relevant('nginx', p), false);
   assert.equal(relevant('Acme Panel', { vendor: 'acme', product: 'panel_virtual_appliance' }), true);
   assert.equal(relevant('Widgetry Server', { vendor: 'widgetry', product: 'widget_server' }), true);
+  // a product named only in generic words: the whole name must be there, a shared generic word is nothing
+  const rs = { vendor: 'beyondtrust', product: 'remote_support' };
+  assert.equal(relevant('Remote Desktop Protocol', rs), false, 'live junk: 1.77M RDP services were "the product" for sharing "remote"');
+  assert.equal(relevant('Pro-Support CloudDrive', rs), false);
+  assert.equal(relevant('BeyondTrust Remote Support', rs), true);
+  assert.equal(relevant('Remote Support Portal', rs), true, 'the whole name, with a generic tail');
 });
 
 test('validateExposure: every Shodan query counted, a product Shodan spells differently gets its own spelling, totals become a trend point', async () => {
