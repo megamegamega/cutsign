@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     const { createClient } = await import('@supabase/supabase-js');
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
     for (const t of OPTIONAL_TABLES) {
-      const { error } = await sb.from(t).select('id', { count: 'exact', head: true }).limit(1);
+      // a real GET of one id, not a HEAD: a HEAD answer carries no body, so a missing table's error is lost and the probe said "ok"
+      const { error } = await sb.from(t).select('id').limit(1);
       tables[t] = !error ? 'ok' : /does not exist|could not find|schema cache/i.test(error.message) ? 'missing' : 'error';
     }
   } catch { for (const t of OPTIONAL_TABLES) tables[t] = 'unknown'; }
