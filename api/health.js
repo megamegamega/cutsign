@@ -32,6 +32,16 @@ export default async function handler(req, res) {
       github = r.status === 200 ? 'ok' : r.status === 401 ? 'unauthorized' : r.status === 422 ? 'no code search (fine-grained token? use a classic token)' : r.status === 403 || r.status === 429 ? 'rate limited (token accepted)' : `http ${r.status}`;
     } catch { github = 'unreachable'; }
   }
-  const optional = { github, card_autopublish: process.env.CARD_AUTOPUBLISH === '0' ? 'off' : 'on' };
+  // Shodan, for the exposure-query counts (lib/shodan.js): the key's own account record. Reports the
+  // plan name and credits left (neither is a secret), never the key.
+  let shodan = 'unset';
+  if (process.env.SHODAN_API_KEY) {
+    try {
+      const r = await fetch(`https://api.shodan.io/api-info?key=${encodeURIComponent(process.env.SHODAN_API_KEY)}`, { headers: { Accept: 'application/json', 'User-Agent': 'cutsign-health' }, signal: AbortSignal.timeout(8000) });
+      if (r.status === 200) { const j = await r.json().catch(() => ({})); shodan = `ok (plan ${j.plan || '?'}, ${j.query_credits ?? '?'} query credits left; counts spend none)`; }
+      else shodan = r.status === 401 ? 'unauthorized (key not accepted)' : r.status === 429 ? 'rate limited (key accepted)' : `http ${r.status}`;
+    } catch { shodan = 'unreachable'; }
+  }
+  const optional = { github, shodan, card_autopublish: process.env.CARD_AUTOPUBLISH === '0' ? 'off' : 'on' };
   return res.json({ ok: true, service: 'cutsign', version: 'v0', inbound: source, paused: process.env.PAUSED === '1', missing_env: missing, tables, optional });
 }

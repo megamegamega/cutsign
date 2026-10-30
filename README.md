@@ -142,6 +142,25 @@ reader to add the scope in Shodan Monitor or their EASM product, where that inve
 A CPE that NVD publishes later appears at the next daily re-check and is posted to Discord with the
 coverage changes.
 
+**Shodan counts, with `SHODAN_API_KEY`** (`lib/shodan.js`). With a key set, every Shodan query on
+a card is counted against Shodan itself through its count endpoint (`/shodan/host/count`, which
+spends no query credits; calls are spaced to the API's one a second and capped per card so they
+fit inside the GitHub lane's wait). Each query line then says what Shodan returned: the
+internet-wide total as of that day, or `0 services match this spelling` — NVD spells a product one
+way (`product:"Panorama Virtual Appliance"`, `cpe:"cpe:/a:php:php"`) and Shodan often another, and
+without the count a zero reads as "nothing exposed". When every query for a product is empty, the
+check runs one text search for the product's distinctive words with the `product`, `http.component`
+and `cpe` facets, keeps the facet values that share a word with the product (never a neighbour in
+the same banners, such as the web server in front of PHP), counts each candidate, and adds the
+ones that match as `discovered` rows labelled with the facet they came from; the `cpe:` row is told
+when Shodan stores the CPE versioned. The totals are kept as one point a day (90 days) on the
+card's coverage check and rendered as a trend table (first, latest, change) once a query has two
+days of counts; a daily count moving is not posted to Discord, a spelling found or the key failing
+is. `vuln:` is a paid-tier filter: on a plan without it the row says so and the product queries are
+still counted. A check made without a key is re-asked at the next tick once the key is set.
+`/api/health` reports `shodan` from the key's account record (plan and query credits left, never
+the key). Nothing but the generic filter ever leaves the host: the scope half stays placeholders.
+
 A thread that already has a hand-written card is not scored, but it is kept honest: each sweep
 compares the card's as-of date with what happened after it (a CISA KEV listing of a CVE the card
 names, a HIGH watch development). Each development is raised once on Discord and folded into an AI

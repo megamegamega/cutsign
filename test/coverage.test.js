@@ -71,6 +71,7 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     if (u.includes('tenable.com/plugins/search')) return ok(tenable === 'none' ? '<html><p>No results found.</p></html>' : tenable === 'blank' ? '<html><p>loading</p></html>'
       : `<html><table><tr><td><a class="no-break" href="/plugins/nessus/369521">369521</a></td><td>GLSA-202610-02 : Widgetry: Multiple Vulnerabilities</td><td>Nessus</td><td><a href="/plugins/nessus/families/x">Gentoo Local Security Checks</a></td><td>10/21/2026</td></tr><tr><td><a class="no-break" href="/plugins/was/114747">114747</a></td><td>Widgetry &lt; 24.3.1 RCE</td><td>Web App Scanning</td><td>x</td></tr></table></html>`);
     if (u.includes('sentinelone.com/blog/feed')) return ok(rss(s1BlogItems), 'application/rss+xml');
+    if (u.startsWith('https://api.shodan.io/')) { const q = new URL(u).searchParams.get('query'); return ok(JSON.stringify({ total: q.startsWith('vuln:') ? 1200 : q.startsWith('product:') ? 48000 : 0, matches: [], facets: {} }), 'application/json'); }
     return miss(); // every other feed: not reachable in the lab
   };
   impl.calls = calls;
@@ -110,6 +111,33 @@ test('checkCoverage: every lane answers with an honest status; feeds match the C
   assert.ok(cov.exposure.items.some((i) => i.query === `vuln:${CVE}`));
   assert.ok(cov.exposure.items.some((i) => i.query === 'cpe:"cpe:/a:widgetry:widget_server"'));
   assert.equal(net.calls.filter((u) => u.includes('services.nvd.nist.gov')).length, 1, 'NVD is asked once');
+  // without a Shodan key the block says so and asks Shodan nothing
+  assert.equal(cov.exposure.shodan.status, 'unset');
+  assert.equal(net.calls.filter((u) => u.includes('api.shodan.io')).length, 0);
+});
+
+test('checkCoverage: with a Shodan key every Shodan query is counted after NVD names the products, the trend is carried from the previous check, and the first counts are a change', async () => {
+  const net = fakeNet();
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  const prev = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet(), githubToken: '', now: now - 3600_000, ...quick });
+  const cov = await checkCoverage({ cves: [CVE], fetchImpl: net, githubToken: '', shodanKey: 'test-key-not-real', shodanMinGapMs: 0, prev, now, ...quick });
+  const by = (q) => cov.exposure.items.find((i) => i.query === q);
+  assert.equal(by(`vuln:${CVE}`).total, 1200); assert.equal(by(`vuln:${CVE}`).check, 'counted');
+  assert.equal(by('product:"Widget Server"').total, 48000);
+  assert.equal(by('cpe:"cpe:/a:widgetry:widget_server"').check, 'empty');
+  assert.equal(cov.exposure.shodan.status, 'ok');
+  assert.deepEqual(cov.exposure.trend.map((t) => t.at), ['2026-10-28']);
+  assert.ok(!JSON.stringify(cov).includes('test-key-not-real'), 'the key is in no stored text');
+  assert.ok(net.calls.some((u) => u.includes('api.shodan.io')) && net.calls.every((u) => !u.includes('api.shodan.io') || u.includes('query=')), 'Shodan asked through its API');
+  const changes = diffCoverage(prev, cov);
+  assert.ok(changes.some((c) => /Shodan counts on \(2 queries counted\)/.test(c)), changes.join('\n'));
+  const again = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet(), githubToken: '', shodanKey: 'test-key-not-real', shodanMinGapMs: 0, prev: cov, now: now + 86400_000, ...quick });
+  assert.deepEqual(again.exposure.trend.map((t) => t.at), ['2026-10-28', '2026-10-29']);
+  assert.equal(diffCoverage(cov, again).length, 0, 'a count moving day to day is not news');
+  // a key set after a check ran makes that check stale at once, so the counts arrive at the next tick
+  assert.equal(coverageStale(prev, now, { shodanKey: 'k' }), true);
+  assert.equal(coverageStale(prev, now, { shodanKey: '' }), false);
+  assert.equal(coverageStale(cov, now + 3600_000, { shodanKey: 'k' }), false);
 });
 
 test('checkCoverage: without NVD CPEs the exposure block says so and carries only the CVE query', async () => {

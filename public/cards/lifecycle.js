@@ -87,10 +87,29 @@
     const ex = me.coverage && me.coverage.exposure;
     if (ex && ((ex.items && ex.items.length) || ex.note)) {
       // one block per query, not a table: a <pre> in a table cell collapses to one character a line on a phone
-      const rows = (ex.items || []).map((i) => `<div style="margin:0 0 10px"><p style="margin:0"><b>${esc(i.engine)}</b> <span class="src">· ${esc(i.kind || '')}${i.for ? ` · ${esc(i.for)}` : ''}</span></p><pre style="margin:4px 0">${esc(i.query)}</pre><p class="src" style="margin:0">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</p></div>`).join('');
-      const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>` + rows
-        + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '')
-        + `<p class="src">Scope every query in your own tool, never in a shared document: Shodan <code>net:&lt;your_ranges&gt;</code>, <code>org:"&lt;your_org&gt;"</code> or <code>hostname:&lt;your_domain&gt;</code> (or a Shodan Monitor network alert, which applies the scope for you); Censys <code>host.ip</code> or <code>host.dns.names</code>. Then compare the banner version with the affected range. Built ${esc(String(ex.built_at).slice(0, 16).replace('T', ' '))}Z from the CVE ids and NVD's CPE configurations; re-built daily with the coverage check.</p>`;
+      // Shodan's count of each query (lib/shodan.js writes check/total/counted_at; the trend is one point a day) — mirrors countLine/trendRows in lib/exposure.js
+      const fmtN = (n) => Number(n).toLocaleString('en-US');
+      const countLine = (i) => {
+        if (!i.check) return '';
+        const day = String(i.counted_at || '').slice(0, 10);
+        if (i.check === 'counted' || i.check === 'empty') {
+          const pts = (ex.trend || []).filter((t) => t && t.totals && t.totals[i.query] != null && t.at !== day);
+          const ref = (t) => { const a = t.totals[i.query]; const d = (i.total || 0) - a; const pct = a ? ` ${d >= 0 ? '+' : '-'}${Math.round(Math.abs(d) / a * 100)}%` : ''; return `${fmtN(a)} on ${t.at} (${d >= 0 ? '+' : '-'}${fmtN(Math.abs(d))}${pct})`; };
+          const refs = pts.length ? [pts[0]].concat(pts.length > 1 ? [pts[pts.length - 1]] : []).map(ref) : [];
+          const head = i.check === 'empty' ? `Shodan: 0 services match this spelling (${day})${i.check_note ? ` — ${i.check_note}` : ''}` : `Shodan: ${fmtN(i.total)} services internet-wide (${day})`;
+          return [head].concat(refs).join(' · ');
+        }
+        return i.check === 'plan' || i.check === 'skipped' ? `Shodan count: ${i.check_note}` : `Shodan count failed: ${i.check_note}`;
+      };
+      const rows = (ex.items || []).map((i) => { const c = countLine(i); return `<div style="margin:0 0 10px"><p style="margin:0"><b>${esc(i.engine)}</b> <span class="src">· ${esc(i.kind || '')}${i.for ? ` · ${esc(i.for)}` : ''}</span></p><pre style="margin:4px 0">${esc(i.query)}</pre><p class="src" style="margin:0">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</p>${c ? `<p class="src" style="margin:0"><b>${esc(c)}</b></p>` : ''}</div>`; }).join('');
+      const byQ = new Map();
+      for (const t of ex.trend || []) for (const q of Object.keys((t && t.totals) || {})) { if (!byQ.has(q)) byQ.set(q, []); byQ.get(q).push({ at: t.at, n: t.totals[q] }); }
+      const tr = [...byQ].filter(([, p]) => p.length >= 2).map(([q, p]) => { const a = p[0]; const b = p[p.length - 1]; const d = b.n - a.n; return `<tr><td><code>${esc(q)}</code></td><td>${fmtN(a.n)} <span class="src">${esc(a.at)}</span></td><td>${fmtN(b.n)} <span class="src">${esc(b.at)}</span></td><td>${d >= 0 ? '+' : '-'}${fmtN(Math.abs(d))}${a.n ? ` (${d >= 0 ? '+' : '-'}${Math.round(Math.abs(d) / a.n * 100)}%)` : ''} <span class="src">over ${p.length} days</span></td></tr>`; });
+      const trend = tr.length ? `<h3>Internet-wide count, trend</h3><table><tr><th>Query</th><th>First</th><th>Latest</th><th>Change</th></tr>${tr.join('')}</table><p class="src">Shodan's count of matching services on the whole internet, one point a day; the scope (your ranges) is never part of it. A count moves with Shodan's crawl as much as with patching, so read the direction, not the digit.</p>` : '';
+      const sh = ex.shodan && ex.shodan.status === 'unset' ? `<p class="src">${esc(ex.shodan.note)}</p>` : ex.shodan && ex.shodan.note ? `<p class="src">Shodan: ${esc(ex.shodan.note)}.</p>` : '';
+      const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>` + rows + trend
+        + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '') + sh
+        + `<p class="src">Scope every query in your own tool, never in a shared document: Shodan <code>net:&lt;your_ranges&gt;</code>, <code>org:"&lt;your_org&gt;"</code> or <code>hostname:&lt;your_domain&gt;</code> (or a Shodan Monitor network alert, which applies the scope for you); Censys <code>host.ip</code> or <code>host.dns.names</code>. Then compare the banner version with the affected range. Built ${esc(String(ex.built_at).slice(0, 16).replace('T', ' '))}Z from the CVE ids and NVD's CPE configurations${ex.shodan && ex.shodan.status === 'ok' ? ', each Shodan query counted against Shodan itself' : ''}; re-built daily with the coverage check.</p>`;
       const live = document.getElementById('coverage-live');
       let anchor = live; if (live) { let el = live.nextElementSibling; while (el && el.tagName !== 'TABLE' && el.tagName !== 'H2') el = el.nextElementSibling; if (el && el.tagName === 'TABLE') anchor = el; }
       if (anchor) anchor.insertAdjacentHTML('afterend', html); else document.body.insertAdjacentHTML('beforeend', html);
