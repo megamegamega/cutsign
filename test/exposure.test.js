@@ -96,3 +96,9 @@ test('namedProducts: the card\'s affected lines first, then capitalised runs in 
   assert.deepEqual(namedProducts({ title: 'Trojanized Claude Code extension 2.1.313 on Cursor' }), ['Claude Code', 'Cursor']);
   assert.deepEqual(namedProducts({ title: 'Gotenberg CVE-2026-42589 RCE reportedly exploited' }), [], 'a plain first word on its own is not trusted even when it is the product: NVD\'s CPE or the model\'s banner spellings carry that case');
 });
+
+test('namedProducts: generic phrases, nationalities and a vendor alone are not products', () => {
+  assert.deepEqual(namedProducts({ title: 'Cisco ASA/FTD SSL VPN zero-day CVE-2026-76418 exploited' }), [], 'SSL VPN is generic; ASA/FTD is lost to the slash and NVD carries it');
+  assert.deepEqual(namedProducts({ title: 'Warp Panda reported exploiting ESXi logging flaw, China-nexus', exclude: ['Warp Panda'] }), ['ESXi']);
+  assert.deepEqual(namedProducts({ title: 'Probing of patched Oracle flaw observed', affected: ['Oracle: Application Object Library'] }), [], 'a vendor alone counts every banner that vendor ever shipped');
+});

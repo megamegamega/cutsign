@@ -208,3 +208,13 @@ test('validateExposure: model banner spellings are counted and only hits are sho
   assert.match(exposureTable(v), /Banner spellings: a model read 2 .* 1 matched something on Shodan and is shown above, the rest was dropped/);
   assert.match(exposureTable(v), /shodan <span class="s">· alias · widgetry:widget_server/);
 });
+
+test('validateExposure: a named guess that matched nothing leaves the card and is listed as tried; a hit stays', async () => {
+  const ex = exposureQueries({ cves: [CVE], cpes: [], named: ['Attackers', 'Oracle EBS'] });
+  const net = fakeShodan({ totals: { 'http.component:"Oracle EBS"': 90 } });
+  const v = await validateExposure(ex, { key: KEY, cpes: [], fetchImpl: net, now, ...quick, vuln: true });
+  assert.deepEqual(v.items.map((i) => i.query), [`vuln:${CVE}`, 'http.component:"Oracle EBS"', 'host.services: (software.product = "Oracle EBS")']);
+  assert.deepEqual(v.named_tried, ['product:"Attackers"', 'http.component:"Attackers"', 'product:"Oracle EBS"', 'host.services: (software.product = "Attackers")']);
+  assert.ok(!('product:"Attackers"' in v.trend.at(-1).totals), 'a failed guess is not a trend point');
+  assert.match(exposureTable(v), /Also tried under the name the card uses, nothing matched on Shodan: <code>product:&quot;Attackers&quot;<\/code>/);
+});

@@ -126,7 +126,8 @@
       const sh = (ex.shodan && ex.shodan.status === 'unset' ? `<p class="src">${esc(ex.shodan.note)}</p>` : ex.shodan && ex.shodan.note ? `<p class="src">Shodan: ${esc(ex.shodan.note)}.</p>` : '')
         + (al && al.suggested ? `<p class="src">Banner spellings: a model read ${al.suggested} from the NVD names and this card's text (former and marketing names, console titles); ${al.matched} matched something on Shodan and ${al.matched === 1 ? 'is' : 'are'} shown above, the rest ${al.suggested - al.matched === 1 ? 'was' : 'were'} dropped.</p>` : '');
       const html = `<h2 id="exposure-live">Exposure queries — generated automatically</h2>` + rows + trend
-        + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '') + sh
+        + (ex.note ? `<p class="src">${esc(ex.note)}</p>` : '')
+        + (ex.named_tried && ex.named_tried.length ? `<p class="src">Also tried under the name the card uses, nothing matched on Shodan: ${ex.named_tried.map((q) => `<code>${esc(q)}</code>`).join(', ')}.</p>` : '') + sh
         + `<p class="src">Scope every query in your own tool, never in a shared document: Shodan <code>net:&lt;your_ranges&gt;</code>, <code>org:"&lt;your_org&gt;"</code> or <code>hostname:&lt;your_domain&gt;</code> (or a Shodan Monitor network alert, which applies the scope for you); Censys <code>host.ip</code> or <code>host.dns.names</code>. Then compare the banner version with the affected range. Built ${esc(String(ex.built_at).slice(0, 16).replace('T', ' '))}Z from the CVE ids and NVD's CPE configurations${ex.shodan && ex.shodan.status === 'ok' ? ', each Shodan query counted against Shodan itself' : ''}; re-built daily with the coverage check.</p>`;
       const live = document.getElementById('coverage-live');
       let anchor = live; if (live) { let el = live.nextElementSibling; while (el && el.tagName !== 'TABLE' && el.tagName !== 'H2') el = el.nextElementSibling; if (el && el.tagName === 'TABLE') anchor = el; }
