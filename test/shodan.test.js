@@ -173,7 +173,7 @@ test('validateExposure: no key → unset, trend carried; a bad key fails every q
   assert.equal(tight.asked.length, 2);
   assert.equal(t.items.filter((i) => i.check === 'skipped').length, 3, 'the three Shodan queries past the budget are skipped, not silently uncounted');
   assert.match(t.items.find((i) => i.check === 'skipped').check_note, /call budget/);
-  assert.ok(MAX_CALLS <= 15, 'a card\'s Shodan calls fit inside the GitHub lane\'s wait at one a second');
+  assert.ok(MAX_CALLS <= 20, 'a card\'s Shodan calls (~22 s at one a second) stay inside the minute a card check gets in the hourly slice');
 
   const rate = fakeShodan({ rate: true });
   const r = await validateExposure(ex, { key: KEY, cpes, fetchImpl: rate, now, ...quick });
@@ -187,4 +187,24 @@ test('validateExposure: calls are spaced to the one-a-second limit', async () =>
   await validateExposure(exposureQueries({ cves: [CVE], cpes, now }), { key: KEY, cpes, fetchImpl: net, now, minGapMs: 1100, sleep: async (ms) => { waits.push(ms); } });
   assert.ok(waits.length >= net.asked.length - 1, `every call after the first waits (${waits.length} waits for ${net.asked.length} calls)`);
   assert.ok(waits.every((w) => w > 0), 'the fake clock never advances, so each wait is the gap or more');
+});
+
+test('validateExposure: model banner spellings are counted and only hits are shown, duplicates of card queries skipped, the summary says how many', async () => {
+  const ex = exposureQueries({ cves: [CVE], cpes });
+  const aliases = [
+    { query: 'http.title:"Cisco vManage"', for: 'widgetry:widget_server', note: 'Banner spelling suggested by the model from the card text (former name); counted against Shodan before it was shown.' },
+    { query: 'http.title:"Nothing Here"', for: 'card', note: 'n' },
+    { query: 'product:"Widget Server"', for: 'card', note: 'already on the card' },
+  ];
+  const net = fakeShodan({ totals: { [`vuln:${CVE}`]: 1, 'product:"Widget Server"': 5, 'http.title:"Cisco vManage"': 412 } });
+  const v = await validateExposure(ex, { key: KEY, cpes, fetchImpl: net, now, ...quick, aliases, vuln: true });
+  const hit = v.items.find((i) => i.kind === 'alias');
+  assert.equal(hit.query, 'http.title:"Cisco vManage"'); assert.equal(hit.total, 412); assert.equal(hit.check, 'counted'); assert.equal(hit.for, 'widgetry:widget_server');
+  assert.match(hit.note, /suggested by the model/);
+  assert.equal(v.items.filter((i) => i.kind === 'alias').length, 1, 'a miss is dropped');
+  assert.deepEqual(v.shodan.aliases, { suggested: 2, matched: 1 }, 'the duplicate of a card query is not counted as suggested');
+  assert.equal(net.asked.filter((q) => q === 'product:"Widget Server"').length, 1, 'the card query is asked once, not again as an alias');
+  assert.equal(v.trend.at(-1).totals['http.title:"Cisco vManage"'], 412);
+  assert.match(exposureTable(v), /Banner spellings: a model read 2 .* 1 matched something on Shodan and is shown above, the rest was dropped/);
+  assert.match(exposureTable(v), /shodan <span class="s">· alias · widgetry:widget_server/);
 });

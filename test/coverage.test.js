@@ -146,6 +146,8 @@ test('checkCoverage: with a Shodan key every Shodan query is counted after NVD n
   const { vuln, ...noProbe } = cov.exposure.shodan;
   assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: noProbe } }, now + 3600_000, { shodanKey: 'k' }), true);
   assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: { ...noProbe, vuln: null } } }, now + 3600_000, { shodanKey: 'k' }), false);
+  const { aliases, ...noAliases } = cov.exposure.shodan;
+  assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: noAliases } }, now + 3600_000, { shodanKey: 'k' }), true, 'counted before banner spellings existed');
 });
 
 test('checkCoverage: without NVD CPEs the exposure block says so and carries only the CVE query', async () => {

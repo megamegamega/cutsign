@@ -167,6 +167,18 @@ tick re-checks stale cards on its own, in a bounded slice before the watches (no
 models, the KEV catalog fetched only when a card is actually stale; new cards start for 90 s and
 the rest take the next hour), so no card waits for tomorrow's brief.
 
+**Banner spellings** (`lib/scannernames.js`). NVD names a product as the vendor's catalogue does
+today (Catalyst SD-WAN Manager, VeloCloud Orchestrator under Arista); Shodan's banners print the
+name the device shipped with (vManage, VeloCloud). With a Shodan key set, one small model call per
+card version reads the NVD names and the card's own affected text and proposes the strings a
+scanner would show (`http.title`, `product`, `http.component`, `http.html`, `ssl`). Each proposal
+is validated (a filter from that list, a specific plain value, never a vendor name or a generic word
+alone, never scope), counted against Shodan, and shown as an `alias` row only when it matches
+something; the card says how many were proposed and how many matched. The suggestions are cached on
+the card's exposure block by a key over the inputs, so the model is asked again only when the
+products or the card text change; the call's cost rides on the sweep's cost line. The discovery
+search's facets also include `http.title`, and the per-card Shodan budget is 20 calls.
+
 **Without an NVD CPE**, the exposure block falls back to the name the campaign gives the software
 (from the card's title, never an actor or malware name): a `product:` and an `http.component:`
 query per name, plus the Censys form, each carrying the card's own affected-version text, so a
