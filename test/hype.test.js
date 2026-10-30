@@ -53,6 +53,15 @@ test('score: thread age, publishers, primary source, exposure, actor and watch s
   assert.ok(reasons.includes('public PoC repo +1'));
 });
 
+test('score: two items in one brief are one day of the story, not two', () => {
+  const a = story(1, { brief_date: '2026-10-29', cves: ['CVE-2026-41709'] });
+  const b = story(2, { brief_date: '2026-10-29', cves: ['CVE-2026-41709'], updates_story_id: a.id });
+  const { reasons } = hypeScore({ story: b, thread: threadOf(b, new Map([[a.id, a]])), day: '2026-10-29' });
+  assert.ok(!reasons.some((r) => r.startsWith('day ')), reasons.join(' | '));
+  const c = story(3, { brief_date: '2026-10-30', cves: ['CVE-2026-41709'], updates_story_id: b.id });
+  assert.ok(hypeScore({ story: c, thread: threadOf(c, new Map([[a.id, a], [b.id, b]])), day: '2026-10-30' }).reasons.includes('day 2 of the story +1'));
+});
+
 test('threadOf stops at a cycle and at an unloaded row', () => {
   const a = story(1, { updates_story_id: uuid(2) }); const b = story(2, { updates_story_id: uuid(1) });
   assert.equal(threadOf(a, new Map([[b.id, b], [a.id, a]])).length, 2);

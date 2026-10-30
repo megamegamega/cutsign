@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findUpdatedStory, isNovelBehavior, fingerprint } from '../lib/diff.js';
+import { findUpdatedStory, isNovelBehavior, fingerprint, linkSiblings } from '../lib/diff.js';
 import { memoryStore } from '../lib/store-memory.js';
 import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
-import { fixtureMessage, withHeaders, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, NETSCALER_EXTRACTION } from './helpers.js';
+import { fixtureMessage, withHeaders, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, NETSCALER_EXTRACTION, emptyExtraction } from './helpers.js';
 
 const prior = (o) => ({ story: { id: o.id, created_at: o.at || '2026-10-18T12:00:00Z', cves: [], threat_actor: null, malware_family: null, ...o }, iocIds: new Set(o.iocs || []) });
 
@@ -22,6 +22,47 @@ test('update matching: shared CVE, specific malware, or actor + shared IoC', () 
   const two = [prior({ id: 'old', cves: ['CVE-1-1'], at: '2026-10-10T00:00:00Z' }), prior({ id: 'new', cves: ['CVE-1-1'], at: '2026-10-19T00:00:00Z' })];
   assert.equal(findUpdatedStory({ cves: ['CVE-1-1'] }, new Set(), two).id, 'new');
   assert.equal(fingerprint({ cves: ['CVE-2026-1'], threat_actor: 'UNC5820', malware_family: 'ransomware' }), 'cve:CVE-2026-1|actor:unc5820');
+});
+
+test('same-brief siblings: the later item updates the earlier, the group takes its strongest priority, unrelated items untouched', () => {
+  const row = (id, o) => ({ id, ordinal: 0, created_at: '2026-10-29T11:30:00Z', cves: [], threat_actor: null, malware_family: null, priority: 3, priority_reason: 'r', first_published_at: null, updates_story_id: null, ...o });
+  // two outlets' takes on one campaign: the one published first is the original, whatever the brief order
+  const thn = row('thn', { ordinal: 2, cves: ['CVE-2026-41709'], threat_actor: 'Warp Panda', priority: 1, first_published_at: '2026-10-29' });
+  const sw = row('sw', { ordinal: 7, cves: ['CVE-2026-41709', 'CVE-2026-59309'], threat_actor: 'Warp Panda', priority: 2, priority_reason: 'no huntable patterns', first_published_at: '2026-10-29' });
+  const other = row('other', { ordinal: 4, cves: ['CVE-2026-1'], priority: 2 });
+  const p = linkSiblings([sw, other, thn]);
+  assert.deepEqual(p.get('sw'), { updates_story_id: 'thn', priority: 1, priority_reason: 'no huntable patterns (raised to P1: the same brief carries a P1 item on this campaign)' }, 'brief order breaks the tie on the same publication day');
+  assert.equal(p.has('thn'), false, 'the original keeps its row');
+  assert.equal(p.has('other'), false);
+  // a third item chains to the nearest earlier sibling; an item that already updates yesterday's row keeps that link only when no sibling precedes it
+  const late = row('late', { ordinal: 9, cves: ['CVE-2026-59309'], first_published_at: '2026-10-29', updates_story_id: 'yesterday' });
+  const q = linkSiblings([thn, sw, late]);
+  assert.equal(q.get('late').updates_story_id, 'sw', 'links to the sibling it shares a CVE with, keeping the chain linear');
+  assert.equal(q.get('late').priority, 1, 'the whole chain is one group');
+  // actor alone never links siblings either
+  assert.equal(linkSiblings([row('a', { threat_actor: 'APT28' }), row('b', { ordinal: 1, threat_actor: 'APT28' })]).size, 0);
+  // level priorities: nothing to change (a second pass is a no-op)
+  assert.equal(linkSiblings([thn, { ...sw, priority: 1 }]).get('sw').priority, undefined);
+});
+
+test('two items in one brief on one campaign: linked, labelled, and the P2 rises to its sibling\'s P1', async () => {
+  const out = captureOutputs();
+  const store = memoryStore();
+  // the retailer item is a second outlet's take on the NetScaler campaign (shares the CVE), rated P2 on its own
+  installFakeLLM((user, n, req) => /Some retailer/.test(user) && req?.schemaName !== 'proposal'
+    ? { ...emptyExtraction('Retailer outlet on the NetScaler campaign', 2), story: { ...emptyExtraction('x', 2).story, title: 'Retailer outlet on the NetScaler campaign', cves: ['CVE-2026-88779'], earliest_published: '2026-10-21' } }
+    : defaultResponder(user, n, req));
+  await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  const t = store._tables;
+  const ns = t.stories.find((s) => s.title.startsWith('NetScaler'));
+  const rt = t.stories.find((s) => s.title.startsWith('Retailer outlet'));
+  assert.equal(rt.updates_story_id, ns.id, 'the later-published item updates the earlier one');
+  assert.equal(ns.updates_story_id, null);
+  assert.equal(rt.priority, 1, 'takes the sibling\'s P1');
+  assert.match(rt.priority_reason, /raised to P1: the same brief carries a P1 item/);
+  assert.equal(t.runs[0].counts.story_siblings, 1);
+  assert.match(out.emails[0].html, /continues an earlier item in today's brief/, 'labelled as a same-brief continuation, not as an update to today\'s date');
 });
 
 test('behavior novelty tolerates small changes in the command list', () => {

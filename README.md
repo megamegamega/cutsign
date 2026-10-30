@@ -58,7 +58,7 @@ and the next tick retries from that stage (3 attempts), resuming what was persis
 | received → parsed | MIME → clean text; the brief split into one story per item |
 | parsed → fetched | each story's sources, with timeouts, size caps, redirect limits, robots.txt, a 7-day cache, and a prompt-injection screen that excludes suspicious pages from extraction |
 | fetched → extracted | a **light read** of every story, scored on what it found; the top stories get a **deep read** with more sources. Structured output validated by zod; ATT&CK IDs checked against a local mirror. Titles and summaries claim outcomes only as strongly as the sources confirm |
-| extracted → normalized | IoCs refanged and canonicalized, placeholders and private ranges dropped, upserted on `(type, value)`; stories matched to the trailing 14 days and linked as updates |
+| extracted → normalized | IoCs refanged and canonicalized, placeholders and private ranges dropped, upserted on `(type, value)`; stories matched to the trailing 14 days and linked as updates; two items in one brief on one campaign (shared CVE, specific malware, or actor plus an IoC) are linked the later to the earlier and take the group's strongest priority, since the model rated each alone — the views say "continues an earlier item in today's brief", the card thread carries both, and the sweep scores the pair once |
 | normalized → … → sent | email, site, Discord. The `validated` / `queried` stages are seams for the detection-validation companion (see below) |
 
 **Watches.** Each day's deep-read stories become watches (14 days, extended by material changes,

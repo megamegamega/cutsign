@@ -47,7 +47,7 @@ const updateChip = (s) => {
   const date = u.brief_date || String(u.created_at || '').slice(0, 10);
   const exec = u.selected || (u.priority ?? 3) <= 2;
   const href = `/?d=${encodeURIComponent(date)}&view=${exec ? 'ciso' : 'analyst'}#s-${esc(String(u.id).slice(0, 8))}`;
-  return `<a class="c" href="${href}">update to ${esc(date)}</a>`;
+  return `<a class="c" href="${href}">${u.run_id && u.run_id === s.run_id ? 'continues an earlier item today' : `update to ${esc(date)}`}</a>`;
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
