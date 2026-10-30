@@ -147,6 +147,13 @@ a.c{color:var(--link)}
 .sub input[type=email]:focus{border-color:var(--acc)}
 .sub button{font:600 12px/1 inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:var(--bg);cursor:pointer}
 .sub .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+/* Shodan counts under each exposure query (lib/exposure.js countHtml): the number is the thing to see */
+.cnt{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin:6px 0 0;font-size:12.5px;color:var(--mut)}
+.cnt .num{font-weight:800;font-size:19px;line-height:1;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--acc);background:color-mix(in srgb,var(--acc) 14%,transparent);border:1px solid color-mix(in srgb,var(--acc) 35%,transparent);border-radius:7px;padding:4px 9px}
+.cnt.zero .num{color:var(--mut);background:var(--chip);border-color:var(--chip-line)}
+.cnt .trd{font-family:var(--mono);font-size:11.5px}
+.cnt .trd.up{color:var(--bad)} .cnt .trd.down{color:var(--acc)}
+.cnt.off .lbl{font-style:italic}
 /* print / save-PDF: the AI card and draft pages print like the hand cards — site chrome off,
    dark backgrounds kept, full bleed (phones have no "Margins: None" control) */
 @media print{

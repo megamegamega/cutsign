@@ -105,19 +105,32 @@
       // one block per query, not a table: a <pre> in a table cell collapses to one character a line on a phone
       // Shodan's count of each query (lib/shodan.js writes check/total/counted_at; the trend is one point a day) — mirrors countLine/trendRows in lib/exposure.js
       const fmtN = (n) => Number(n).toLocaleString('en-US');
-      const countLine = (i) => {
+      const trendRefs = (i) => {
+        const day = String(i.counted_at || '').slice(0, 10);
+        const pts = (ex.trend || []).filter((t) => t && t.totals && t.totals[i.query] != null && t.at !== day);
+        const ref = (t) => { const a = t.totals[i.query]; const d = (i.total || 0) - a; const pct = a ? ` ${d >= 0 ? '+' : '-'}${Math.round(Math.abs(d) / a * 100)}%` : ''; return `${fmtN(a)} on ${t.at} (${d >= 0 ? '+' : '-'}${fmtN(Math.abs(d))}${pct})`; };
+        const refs = pts.length ? [pts[0]].concat(pts.length > 1 ? [pts[pts.length - 1]] : []).map(ref) : [];
+        const first = pts.length ? pts[0].totals[i.query] : null;
+        return { refs, dir: first == null ? '' : (i.total || 0) > first ? 'up' : (i.total || 0) < first ? 'down' : 'flat' };
+      };
+      // the number as a badge (card lane colour for a hit, muted for a zero), the trend coloured by direction (up is more exposure)
+      const countHtml = (i) => {
         if (!i.check) return '';
         const day = String(i.counted_at || '').slice(0, 10);
+        const wrap = 'display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin:6px 0 0;font-size:12.5px;color:var(--mut)';
         if (i.check === 'counted' || i.check === 'empty') {
-          const pts = (ex.trend || []).filter((t) => t && t.totals && t.totals[i.query] != null && t.at !== day);
-          const ref = (t) => { const a = t.totals[i.query]; const d = (i.total || 0) - a; const pct = a ? ` ${d >= 0 ? '+' : '-'}${Math.round(Math.abs(d) / a * 100)}%` : ''; return `${fmtN(a)} on ${t.at} (${d >= 0 ? '+' : '-'}${fmtN(Math.abs(d))}${pct})`; };
-          const refs = pts.length ? [pts[0]].concat(pts.length > 1 ? [pts[pts.length - 1]] : []).map(ref) : [];
-          const head = i.check === 'empty' ? `Shodan: 0 services match this spelling (${day})${i.check_note ? ` — ${i.check_note}` : ''}` : `Shodan: ${fmtN(i.total)} services internet-wide (${day})`;
-          return [head].concat(refs).join(' · ');
+          const { refs, dir } = trendRefs(i);
+          const zero = i.check === 'empty';
+          const num = zero ? 'font-weight:800;font-size:19px;line-height:1;color:var(--mut);border:1px solid var(--line);border-radius:7px;padding:4px 9px'
+            : 'font-weight:800;font-size:19px;line-height:1;color:var(--lane);background:var(--lane-bg, rgba(128,128,128,.12));border:1px solid var(--lane);border-radius:7px;padding:4px 9px';
+          const lbl = zero ? `match this spelling on Shodan · ${day}${i.check_note ? ` — ${i.check_note}` : ''}` : `services internet-wide on Shodan · ${day}`;
+          const trd = refs.length ? `<span style="font-family:var(--mono);font-size:11.5px;color:${dir === 'up' ? 'var(--bad)' : dir === 'down' ? 'var(--ok)' : 'inherit'}">${dir === 'up' ? '▲' : dir === 'down' ? '▼' : '▬'} ${esc(refs.join(' · '))}</span>` : '';
+          return `<p class="cnt" style="${wrap}"><span style="${num}">${fmtN(i.total || 0)}</span><span>${esc(lbl)}</span>${trd}</p>`;
         }
-        return i.check === 'plan' || i.check === 'skipped' ? `Shodan count: ${i.check_note}` : `Shodan count failed: ${i.check_note}`;
+        const text = i.check === 'plan' || i.check === 'skipped' ? `Shodan count: ${i.check_note}` : `Shodan count failed: ${i.check_note}`;
+        return `<p class="cnt" style="${wrap};font-style:italic"><span>${esc(text)}</span></p>`;
       };
-      const rows = (ex.items || []).map((i) => { const c = countLine(i); return `<div style="margin:0 0 10px"><p style="margin:0"><b>${esc(i.engine)}</b> <span class="src">· ${esc(i.kind || '')}${i.for ? ` · ${esc(i.for)}` : ''}</span></p><pre style="margin:4px 0">${esc(i.query)}</pre><p class="src" style="margin:0">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</p>${c ? `<p class="src" style="margin:0"><b>${esc(c)}</b></p>` : ''}</div>`; }).join('');
+      const rows = (ex.items || []).map((i) => `<div style="margin:0 0 10px"><p style="margin:0"><b>${esc(i.engine)}</b> <span class="src">· ${esc(i.kind || '')}${i.for ? ` · ${esc(i.for)}` : ''}</span></p><pre style="margin:4px 0">${esc(i.query)}</pre><p class="src" style="margin:0">${i.url ? `<a href="${esc(i.url)}">open</a> · ` : ''}${esc(i.note)}</p>${countHtml(i)}</div>`).join('');
       const byQ = new Map();
       for (const t of ex.trend || []) for (const q of Object.keys((t && t.totals) || {})) { if (!byQ.has(q)) byQ.set(q, []); byQ.get(q).push({ at: t.at, n: t.totals[q] }); }
       const tr = [...byQ].filter(([, p]) => p.length >= 2).map(([q, p]) => { const a = p[0]; const b = p[p.length - 1]; const d = b.n - a.n; return `<tr><td><code>${esc(q)}</code></td><td>${fmtN(a.n)} <span class="src">${esc(a.at)}</span></td><td>${fmtN(b.n)} <span class="src">${esc(b.at)}</span></td><td>${d >= 0 ? '+' : '-'}${fmtN(Math.abs(d))}${a.n ? ` (${d >= 0 ? '+' : '-'}${Math.round(Math.abs(d) / a.n * 100)}%)` : ''} <span class="src">over ${p.length} days</span></td></tr>`; });

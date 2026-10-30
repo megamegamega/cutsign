@@ -139,7 +139,7 @@ test('validateExposure: every Shodan query counted, a product Shodan spells diff
   assert.deepEqual(rows.find((r) => r.query === `vuln:${CVE}`), { query: `vuln:${CVE}`, first: { at: '2026-10-30', n: 1200 }, latest: { at: '2026-11-06', n: 900 }, delta: -300, pct: -25, points: 2 });
   assert.equal(rows.some((r) => r.query === 'http.component:"Acme Panel UI"'), false, 'a query counted once has no trend row');
   const html = exposureTable(v3);
-  assert.match(html, /Shodan: 900 services internet-wide \(2026-11-06\) · 1,200 on 2026-10-30 \(-300 -25%\)/);
+  assert.match(html, /<span class="num">900<\/span><span class="lbl">services internet-wide on Shodan · 2026-11-06<\/span><span class="trd down">▼ 1,200 on 2026-10-30 \(-300 -25%\)/);
   assert.match(html, /Internet-wide count, trend/); assert.match(html, /over 2 days/);
   assert.match(html, /each Shodan query counted against Shodan itself/);
 });

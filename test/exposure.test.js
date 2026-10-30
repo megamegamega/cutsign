@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nvdCpes, productName, exposureQueries, exposureTable, namedProducts, SCOPE_NOTE } from '../lib/exposure.js';
+import { nvdCpes, productName, exposureQueries, exposureTable, namedProducts, countHtml, SCOPE_NOTE } from '../lib/exposure.js';
 
 const CVE = 'CVE-2026-424242';
 const nvd = (cpeMatch) => ({ vulnerabilities: [{ cve: { id: CVE, configurations: [{ nodes: [{ operator: 'OR', cpeMatch }] }] } }] });
@@ -101,4 +101,17 @@ test('namedProducts: generic phrases, nationalities and a vendor alone are not p
   assert.deepEqual(namedProducts({ title: 'Cisco ASA/FTD SSL VPN zero-day CVE-2026-76418 exploited' }), [], 'SSL VPN is generic; ASA/FTD is lost to the slash and NVD carries it');
   assert.deepEqual(namedProducts({ title: 'Warp Panda reported exploiting ESXi logging flaw, China-nexus', exclude: ['Warp Panda'] }), ['ESXi']);
   assert.deepEqual(namedProducts({ title: 'Probing of patched Oracle flaw observed', affected: ['Oracle: Application Object Library'] }), [], 'a vendor alone counts every banner that vendor ever shipped');
+});
+
+test('countHtml: the number is a badge, a hit in accent and a zero muted, the trend coloured by direction', () => {
+  const hit = { engine: 'shodan', kind: 'product', query: 'product:"X"', check: 'counted', total: 1200, counted_at: '2026-10-30T12:00:00Z' };
+  const trend = [{ at: '2026-10-28', totals: { 'product:"X"': 1000 } }, { at: '2026-10-29', totals: { 'product:"X"': 1100 } }];
+  const h = countHtml(hit, trend);
+  assert.match(h, /^<p class="cnt hit"><span class="num">1,200<\/span><span class="lbl">services internet-wide on Shodan · 2026-10-30<\/span><span class="trd up">▲ 1,000 on 2026-10-28 \(\+200 \+20%\) · 1,100 on 2026-10-29 \(\+100 \+9%\)<\/span><\/p>$/);
+  assert.match(countHtml({ ...hit, total: 900 }, trend), /class="trd down">▼/);
+  assert.match(countHtml({ ...hit, check: 'empty', total: 0, check_note: 'a text search for "X" matches nothing on Shodan' }), /^<p class="cnt zero"><span class="num">0<\/span><span class="lbl">match this spelling on Shodan · 2026-10-30 — a text search for &quot;X&quot; matches nothing on Shodan<\/span><\/p>$/);
+  assert.match(countHtml({ ...hit, check: 'plan', check_note: 'the vuln: filter returns nothing for this key' }), /^<p class="cnt off"><span class="lbl">Shodan count: the vuln: filter returns nothing for this key<\/span><\/p>$/);
+  assert.equal(countHtml({ engine: 'censys', query: 'q' }), '');
+  const table = exposureTable({ items: [hit], trend, built_at: '2026-10-30T12:00:00Z' });
+  assert.match(table, /<span class="num">1,200<\/span>/); assert.doesNotMatch(table, /<b>Shodan: /);
 });
