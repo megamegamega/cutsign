@@ -5,7 +5,7 @@ const BY_SOURCE = { resend: ['BRIEF_INBOUND_ADDRESS'], gmail: ['GMAIL_CLIENT_ID'
 
 // Optional tables (added by later migrations); reported as ok | missing so an unapplied migration
 // is visible without database access. Never fails the health check.
-const OPTIONAL_TABLES = ['watches', 'card_drafts', 'subscribers'];
+const OPTIONAL_TABLES = ['watches', 'card_drafts', 'card_subscribers'];
 
 export default async function handler(req, res) {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');

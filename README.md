@@ -171,7 +171,7 @@ query per name, plus the Censys form, each carrying the card's own affected-vers
 card is not blind to its product while NVD catches up; NVD's rows replace them at the re-check
 that finds the configuration.
 
-**Card mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_subscribers.sql`).
+**Card mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_card_subscribers.sql`).
 The cards index and every AI card page carry a sign-up form; the hand-written cards get the same
 form from `lifecycle.js`. An address is stored pending, mailed a confirmation link, and only after
 that link is opened does it get mail: one message per new verdict card (an AI card at its first

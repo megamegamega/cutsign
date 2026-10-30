@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     return page(res, r.status === 'invalid' ? 400 : 200, resultPage(r.status));
   } catch (e) {
     const m = String(e?.message || e);
-    if (/subscribers/.test(m) && /does not exist|could not find|schema cache/i.test(m)) return page(res, 503, resultPage('unavailable'));
+    if (/card_subscribers/.test(m) && /does not exist|could not find|schema cache/i.test(m)) return page(res, 503, resultPage('unavailable'));
     return page(res, 500, resultPage('error'));
   }
 }
