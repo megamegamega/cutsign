@@ -115,3 +115,8 @@ test('countHtml: the number is a badge, a hit in accent and a zero muted, the tr
   const table = exposureTable({ items: [hit], trend, built_at: '2026-10-30T12:00:00Z' });
   assert.match(table, /<span class="num">1,200<\/span>/); assert.doesNotMatch(table, /<b>Shodan: /);
 });
+
+test('namedProducts: version numbers in an affected line are the range, not the name', () => {
+  assert.deepEqual(namedProducts({ title: 'Drupal Commerce Core access bypass CVE-2026-118539', affected: ['Drupal Commerce Core 0.0.0 through 2.39', 'Drupal Commerce Core 3.0.0 before 3.0.5'] }), ['Drupal Commerce Core']);
+  assert.deepEqual(namedProducts({ title: 'GitLab 19.5.1 critical release' }), ['GitLab']);
+});

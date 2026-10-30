@@ -224,3 +224,16 @@ test('validateExposure: a named guess that matched nothing leaves the card and i
   assert.ok(!('product:"Attackers"' in v.trend.at(-1).totals), 'a failed guess is not a trend point');
   assert.match(exposureTable(v), /Also tried under the name the card uses, nothing matched on Shodan: <code>product:&quot;Attackers&quot;<\/code>/);
 });
+
+test('validateExposure: a spelling discovered for two product groups is one row', async () => {
+  const two = nvdCpes(nvd([
+    { vulnerable: true, criteria: 'cpe:2.3:a:cisco:catalyst_sd-wan_manager:*:*:*:*:*:*:*:*' },
+    { vulnerable: true, criteria: 'cpe:2.3:a:cisco:sd-wan_vsmart_controller:*:*:*:*:*:*:*:*' },
+  ]));
+  const ex = exposureQueries({ cves: [CVE], cpes: two });
+  const facet = { product: [{ value: 'Cisco Catalyst SD-WAN vdaemon', count: 391 }] };
+  const net = fakeShodan({ totals: { 'product:"Cisco Catalyst SD-WAN vdaemon"': 391 }, facets: { 'Catalyst Sd-wan': facet, 'Sd-wan Vsmart': facet } });
+  const v = await validateExposure(ex, { key: KEY, cpes: two, fetchImpl: net, now, ...quick, vuln: true });
+  assert.equal(v.items.filter((i) => i.query === 'product:"Cisco Catalyst SD-WAN vdaemon"').length, 1);
+  assert.equal(net.asked.filter((q) => q === 'product:"Cisco Catalyst SD-WAN vdaemon"').length, 1, 'counted once');
+});
