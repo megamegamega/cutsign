@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { scannerNames, cleanNames, aliasKey, MAX_ALIASES, FILTERS } from '../lib/scannernames.js';
 import { installFakeLLM } from './helpers.js';
+import { _setLLM } from '../lib/llm.js';
 
 const products = [
   { part: 'a', vendor: 'cisco', product: 'catalyst_sd-wan_manager', cpe23: 'cpe:2.3:a:cisco:catalyst_sd-wan_manager', ranges: ['< 20.9.8.2'] },
@@ -61,4 +62,12 @@ test('scannerNames: one light call, validated, cached on the previous block by k
   installFakeLLM(() => ({ nonsense: true }));
   const bad = await scannerNames({ products, affected, title: 'x' });
   assert.deepEqual(bad.aliases, []); assert.ok(bad.cost > 0);
+});
+
+test('scannerNames: a model that does not answer in time yields no aliases, not a stalled card check', async () => {
+  _setLLM(() => new Promise(() => {})); // the model never answers (installFakeLLM would stringify the pending promise at once)
+  const t0 = Date.now();
+  const r = await scannerNames({ products, affected, title: 'slow', timeoutMs: 50 });
+  assert.ok(Date.now() - t0 < 2000);
+  assert.deepEqual(r.aliases, []); assert.match(r.error, /exceeded 50 ms/); assert.equal(r.cost, 0);
 });
