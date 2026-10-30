@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { hypeScore, threadOf, hypeSweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, P1_REASON } from '../lib/hype.js';
+import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, P1_REASON } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
@@ -455,4 +455,28 @@ test('coverage: cards and published drafts whose campaign is not in today\'s bri
   // same day again: nothing is re-asked
   const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
   assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
+});
+
+test('coverage: the hourly tick re-checks stale cards on its own, fetches KEV only when one is stale, and defers past its deadline', async (t) => {
+  t.after(off);
+  const { store, out } = await published();
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const old = await store.insertCardDraft({ story_id: uuid(8), thread_ids: [uuid(8)], title: 'Older published card', score: 10, reasons: [], draft: { ...DRAFT, cves: ['CVE-2026-8'], coverage: { checked_at: '2026-10-27T12:00:00Z', lanes: [{ id: 'cloudflare_waf', name: 'Cloudflare WAF managed-ruleset changelog', status: 'nothing found', detail: '' }] } }, version: 1, status: 'promoted', promoted_slug: 'older-2026', surfaced_at: '2026-10-27T12:00:00Z' });
+  const net = routed({ kev: [{ cveID: 'CVE-2026-8', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': '<rss><channel><item><title>WAF Release - CVE-2026-8</title><link>https://developers.cloudflare.com/waf/change-log/z/</link></item></channel></rss>' } });
+  // a deadline already past: every stale card is deferred, nothing is fetched (not even KEV)
+  const d0 = await coverageOnlySweep(store, { fetchImpl: net, now, deadline: 0 });
+  assert.equal(d0.coverage_checked, 0); assert.ok(d0.coverage_deferred >= 1, JSON.stringify(d0));
+  assert.equal(net.calls.length, 0, 'nothing fetched when every card is deferred');
+  // the real hourly call: the published draft and the hand cards with no check yet are all re-checked
+  const c = await coverageOnlySweep(store, { fetchImpl: net, now });
+  assert.ok(c.coverage_checked >= 1, JSON.stringify(c)); assert.equal(c.errors, 0);
+  assert.equal(net.calls.filter((u) => u.includes('cisa.gov/sites/default/files/feeds')).length, 1, 'KEV fetched once for the whole sweep');
+  const re = await store.getCardDraft(old.id);
+  assert.equal(re.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ coverage changed for AI card older-2026')));
+  // an hour later nothing is stale: no check, no KEV fetch
+  const before = net.calls.length;
+  const c2 = await coverageOnlySweep(store, { fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
+  assert.equal(net.calls.length, before, 'a quiet hour fetches nothing');
 });

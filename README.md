@@ -157,7 +157,11 @@ when Shodan stores the CPE versioned. The totals are kept as one point a day (90
 card's coverage check and rendered as a trend table (first, latest, change) once a query has two
 days of counts; a daily count moving is not posted to Discord, a spelling found or the key failing
 is. `vuln:` is a paid-tier filter: on a plan without it the row says so and the product queries are
-still counted. A check made without a key is re-asked at the next tick once the key is set.
+still counted. A check made without a key is stale the moment the key exists, and the hourly watch
+tick re-checks stale cards on its own (a quiet hour runs only the coverage sweep: no scoring, no
+models, the KEV catalog fetched only when a card is actually stale, and the sweep stops starting
+cards near the function's deadline so the rest take the next hour), so no card waits for tomorrow's
+brief.
 `/api/health` reports `shodan` from the key's account record (plan and query credits left, never
 the key). Nothing but the generic filter ever leaves the host: the scope half stays placeholders.
 
