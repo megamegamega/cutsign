@@ -12,7 +12,9 @@ public sources behind each story, and produces a structured record for defenders
 
 It emails a morning brief, publishes the same material as a small site (analyst, CISO, agent-JSON,
 IoC-corpus and search views), keeps a **watch** on ongoing stories so material developments —
-new advisories, KEV listings, vendor fixes, confirmed exploitation — surface the same day, and for
+new advisories, KEV listings, vendor fixes, confirmed exploitation — surface the same day (one
+development, one line: a write-up that only reports a KEV listing the catalog probe caught in the
+same tick folds into that event and lends it its link), and for
 the stories that matter most carries hand-written one-page **verdict cards** (patch / hunt / prepare,
 with detection coverage per vendor and tool-neutral inferred detections).
 

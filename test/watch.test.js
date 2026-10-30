@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
-import { runWatchTick, addedText, lineHashes, itemMatches, parseFeed } from '../lib/watch.js';
+import { runWatchTick, addedText, lineHashes, itemMatches, parseFeed, foldKevEvents } from '../lib/watch.js';
 import { fixtureMessage, withHeaders, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, readFixture } from './helpers.js';
 
 const ADVISORY = 'https://research.vendor-fixture.test/netscaler-post-exploitation';
@@ -165,16 +165,35 @@ test('new IoCs alone never retitle, even if the model says so', async () => {
   assert.equal(store._tables.watches[0].title, before);
 });
 
-test('KEV listing and a new write-up naming the CVE are caught', async () => {
-  const llm = { next: () => assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'BleepingComputer reports mass exploitation.' }) };
+test('KEV listing and a new write-up naming the CVE are caught; a write-up that only reports the listing folds into it', async () => {
+  const llm = { next: (u) => (/Known Exploited Vulnerability to Catalog/.test(u)
+    ? assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'CISA added CVE-2026-88779 to the KEV Catalog based on evidence of active exploitation.' })
+    : assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'BleepingComputer reports mass exploitation.' })) };
   const { store } = await setup(llm);
   const w = world();
   await runWatchTick(store, { fetchImpl: w.fetch });
   w.kev = ['CVE-2026-88779'];
-  w.feed = [{ title: 'Hackers mass-exploit CVE-2026-88779', link: 'https://www.bleepingcomputer.com/news/x', summary: 'Mass exploitation of the NetScaler flaw.' }];
+  w.feed = [
+    { title: 'Hackers mass-exploit CVE-2026-88779', link: 'https://www.bleepingcomputer.com/news/x', summary: 'Mass exploitation of the NetScaler flaw.' },
+    { title: 'CISA Adds One Known Exploited Vulnerability to Catalog', link: 'https://www.cisa.gov/news-events/alerts/2026/10/22/cisa-adds-one-known-exploited-vulnerability-catalog', summary: 'CISA added CVE-2026-88779 to the KEV Catalog.' },
+  ];
   await runWatchTick(store, { fetchImpl: w.fetch });
-  const kinds = store._tables.watch_events.map((e) => `${e.kind}:${e.level}`).sort();
-  assert.deepEqual(kinds, ['kev_added:HIGH', 'new_source:HIGH']);
+  const ev = store._tables.watch_events;
+  assert.deepEqual(ev.map((e) => `${e.kind}:${e.level}`).sort(), ['kev_added:HIGH', 'new_source:HIGH'], 'the listing and the exploitation write-up: two lines, not three');
+  const kev = ev.find((e) => e.kind === 'kev_added');
+  assert.equal(kev.url, 'https://www.cisa.gov/news-events/alerts/2026/10/22/cisa-adds-one-known-exploited-vulnerability-catalog', 'the folded alert supplies the link');
+  assert.match(kev.summary, /^CVE-2026-88779 was added to CISA's Known Exploited Vulnerabilities catalog\. CISA added CVE-2026-88779 to the KEV Catalog/);
+  assert.ok(ev.find((e) => e.kind === 'new_source').url.includes('bleepingcomputer'), 'the write-up with more than the listing stays its own event');
+});
+
+test('foldKevEvents: only a listing-only write-up on the same CVE folds; the catalog link lands on the entry', () => {
+  const kev = { kind: 'kev_added', level: 'HIGH', url: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search_api_fulltext=CVE-2026-1', summary: 'CVE-2026-1 was added to CISA\'s Known Exploited Vulnerabilities catalog.' };
+  const iocs = { kind: 'new_source', level: 'HIGH', url: 'https://x.test/a', summary: 'CISA added CVE-2026-1 to KEV; the write-up lists new C2 domains.', assessment: { new_iocs: [{ type: 'domain', value: 'c2.example.test' }] } };
+  const otherCve = { kind: 'new_source', level: 'HIGH', url: 'https://x.test/b', summary: 'CISA added CVE-2026-2 to the KEV Catalog.' };
+  assert.equal(foldKevEvents([{ ...kev }, iocs, otherCve]).length, 3, 'new IoCs or a different CVE: nothing folds');
+  const folded = foldKevEvents([{ ...kev }, { kind: 'new_source', level: 'HIGH', url: 'https://x.test/c', summary: 'CISA added CVE-2026-1 to the KEV Catalog.', assessment: { kinds: ['exploitation'] } }]);
+  assert.equal(folded.length, 1); assert.equal(folded[0].url, 'https://x.test/c'); assert.deepEqual(folded[0].assessment, { kinds: ['exploitation'] });
+  assert.deepEqual(foldKevEvents([iocs]), [iocs], 'no listing this tick: untouched');
 });
 
 test('injection-shaped new text is recorded but never sent to a model', async () => {
