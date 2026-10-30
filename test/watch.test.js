@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
-import { runWatchTick, addedText, lineHashes, itemMatches, parseFeed, foldKevEvents } from '../lib/watch.js';
+import { runWatchTick, addedText, lineHashes, itemMatches, parseFeed, foldKevEvents, watchMatchesStory, normUrl, mergeDuplicateWatches } from '../lib/watch.js';
+import { dedupeEvents } from '../lib/render.js';
 import { fixtureMessage, withHeaders, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, readFixture } from './helpers.js';
 
 const ADVISORY = 'https://research.vendor-fixture.test/netscaler-post-exploitation';
@@ -224,4 +225,43 @@ test('changes show in the next morning email, then are marked digested; same cam
   assert.match(html, /second-c2\[\.\]net/);
   assert.ok(store._tables.watch_events.every((e) => e.digested_at));
   assert.equal(store._tables.watches.length, 1, 'day-2 story extended the existing watch instead of creating another');
+});
+
+test('one story, one watch: duplicates are merged at the tick, and the same page change is assessed and shown once', async () => {
+  const llm = { next: () => assessment({ kinds: ['new_iocs'] }) };
+  const { store, out } = await setup(llm);
+  const t = store._tables;
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch }); // baseline
+  // a second and third watch on the same story (what a CVE-less story used to get on every pass over its run)
+  const base = structuredClone(t.watches[0]);
+  t.watches.push({ ...structuredClone(base), id: 'dup-1', created_at: '2099-01-01T00:00:00Z' }, { ...structuredClone(base), id: 'dup-2', created_at: '2099-01-02T00:00:00Z', urls: [base.urls[0].replace('https://', 'http://www.') + '/?utm=x'] });
+  w.advisory = w.advisory.replace('No file hashes were recovered.', 'Update Oct 22: the actor now also beacons to second-c2[.]net and drops /tmp/.x every hour.');
+  const c = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(c.merged, 2, JSON.stringify(c));
+  assert.deepEqual(t.watches.filter((x) => x.status === 'active').map((x) => x.id), [base.id], 'the oldest watch stays');
+  assert.ok(t.watches.filter((x) => x.id.startsWith('dup')).every((x) => x.status === 'expired' && x.state.merged_into === base.id));
+  const ev = t.watch_events;
+  assert.equal(ev.length, 1, 'one change, one event'); assert.equal(ev[0].level, 'HIGH');
+  assert.match(ev[0].assessment.text_hash, /^page_changed\|research\.vendor-fixture\.test\/netscaler-post-exploitation\|[0-9a-f]{10}$/);
+  assert.equal(out.emails.filter((m) => /^Cutsign update — /.test(m.subject)).length, 1, 'one alert');
+  // a different watch that also reads this page (not a duplicate: it has a page of its own) sees the same added text within the day: not assessed again
+  t.watches.push({ ...structuredClone(base), id: 'other', story_id: 'other-story', created_at: '2099-01-03T00:00:00Z', urls: [...base.urls, 'https://other.example.test/page'], state: { ...structuredClone(base.state), pages: structuredClone(base.state.pages) } });
+  t.watches.at(-1).state.pages[ADVISORY] = { h: 'stale', l: base.state.pages[ADVISORY].l };
+  const c2 = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(c2.duplicates, 1, JSON.stringify(c2)); assert.equal(t.watch_events.length, 1);
+});
+
+test('watchMatchesStory / normUrl / dedupeEvents: the same story row or a shared page is the same watch; a page read three times is one line', () => {
+  const w = { story_id: 's1', cves: [], urls: ['https://thehackernews.com/2026/10/x.html'], actor: null, malware: null };
+  assert.equal(watchMatchesStory(w, { id: 's1', cves: [] }), true, 'same story row');
+  assert.equal(watchMatchesStory(w, { id: 's2', updates_story_id: 's1', cves: [] }), true, 'the story it updates');
+  assert.equal(watchMatchesStory(w, { id: 's3', cves: [], source_urls: ['http://www.thehackernews.com/2026/10/x.html?m=1'] }), true, 'the same page, spelled differently');
+  assert.equal(watchMatchesStory(w, { id: 's4', cves: [], source_urls: ['https://thehackernews.com/2026/10/y.html'] }), false);
+  assert.equal(normUrl('HTTPS://www.Example.test/a/b/?q=1#f'), 'example.test/a/b');
+  const mk = (n, over = {}) => ({ id: `e${n}`, kind: 'page_changed', level: 'HIGH', url: 'https://thehackernews.com/2026/10/x.html', watch_title: 'T', summary: `reading ${n}`, created_at: `2026-10-30T13:4${n}:00Z`, ...over });
+  const d = dedupeEvents([mk(1), mk(2), mk(3), mk(4, { url: 'https://other.example.test/' }), mk(5, { kind: 'poc_repo', url: 'https://github.com/a/b' }), mk(6, { kind: 'poc_repo', url: 'https://github.com/a/c' })]);
+  assert.deepEqual(d.map((e) => e.id).sort(), ['e3', 'e4', 'e5', 'e6'], 'three reads of one page keep the latest; repos stay distinct');
+  const h = dedupeEvents([mk(1, { assessment: { text_hash: 'h1' } }), mk(2, { assessment: { text_hash: 'h1' } }), mk(3, { assessment: { text_hash: 'h2' } })]);
+  assert.deepEqual(h.map((e) => e.id).sort(), ['e2', 'e3'], 'with hashes, two different changes to one page both stay');
 });
