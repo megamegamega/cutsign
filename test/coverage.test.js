@@ -71,7 +71,8 @@ function fakeNet({ nvd = true, rapid7 = 'covered', redhat = 'errata', nuclei = f
     if (u.includes('tenable.com/plugins/search')) return ok(tenable === 'none' ? '<html><p>No results found.</p></html>' : tenable === 'blank' ? '<html><p>loading</p></html>'
       : `<html><table><tr><td><a class="no-break" href="/plugins/nessus/369521">369521</a></td><td>GLSA-202610-02 : Widgetry: Multiple Vulnerabilities</td><td>Nessus</td><td><a href="/plugins/nessus/families/x">Gentoo Local Security Checks</a></td><td>10/21/2026</td></tr><tr><td><a class="no-break" href="/plugins/was/114747">114747</a></td><td>Widgetry &lt; 24.3.1 RCE</td><td>Web App Scanning</td><td>x</td></tr></table></html>`);
     if (u.includes('sentinelone.com/blog/feed')) return ok(rss(s1BlogItems), 'application/rss+xml');
-    if (u.startsWith('https://api.shodan.io/')) { const q = new URL(u).searchParams.get('query'); return ok(JSON.stringify({ total: q.startsWith('vuln:') ? 1200 : q.startsWith('product:') ? 48000 : 0, matches: [], facets: {} }), 'application/json'); }
+    if (u.startsWith('https://api.shodan.io/api-info')) return ok(JSON.stringify({ plan: 'plus', query_credits: 100 }), 'application/json');
+    if (u.startsWith('https://api.shodan.io/')) { const q = new URL(u).searchParams.get('query') || ''; return ok(JSON.stringify({ total: q.startsWith('vuln:') ? 1200 : q.startsWith('product:') ? 48000 : 0, matches: [], facets: {} }), 'application/json'); }
     return miss(); // every other feed: not reachable in the lab
   };
   impl.calls = calls;
@@ -128,7 +129,7 @@ test('checkCoverage: with a Shodan key every Shodan query is counted after NVD n
   assert.equal(cov.exposure.shodan.status, 'ok');
   assert.deepEqual(cov.exposure.trend.map((t) => t.at), ['2026-10-28']);
   assert.ok(!JSON.stringify(cov).includes('test-key-not-real'), 'the key is in no stored text');
-  assert.ok(net.calls.some((u) => u.includes('api.shodan.io')) && net.calls.every((u) => !u.includes('api.shodan.io') || u.includes('query=')), 'Shodan asked through its API');
+  assert.ok(net.calls.some((u) => u.includes('api.shodan.io')) && net.calls.every((u) => !u.includes('api.shodan.io') || u.includes('query=') || u.includes('/api-info')), 'Shodan asked through its API');
   const changes = diffCoverage(prev, cov);
   assert.ok(changes.some((c) => /Shodan counts on \(2 queries counted\)/.test(c)), changes.join('\n'));
   const again = await checkCoverage({ cves: [CVE], fetchImpl: fakeNet(), githubToken: '', shodanKey: 'test-key-not-real', shodanMinGapMs: 0, prev: cov, now: now + 86400_000, ...quick });
@@ -138,6 +139,9 @@ test('checkCoverage: with a Shodan key every Shodan query is counted after NVD n
   assert.equal(coverageStale(prev, now, { shodanKey: 'k' }), true);
   assert.equal(coverageStale(prev, now, { shodanKey: '' }), false);
   assert.equal(coverageStale(cov, now + 3600_000, { shodanKey: 'k' }), false);
+  // a check from before counting existed (no shodan block at all) is stale too once a key is set
+  assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: undefined } }, now + 3600_000, { shodanKey: 'k' }), true);
+  assert.equal(coverageStale({ ...cov, exposure: { ...cov.exposure, shodan: undefined } }, now + 3600_000, { shodanKey: '' }), false);
 });
 
 test('checkCoverage: without NVD CPEs the exposure block says so and carries only the CVE query', async () => {

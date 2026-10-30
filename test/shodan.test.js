@@ -18,23 +18,47 @@ const quick = { minGapMs: 0, sleep: async () => {} };
 const now = Date.parse('2026-10-30T12:00:00Z');
 
 /** Fake Shodan: totals by query, facets for the discovery search, failure modes. Records every query asked. */
-function fakeShodan({ totals = {}, facets = {}, vulnPlan = false, badKey = false, rate = false } = {}) {
+function fakeShodan({ totals = {}, facets = {}, vulnPlan = false, badKey = false, rate = false, plan = 'plus' } = {}) {
   const asked = [];
   const impl = async (url) => {
     const u = new URL(url);
     assert.equal(u.hostname, 'api.shodan.io');
-    const q = u.searchParams.get('query'); asked.push(q);
     assert.equal(u.searchParams.get('key'), KEY);
     const json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
+    if (u.pathname === '/api-info') { impl.planAsked++; return badKey ? json({ error: 'Invalid API key' }, 401) : json({ plan, query_credits: 100 }); }
+    const q = u.searchParams.get('query'); asked.push(q);
     if (badKey) return json({ error: 'Invalid API key' }, 401);
     if (rate) return json({ error: 'Rate limit exceeded' }, 429);
     if (vulnPlan && q.startsWith('vuln:')) return json({ error: 'Please upgrade your API plan to use this filter.' }, 401);
     if (u.searchParams.get('facets')) return json({ total: 999, matches: [], facets: facets[q] || {} });
     return json({ total: totals[q] ?? 0, matches: [] });
   };
-  impl.asked = asked;
+  impl.asked = asked; impl.planAsked = 0;
   return impl;
 }
+
+test('validateExposure: on a plan without the vuln filter a vuln: zero is marked unconfirmed, not "0 services"; a nonzero still counts; the plan is asked once', async () => {
+  const ex = exposureQueries({ cves: [CVE], cpes });
+  const low = fakeShodan({ plan: 'dev', totals: { 'product:"Widget Server"': 5 } });
+  // two days back, so the module's hour-long plan cache from this lookup is expired for the tests that follow
+  const a = await validateExposure(ex, { key: KEY, cpes, fetchImpl: low, now: now - 2 * 86400_000, ...quick, plan: undefined });
+  const vuln = a.items.find((i) => i.kind === 'cve');
+  assert.equal(vuln.check, 'plan'); assert.match(vuln.check_note, /returned 0 on the "dev" plan.*Small Business/);
+  assert.equal(low.planAsked, 1, 'plan looked up once');
+  assert.ok(!(`vuln:${CVE}` in a.trend.at(-1).totals), 'an unconfirmed zero is not a trend point');
+  assert.match(countLine(vuln, a.trend), /^Shodan count: vuln: returned 0/);
+  assert.equal(a.items.find((i) => i.query === 'product:"Widget Server"').check, 'counted');
+  // a nonzero vuln: total on the same plan is real
+  const some = fakeShodan({ plan: 'dev', totals: { [`vuln:${CVE}`]: 7 } });
+  const b = await validateExposure(ex, { key: KEY, cpes, fetchImpl: some, now, ...quick, plan: 'dev' });
+  assert.equal(b.items.find((i) => i.kind === 'cve').check, 'counted');
+  assert.equal(some.planAsked, 0, 'a plan passed in is not looked up');
+  // the product whose queries all matched nothing says the spelling was searched for
+  const panel = b.items.find((i) => i.kind === 'product' && i.for === 'acme:panel_virtual_appliance');
+  assert.equal(panel.check, 'empty'); assert.match(panel.check_note, /text search for "Panel".*no product or http\.component facet value/);
+  assert.match(countLine(panel, b.trend), /0 services match this spelling .* — a text search/);
+  assert.ok(!JSON.stringify([a, b]).includes(KEY));
+});
 
 test('shodanCount / failureKind: Shodan\'s own error text, classified; never the URL', async () => {
   const ok = await shodanCount('product:"X"', { key: KEY, fetchImpl: fakeShodan({ totals: { 'product:"X"': 5 } }) });
