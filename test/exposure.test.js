@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nvdCpes, productName, exposureQueries, exposureTable, SCOPE_NOTE } from '../lib/exposure.js';
+import { nvdCpes, productName, exposureQueries, exposureTable, namedProducts, SCOPE_NOTE } from '../lib/exposure.js';
 
 const CVE = 'CVE-2026-424242';
 const nvd = (cpeMatch) => ({ vulnerabilities: [{ cve: { id: CVE, configurations: [{ nodes: [{ operator: 'OR', cpeMatch }] }] } }] });
@@ -81,4 +81,18 @@ test('exposureTable: queries rendered verbatim, escaped, with the scope note', (
   assert.match(html, /2026-10-28 12:00Z/);
   assert.match(SCOPE_NOTE, /never in a shared document/);
   assert.match(exposureTable(null), /No exposure query/);
+});
+
+test('namedProducts: the card\'s affected lines first, then capitalised runs in the title; never a headline\'s first word for being first, an actor, a quoted name or a stop word', () => {
+  // the Oracle EBS card: "Attackers" opened the story title and became product:"Attackers"
+  assert.deepEqual(namedProducts({ title: 'Attackers probe patched Oracle EBS flaw CVE-2026-101767 on decoys', affected: ['Oracle E-Business Suite: Application Object Library component per SecurityWeek [S3]', 'Thin Client Framework servlet per BleepingComputer [S1]'] }),
+    ['Oracle E-Business Suite', 'Thin Client Framework']);
+  assert.deepEqual(namedProducts({ title: 'Attackers probe patched Oracle EBS flaw CVE-2026-101767 on decoys' }), ['Oracle EBS']);
+  assert.deepEqual(namedProducts({ title: 'Probing of patched Oracle EBS flaw CVE-2026-101767 observed on decoys; no confirmed compromises' }), ['Oracle EBS']);
+  // actor excluded, the quoted campaign name skipped, the products kept
+  assert.deepEqual(namedProducts({ title: "Volt Typhoon reportedly uses 'Silent Train' relay chain to hide zero-day exploitation of VeloCloud Orchestrator and Cisco Catalyst SD-WAN", exclude: ['Volt Typhoon', 'VOLTZITE'] }),
+    ['VeloCloud Orchestrator', 'Cisco Catalyst SD-WAN']);
+  assert.deepEqual(namedProducts({ title: 'Drupal Commerce Core access bypass CVE-2026-118539 exploited' }), ['Drupal Commerce Core']);
+  assert.deepEqual(namedProducts({ title: 'Trojanized Claude Code extension 2.1.313 on Cursor' }), ['Claude Code', 'Cursor']);
+  assert.deepEqual(namedProducts({ title: 'Gotenberg CVE-2026-42589 RCE reportedly exploited' }), [], 'a plain first word on its own is not trusted even when it is the product: NVD\'s CPE or the model\'s banner spellings carry that case');
 });
