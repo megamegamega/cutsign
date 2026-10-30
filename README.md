@@ -161,10 +161,9 @@ is. `vuln:` is a paid-tier filter (Small Business and higher): on a plan without
 `vuln:` zero on a lower plan as unconfirmed rather than as "0 services"; a nonzero total still
 counts, and the product queries are counted either way. A product none of whose queries matched
 also says whether the text search for its name found anything at all. A check made without a key is stale the moment the key exists, and the hourly watch
-tick re-checks stale cards on its own (a quiet hour runs only the coverage sweep: no scoring, no
-models, the KEV catalog fetched only when a card is actually stale, and the sweep stops starting
-cards near the function's deadline so the rest take the next hour), so no card waits for tomorrow's
-brief.
+tick re-checks stale cards on its own, in a bounded slice before the watches (no scoring, no
+models, the KEV catalog fetched only when a card is actually stale; new cards start for 90 s and
+the rest take the next hour), so no card waits for tomorrow's brief.
 `/api/health` reports `shodan` from the key's account record (plan and query credits left, never
 the key). Nothing but the generic filter ever leaves the host: the scope half stays placeholders.
 

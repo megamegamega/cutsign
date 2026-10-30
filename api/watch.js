@@ -25,22 +25,23 @@ export default async function handler(req, res) {
       return res.json({ ok: true, backfill: made });
     }
     const started = Date.now();
+    // First, any card whose coverage went stale (daily, or the moment a Shodan key appears) is
+    // re-checked, in a bounded slice: new cards start for 90 s, a check runs about a minute, so the
+    // watches below keep at least two minutes. The watch loop runs to its own deadline whenever
+    // there are watches, so the sweep cannot come after it; a quiet hour costs it one DB read.
+    const coverage = await coverageOnlySweep(store, { deadline: started + 90_000 });
     const counts = await runWatchTick(store, { deadline: started + 270_000 });
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
     // something developed: re-score the latest brief's stories, since a KEV listing or a material
-    // change during the day can push one over the card bar (lib/hype.js); never fails the tick.
-    // A quiet hour still re-checks any card whose coverage went stale (daily, or the moment a
-    // Shodan key appears), so no card waits for tomorrow's brief; it stops at the function's deadline
+    // change during the day can push one over the card bar (lib/hype.js); never fails the tick
     let hype = {};
     if (counts.events > 0) {
       try {
         const latest = (await store.listRecentSentRuns(3)).sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
         if (latest) hype = await hypeSweep(store, { run: latest });
       } catch (e) { hype = { hype_error: String(e?.message || e).slice(0, 200) }; }
-    } else {
-      hype = await coverageOnlySweep(store, { deadline: started + 230_000 }); // a card's check may run ~1 min
     }
-    return res.json({ ok: true, ...counts, hype });
+    return res.json({ ok: true, ...counts, coverage, hype });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting hourly
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
