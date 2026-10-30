@@ -6,7 +6,7 @@
 // so the page is public; noindex like every other endpoint.
 
 import { supabaseStore } from '../lib/db.js';
-import { buildDigestData, renderHtml, exposureBox, defang } from '../lib/render.js';
+import { buildDigestData, renderHtml, exposureBox, defang, dedupeEvents } from '../lib/render.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { PROPOSAL_SHAPES } from '../lib/schemas.js';
@@ -735,7 +735,7 @@ export default async function handler(req, res) {
     try { d.drafts = (await store.listCardDrafts({ status: 'draft', limit: 30 })).filter((x) => x.surfaced_at); } catch { d.drafts = []; }
     try { // web view: recent watch events regardless of digested/notified state
       const cutoff = Date.now() - 48 * 3600 * 1000;
-      d.watchEvents = (await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff);
+      d.watchEvents = dedupeEvents((await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff));
     } catch { /* watches table absent — keep whatever buildDigestData found */ }
 
     if (view === 'agent' && json) {
