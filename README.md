@@ -164,6 +164,22 @@ also says whether the text search for its name found anything at all. A check ma
 tick re-checks stale cards on its own, in a bounded slice before the watches (no scoring, no
 models, the KEV catalog fetched only when a card is actually stale; new cards start for 90 s and
 the rest take the next hour), so no card waits for tomorrow's brief.
+
+**Without an NVD CPE**, the exposure block falls back to the name the campaign gives the software
+(from the card's title, never an actor or malware name): a `product:` and an `http.component:`
+query per name, plus the Censys form, each carrying the card's own affected-version text, so a
+card is not blind to its product while NVD catches up; NVD's rows replace them at the re-check
+that finds the configuration.
+
+**Card mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_subscribers.sql`).
+The cards index and every AI card page carry a sign-up form; the hand-written cards get the same
+form from `lifecycle.js`. An address is stored pending, mailed a confirmation link, and only after
+that link is opened does it get mail: one message per new verdict card (an AI card at its first
+publication, a hand-written card when the sweep first sees it in the manifest and its as-of date is
+within three days), each with an unsubscribe link and `List-Unsubscribe` headers, one-click
+included. Addresses are never rendered, logged or sent anywhere but the mail sender; the sign-up
+page never echoes one; a honeypot field and a site-wide cap of thirty requests an hour keep bots
+out. Revisions of a published card are not mailed.
 `/api/health` reports `shodan` from the key's account record (plan and query credits left, never
 the key). Nothing but the generic filter ever leaves the host: the scope half stays placeholders.
 

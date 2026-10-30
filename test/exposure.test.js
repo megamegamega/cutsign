@@ -59,6 +59,15 @@ test('exposureQueries: a CVE query per CVE, three product queries per CPE, a sco
 
   const noCpe = exposureQueries({ cves: [CVE], cpes: [] });
   assert.equal(noCpe.items.length, 1); assert.match(noCpe.note, /NVD has not published CPE/);
+  // no CPE but the campaign names the software: product + http.component + Censys rows under the name, with the card's own affected text
+  const named = exposureQueries({ cves: [CVE], cpes: [], named: ['Drupal', 'Commerce', 'Third'], affected: ['Drupal Commerce Core 8.x-2.x before 2.40', 'Drupal 10.x and 11.x sites with Commerce'] });
+  assert.deepEqual(named.items.map((i) => i.query), [`vuln:${CVE}`, 'product:"Drupal"', 'http.component:"Drupal"', 'host.services: (software.product = "Drupal")', 'product:"Commerce"', 'http.component:"Commerce"', 'host.services: (software.product = "Commerce")']);
+  assert.ok(named.items.slice(1).every((i) => i.kind === 'named' && i.for.startsWith('named:') && /Affected per the card: Drupal Commerce Core 8\.x-2\.x before 2\.40; Drupal 10/.test(i.note)));
+  assert.match(named.note, /name the campaign gives \(Drupal, Commerce\)/);
+  assert.deepEqual(named.products, [], 'named rows are not NVD products');
+  // with a CPE the names are not used (NVD's spelling wins), and a name that is not a word is dropped
+  assert.ok(!exposureQueries({ cves: [CVE], cpes: many.slice(0, 1), named: ['Drupal'] }).items.some((i) => i.kind === 'named'));
+  assert.equal(exposureQueries({ cves: [CVE], cpes: [], named: ['a', 'x"y', 'UAT-11473'] }).items.filter((i) => i.kind === 'named').length, 3, 'UAT-11473 is a word by shape; the caller strips actor names');
   const noCve = exposureQueries({ cves: [], cpes: [] });
   assert.equal(noCve.items.length, 0); assert.match(noCve.note, /No CVE/);
 });

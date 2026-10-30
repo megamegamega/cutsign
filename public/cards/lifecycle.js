@@ -15,6 +15,22 @@
     const me = ((await r.json()).cards || []).find((c) => c.slug === slug);
     if (!me) return;
     const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    // (6) the card-mail sign-up form the cards index and AI cards carry (api/subscribe): after the card, never printed
+    try {
+      const st = document.createElement('style');
+      st.textContent = '@media print{form.sub{display:none!important}}';
+      document.head.appendChild(st);
+      const f = document.createElement('form');
+      f.className = 'sub'; f.method = 'post'; f.action = '/api/subscribe';
+      f.setAttribute('style', 'max-width:860px;margin:28px auto 8px;padding:12px 16px;border:1px solid rgba(128,128,128,.35);border-radius:10px;font:13px/1.5 system-ui,sans-serif');
+      f.innerHTML = '<label for="sub-e"><b>Email me each new verdict card</b></label>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><input id="sub-e" type="email" name="email" required maxlength="254" placeholder="you@example.test" autocomplete="email" style="flex:1 1 220px;min-width:0;padding:6px 10px;border-radius:8px;border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit;font:inherit">'
+        + '<input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">'
+        + '<button type="submit" style="padding:7px 14px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font:600 12px system-ui,sans-serif;cursor:pointer">Subscribe</button></div>'
+        + '<span class="src">One mail per new card, after you confirm by link; an unsubscribe link in every mail. The address is used for nothing else.</span>';
+      const card = document.querySelector('.card');
+      if (card && card.parentNode) card.parentNode.insertBefore(f, card.nextSibling); else document.body.appendChild(f);
+    } catch { /* best-effort */ }
     const banner = (id, html) => {
       const el = document.createElement('div');
       el.id = id;

@@ -12,6 +12,7 @@ import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
 import { fetchKevEntries } from '../lib/hype.js';
+import { subscribeForm } from '../lib/subscribe.js';
 
 // Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
@@ -135,12 +136,23 @@ a.c{color:var(--link)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:14px 0}
 .card h3{margin:0;border:none;padding:0;font-size:17px;display:inline}
 .card .ex{background:var(--panel2)}
+/* print / save-PDF button (the hand cards have the same one) and the card-mail sign-up form */
+.pbar{display:flex;justify-content:flex-end;margin:12px 0 -4px}
+.pdf{font:600 12px/1 inherit;padding:6px 12px;border-radius:999px;border:1px solid var(--chip-line);background:var(--chip);color:var(--text);cursor:pointer}
+.pdf:hover{border-color:var(--acc);color:var(--acc)}
+.sub{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:22px 0 10px;font-size:13px}
+.sub label{display:block;margin-bottom:6px}
+.sub div{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 6px}
+.sub input[type=email]{flex:1 1 220px;min-width:0;background:var(--panel2);border:1px solid var(--chip-line);border-radius:8px;color:var(--text);font:13px var(--mono);padding:6px 10px;outline:none}
+.sub input[type=email]:focus{border-color:var(--acc)}
+.sub button{font:600 12px/1 inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:var(--bg);cursor:pointer}
+.sub .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 /* print / save-PDF: the AI card and draft pages print like the hand cards — site chrome off,
    dark backgrounds kept, full bleed (phones have no "Margins: None" control) */
 @media print{
   @page{margin:0}
   html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-  header.top,footer,.tabs,.search,.nav{display:none!important}
+  header.top,footer,.tabs,.search,.nav,.pbar,.sub{display:none!important}
   main{max-width:none;padding:14px 18px}
   body{font-size:12.5px}
   .card,pre,.ch,.c{print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -214,6 +226,8 @@ const behaviorLine = (b) => `<div class="s">${b.attack_technique
   + `${b.log_source ? ` · hunt in: ${esc(b.log_source)}` : ''}</div>`;
 
 const searchForm = (q) => `<form class="search" action="/"><input type="search" name="q" placeholder="search stories & IoCs" value="${esc(q)}" maxlength="80"></form>`;
+// the same button the hand-written cards carry; the print stylesheet above drops the site chrome
+const printBar = '<div class="pbar"><button class="pdf" type="button" onclick="window.print()">Print / save PDF</button></div>';
 
 // Search results across every stored brief: extracted stories (title/summary/actor/malware/CVE)
 // and the IoC table (substring on normalized value). Capped at 30 each.
@@ -515,7 +529,7 @@ export default async function handler(req, res) {
       const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
       if (row.status === 'promoted' && row.promoted_slug) { res.setHeader('Location', `/cards/${row.promoted_slug}`); return res.status(302).send(''); }
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
-        `<div class="w">${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
+        `<div class="w">${printBar}${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
     }
 
     // A card the pipeline published: /cards/<slug> (vercel.json rewrites it here; the static
@@ -527,7 +541,7 @@ export default async function handler(req, res) {
       const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
-        `<div class="w">${draftBody(row, { published: true })}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
+        `<div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
     }
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
@@ -596,7 +610,7 @@ export default async function handler(req, res) {
       }
       const partsHtml = candHtml + parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
-        `${hero}<div class="w">${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
+        `${hero}<div class="w">${subscribeForm()}${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }
 
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first

@@ -457,6 +457,26 @@ test('coverage: cards and published drafts whose campaign is not in today\'s bri
   assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
 });
 
+test('subscribers: a card\'s first publication is mailed once to confirmed addresses, its revision is not', async (t) => {
+  t.after(off);
+  const { out, store, run, kevFetch } = await published();
+  await store.insertSubscriber({ email: 'subscriber@example.test', token: 'b'.repeat(48), status: 'confirmed', requested_at: '2026-10-16T10:00:00Z' });
+  await store.insertSubscriber({ email: 'pending@example.test', token: 'c'.repeat(48), status: 'pending', requested_at: '2026-10-16T10:00:00Z' });
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(c1.published, 1, JSON.stringify(c1));
+  const mails = out.emails.filter((m) => m.to === 'subscriber@example.test');
+  assert.equal(mails.length, 1); assert.match(mails[0].subject, /new verdict card/); assert.match(mails[0].html, /\/cards\//);
+  assert.equal(mails[0].headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+  assert.ok(!out.emails.some((m) => m.to === 'pending@example.test'), 'an unconfirmed address gets nothing');
+  assert.equal(c1.subscribers_notified, 1);
+  // the evidence moves: the card is revised, subscribers are not mailed again
+  store._tables.evidence.push({ id: 'e9', story_id: uuid(1), kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
+  assert.equal(c2.revised, 1, JSON.stringify(c2));
+  assert.equal(out.emails.filter((m) => m.to === 'subscriber@example.test').length, 1);
+});
+
 test('coverage: the hourly tick re-checks stale cards on its own, fetches KEV only when one is stale, and defers past its deadline', async (t) => {
   t.after(off);
   const { store, out } = await published();
