@@ -62,6 +62,9 @@ test('applyUpdate: links are read as developments of the story, an unrelated one
     : req.schemaName === 'card_draft' ? { title: 'incomplete' } : defaultResponder(u, n, req));
   assert.equal(await findStory(store, { cves: ['CVE-2026-999999'] }), null);
   assert.equal((await findStory(store, { title: 'ivanti connect secure' })).id, 's-ivanti', 'a quoted title finds the story too');
+  // a newer roundup that lists the CVE among many is not the story the update is about
+  store._tables.stories.push({ id: 's-roundup', run_id: run.id, ordinal: 2, status: 'extracted', selected: true, priority: 2, title: 'Report warns exploited flaws expose management interfaces', summary: 'roundup', cves: ['CVE-2026-1', 'CVE-2026-2', CVE, 'CVE-2026-4'], source_urls: [], raw_iocs: { exposure: null, iocs: [] }, created_at: '2026-10-29T12:00:00Z' });
+  assert.equal((await findStory(store, { cves: [CVE] })).id, 's-ivanti', 'the most specific story wins over the newest');
   const r = await applyUpdate(store, { cves: [CVE], urls: [U1, U2, U3], from: 'reader@example.test', fetchImpl: net, now: Date.parse('2026-10-31T13:00:00Z') });
   assert.equal(r.ok, true); assert.equal(r.story_id, 's-ivanti');
   assert.deepEqual(r.read, [U1, U2]); assert.ok(r.skipped.some((s) => s.startsWith(U3) && /not about this story/.test(s)));
