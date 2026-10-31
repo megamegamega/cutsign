@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       const rec = await intake(store, {});
       for (const u of rec.updates || []) await applyUpdate(store, u);
       updates = { mails: rec.seen, applied: (rec.updates || []).length };
-    } catch (e) { updates = { error: String(e?.message || e).slice(0, 160) }; }
+    } catch (e) { updates = { error: String(e?.message || e).slice(0, 160) }; await postDiscord(`Cutsign ✖ inbox poll on the watch tick failed: ${updates.error}`); }
     // First, any card whose coverage went stale (daily, or the moment a Shodan key appears) is
     // re-checked, in a bounded slice: new cards start for 90 s, a check runs about a minute, so the
     // watches below keep at least two minutes. The watch loop runs to its own deadline whenever
