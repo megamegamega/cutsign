@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { intake } from '../lib/intake.js';
-import { parseUpdateMail, applyUpdate, findStory, updateSenders, UPDATE_RE } from '../lib/update.js';
+import { parseUpdateMail, applyUpdate, findStory, updateSenders, unwrapLink, UPDATE_RE } from '../lib/update.js';
 import { fixtureMessage, withHeaders, installFakeLLM, captureOutputs, defaultResponder } from './helpers.js';
 
 const CVE = 'CVE-2026-104935';
@@ -82,4 +82,26 @@ test('applyUpdate: links are read as developments of the story, an unrelated one
   // no story: said, nothing read
   const none = await applyUpdate(store, { cves: ['CVE-2026-999999'], urls: [U1], fetchImpl: net });
   assert.equal(none.ok, false); assert.ok(out.discord.some((l) => /no stored story names CVE-2026-999999/.test(l)));
+});
+
+test('unwrapLink: a mail client\'s redirector and tracker fall away; the wrapped page is the link', () => {
+  const wrapped = 'https://www.google.com/url?q=https://thehackernews.com/2026/10/cisa-urges-immediate-ivanti-connect.html&source=gmail&ust=1793569718550000&sa=E';
+  assert.equal(unwrapLink(wrapped), 'https://thehackernews.com/2026/10/cisa-urges-immediate-ivanti-connect.html');
+  assert.equal(unwrapLink('https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fnews.example.test%2Fa&data=x'), 'https://news.example.test/a');
+  assert.equal(unwrapLink('https://news.example.test/plain?m=1'), 'https://news.example.test/plain?m=1', 'an ordinary link is untouched');
+  assert.equal(unwrapLink('https://www.google.com/url?q=javascript:alert(1)'), 'https://www.google.com/url?q=javascript:alert(1)', 'only an http(s) target is unwrapped');
+  // the live failure: two Gmail-wrapped links collapsed to one google.com/url address and were read as a Google page
+  const p = parseUpdateMail({ subject: 'update: CVE-2026-104935', html: `<a href="${wrapped}">${wrapped}</a><br><a href="https://www.google.com/url?q=https://thehackernews.com/2026/10/attackers-chain-three-ivanti-connect.html&amp;source=gmail&amp;ust=1&amp;sa=E">x</a>` });
+  assert.deepEqual(p.urls, ['https://thehackernews.com/2026/10/cisa-urges-immediate-ivanti-connect.html', 'https://thehackernews.com/2026/10/attackers-chain-three-ivanti-connect.html']);
+});
+
+test('hypeSweep: an old run swept for a development does not publish day-one cards for its other P1s', async (t) => {
+  // covered by the dayOne gate in lib/hype.js: hype.test.js exercises day-one on a current run; here an old run with a P1 and no actionable evidence yields no draft
+  const { out, store, run } = await world();
+  store._tables.runs.find((r) => r.id === run.id).started_at = '2026-10-15T12:00:00Z';
+  installFakeLLM((u, n, req) => req.schemaName === 'card_draft' ? { title: 'incomplete' } : defaultResponder(u, n, req));
+  const { hypeSweep } = await import('../lib/hype.js');
+  const c = await hypeSweep(store, { run: { ...run, started_at: '2026-10-15T12:00:00Z' }, fetchImpl: async () => new Response('{}', { status: 404 }), now: Date.parse('2026-10-31T20:00:00Z') });
+  assert.equal(c.drafted, 0, JSON.stringify(c)); assert.equal(c.published, 0);
+  assert.ok(!out.discord.some((l) => /P1 without anything actionable/.test(l)), 'no day-one nagging for a two-week-old P1 either');
 });
