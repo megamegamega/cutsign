@@ -14,6 +14,7 @@ export default async function handler(req, res) {
   const missing = [...BASE, ...BY_SOURCE[source]].filter((k) => !process.env[k]);
   const tables = {};
   let lastWatchTick = null; // when the hourly tick last touched a watch: the one liveness signal readable without logs
+  let lastMail = null;
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
@@ -26,6 +27,9 @@ export default async function handler(req, res) {
       const { data } = await sb.from('watches').select('last_checked_at').not('last_checked_at', 'is', null).order('last_checked_at', { ascending: false }).limit(1);
       lastWatchTick = data?.[0]?.last_checked_at || null;
     }
+    // the newest inbound mail as the pipeline classified it (when, what became of it; never who sent it or what it said)
+    const { data: mail } = await sb.from('briefs').select('received_at,status,status_reason').order('received_at', { ascending: false }).limit(1);
+    if (mail?.[0]) lastMail = { received_at: mail[0].received_at, status: mail[0].status, reason: mail[0].status_reason || null };
   } catch { for (const t of OPTIONAL_TABLES) tables[t] = 'unknown'; }
   // optional integrations, verified live: GitHub code search for the coverage check (lib/coverage.js).
   // The probe is a code search itself (one tiny query against a public rule repository), because any
@@ -58,5 +62,5 @@ export default async function handler(req, res) {
     } catch { shodan = 'unreachable'; }
   }
   const optional = { github, shodan, card_autopublish: process.env.CARD_AUTOPUBLISH === '0' ? 'off' : 'on' };
-  return res.json({ ok: true, service: 'cutsign', version: 'v0', inbound: source, paused: process.env.PAUSED === '1', missing_env: missing, tables, last_watch_tick: lastWatchTick, optional });
+  return res.json({ ok: true, service: 'cutsign', version: 'v0', inbound: source, paused: process.env.PAUSED === '1', missing_env: missing, tables, last_watch_tick: lastWatchTick, last_mail: lastMail, optional });
 }
