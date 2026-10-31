@@ -9,6 +9,7 @@ import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
 import { authorized, kickAdvance } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
+import { applyUpdate } from '../lib/update.js';
 
 export const config = { maxDuration: 300 };
 const BUDGET_MS = 270_000;
@@ -27,6 +28,8 @@ export default async function handler(req, res) {
     await postDiscord(`Cutsign ✖ stage=received error=${String(e?.message || e).slice(0, 300)}`);
     res.statusCode = 500; return res.json({ ok: false, error: String(e?.message || e) });
   }
+  // reader-supplied updates (lib/update.js) are read before the runs; one failing never blocks the brief
+  for (const u of received.updates || []) { try { await applyUpdate(store, u); } catch (e) { await postDiscord(`Cutsign ✖ update mail error=${String(e?.message || e).slice(0, 200)}`); } }
   const more = await driveRuns(store, { deadline });
   const chained = more ? await kickAdvance() : false;
   if (more && !chained) await postDiscord('Cutsign ⚠ work remains but the chain to /api/advance failed — it will resume on the next cron tick.');

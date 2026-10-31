@@ -7,6 +7,8 @@ import { runWatchTick, ensureWatches } from '../lib/watch.js';
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
 import { hypeSweep, coverageOnlySweep } from '../lib/hype.js';
+import { intake } from '../lib/intake.js';
+import { applyUpdate } from '../lib/update.js';
 
 export const config = { maxDuration: 300 };
 
@@ -25,11 +27,23 @@ export default async function handler(req, res) {
       return res.json({ ok: true, backfill: made });
     }
     const started = Date.now();
+    // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the hourly
+    // tick polls the inbox too and reads them first (a brief found here waits for the cron, as before)
+    let updates = {};
+    try {
+      const rec = await intake(store, {});
+      for (const u of rec.updates || []) await applyUpdate(store, u);
+      updates = { mails: rec.seen, applied: (rec.updates || []).length };
+    } catch (e) { updates = { error: String(e?.message || e).slice(0, 160) }; }
     // First, any card whose coverage went stale (daily, or the moment a Shodan key appears) is
     // re-checked, in a bounded slice: new cards start for 90 s, a check runs about a minute, so the
     // watches below keep at least two minutes. The watch loop runs to its own deadline whenever
     // there are watches, so the sweep cannot come after it; a quiet hour costs it one DB read.
     const coverage = await coverageOnlySweep(store, { deadline: started + 90_000 });
+    // every CVE story of the last 30 days has a watch: what an older rule skipped (quick reads) is opened
+    // here without anyone finding it; nothing is extended, so watches still expire on their own
+    const opened = { watches_created: 0 };
+    try { for (const run of await store.listRecentSentRuns(30)) opened.watches_created += (await ensureWatches(store, run, { extend: false })).watches_created; } catch (e) { opened.error = String(e?.message || e).slice(0, 160); }
     const counts = await runWatchTick(store, { deadline: started + 270_000 });
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
     // something developed: re-score the latest brief's stories, since a KEV listing or a material
@@ -55,7 +69,7 @@ export default async function handler(req, res) {
         hype.runs = runs.length;
       } catch (e) { hype = { hype_error: String(e?.message || e).slice(0, 200) }; }
     }
-    return res.json({ ok: true, ...counts, coverage, hype });
+    return res.json({ ok: true, ...counts, updates, opened, coverage, hype });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting hourly
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
