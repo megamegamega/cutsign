@@ -34,11 +34,25 @@ export default async function handler(req, res) {
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
     // something developed: re-score the latest brief's stories, since a KEV listing or a material
     // change during the day can push one over the card bar (lib/hype.js); never fails the tick
+    // The card loop runs for today's brief and for the run of every story that developed this tick: a
+    // story from two weeks ago that just landed in KEV or got a new write-up is scored where it lives.
     let hype = {};
-    if (counts.events > 0) {
+    // stories that developed in the last day (this tick's events, or an update mail's) keep their run in the
+    // loop for a day, so a draft the inbound function could not finish inside its budget is written here
+    let recentStoryIds = [];
+    try { recentStoryIds = [...new Set((await store.listWatchEvents({ since: new Date(started - 86_400_000).toISOString() })).filter((e) => e.level === 'HIGH').map((e) => e.watch_story_id).filter(Boolean))]; } catch { /* no events table */ }
+    if (counts.events > 0 || recentStoryIds.length) {
       try {
         const latest = (await store.listRecentSentRuns(3)).sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
-        if (latest) hype = await hypeSweep(store, { run: latest });
+        const runIds = new Set(latest ? [latest.id] : []);
+        for (const sid of [...(counts.event_story_ids || []), ...recentStoryIds]) { try { const s = await store.getStory(sid); if (s?.run_id) runIds.add(s.run_id); } catch { /* skip */ } }
+        const runs = [];
+        for (const id of [...runIds].slice(0, 4)) { const r = id === latest?.id ? latest : await store.getRun(id); if (r) runs.push(r); }
+        for (const r of runs) {
+          const h = await hypeSweep(store, { run: r });
+          for (const [k, v] of Object.entries(h)) hype[k] = typeof v === 'number' ? (hype[k] || 0) + v : v;
+        }
+        hype.runs = runs.length;
       } catch (e) { hype = { hype_error: String(e?.message || e).slice(0, 200) }; }
     }
     return res.json({ ok: true, ...counts, coverage, hype });

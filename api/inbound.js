@@ -8,6 +8,7 @@ import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
 import { authorized, kickAdvance } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
+import { applyUpdate } from '../lib/update.js';
 
 export const config = { maxDuration: 300 };
 const MAX_BYTES = 2_000_000;
@@ -29,8 +30,10 @@ export default async function handler(req, res) {
   const received = await intake(store, { dry, messages: [{ getRaw: async () => raw }] });
   const deadline = Date.now() + BUDGET_MS;
   waitUntil((async () => {
-    try { if (await driveRuns(store, { deadline })) await kickAdvance(); }
-    catch (e) { await postDiscord(`Cutsign ✖ inbound error=${String(e?.message || e).slice(0, 300)}`); }
+    try {
+      for (const u of received.updates || []) await applyUpdate(store, u); // reader-supplied sources for a known story (lib/update.js)
+      if (await driveRuns(store, { deadline })) await kickAdvance();
+    } catch (e) { await postDiscord(`Cutsign ✖ inbound error=${String(e?.message || e).slice(0, 300)}`); }
   })());
   res.statusCode = 202;
   return res.json({ ok: true, received });

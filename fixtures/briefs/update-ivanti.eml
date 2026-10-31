@@ -1,0 +1,15 @@
+From: Reader <reader@example.test>
+To: brief@example.test
+Subject: update: CVE-2026-104935
+Date: Sat, 31 Oct 2026 13:00:00 +0000
+Message-ID: <fixture-update-ivanti@mail.example.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+Two new write-ups on the Connect Secure zero-day:
+
+https://news.example.test/2026/10/cisa-urges-ivanti.html?m=1
+https://news.example.test/2026/10/attackers-chain-three-ivanti.html
+
+Also this one, which is about something else:
+https://news.example.test/2026/10/unrelated-router-botnet.html

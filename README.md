@@ -185,6 +185,20 @@ query per name, plus the Censys form, each carrying the card's own affected-vers
 card is not blind to its product while NVD catches up; NVD's rows replace them at the re-check
 that finds the configuration.
 
+**Circling back** (`lib/update.js`). A story that is thin on its day (the brief named it, no source
+text was readable) is the one that develops later, so three things keep it in view. Every quick-read
+story that names a CVE gets a watch, not only the deep-read ones: its CVE is enough for KEV, NVD,
+the feeds and GitHub. A watch that keeps developing lives up to 60 days. And the card loop runs for
+the run of every story that developed in a tick, not only for today's brief, so a two-week-old story
+that lands in KEV or gets a new write-up is scored and carded where it lives. When the pipeline
+still misses something, the reader supplies it: a mail to the inbound address from the digest's own
+recipient (`UPDATE_SENDER_ALLOWLIST`, default `EMAIL_TO`; the brief senders may too) with a subject
+starting `update:` and naming a CVE or a quoted title, links in the body. Each link is fetched with
+the same guards as a watched page, assessed by the light model as a development of that story,
+stored as a watch event (`new_source`, marked supplied), and the card loop then runs for the story's
+run; a link that is not about the story, or was already read, is skipped and said. Nothing in the
+mail is taken as fact.
+
 **Card mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_card_subscribers.sql`).
 The cards index and every AI card page carry a sign-up form; the hand-written cards get the same
 form from `lifecycle.js`. An address is stored pending, mailed a confirmation link, and only after
