@@ -98,7 +98,8 @@ after the corroboration arrives — the banner says it is an early read and the 
 the story develops), the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
 an AI verdict card at `/cards/<slug>`, with a "Verdict card" chip on its story in the CISO view,
 `verdict_card` in the agent JSON, a place on the Cards tab, and a "published" email. Revisions
-re-issue it in place (same URL, old version superseded); dismissing the draft unpublishes it. No
+re-issue it in place (same URL, old version superseded) with a Discord line and no email;
+dismissing the draft unpublishes it. No
 person is in the loop: the banner says what it is. Drafts live in `card_drafts` (migrations 0004,
 0005), render at `/?view=draft&id=…` behind an "AI-generated, unreviewed" banner until published,
 and are scrubbed with the repo's hygiene rules.

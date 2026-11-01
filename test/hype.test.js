@@ -400,6 +400,39 @@ test('publish: with autopublish off the draft waits; turning it on publishes it 
   assert.equal(row.status, 'promoted'); assert.ok(row.promoted_slug);
 });
 
+test('mail: a published card\'s first publication is emailed; its re-issue posts to Discord and sends no email', async (t) => {
+  t.after(off);
+  const { store, run, kevFetch, hot, out } = await published();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(out.emails.filter((m) => /AI verdict card published/.test(m.subject)).length, 1, 'the first publication is emailed');
+  const before = out.emails.length;
+  store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
+  assert.equal(c.revised, 1); assert.equal(c.published, 1);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card re-issued (v2)')), 'the re-issue still reaches Discord');
+  assert.equal(out.emails.length, before, 'no email for the re-issue');
+  assert.ok(!out.emails.some((m) => /re-issued/.test(m.subject)));
+});
+
+test('mail: a draft revised while unpublished and published later is emailed as a publication, not called a re-issue', async (t) => {
+  t.after(off);
+  const { store, run, kevFetch, hot, out } = await world(); // autopublish off: the draft waits
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
+  const head = (await store.listCardDrafts()).find((d) => d.status === 'draft');
+  assert.equal(head.version, 2, 'revised while unpublished');
+  const before = out.emails.length;
+  process.env.CARD_AUTOPUBLISH = '1';
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 5 * 3600_000 });
+  assert.equal(c.published, 1, JSON.stringify(c));
+  const mails = out.emails.slice(before);
+  assert.equal(mails.length, 1, 'its first publication is emailed'); assert.match(mails[0].subject, /AI verdict card published/);
+  assert.ok(!out.discord.some((l) => /re-issued/.test(l)), 'never labelled a re-issue');
+});
+
 test('coverage: the published card is re-checked daily and a lane that moved is posted', async (t) => {
   t.after(off);
   const { store, run, out } = await published();
