@@ -88,8 +88,14 @@ with the signals that fired. A nominated thread with something actionable (publi
 vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs) gets an
 AI-generated draft from one Opus call, shaped on the DAIR model (Detect, Verify and Triage, the
 Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic Incident Response*).
-Each draft records the evidence fingerprint it was built from; when the evidence changes, the draft
-is revised from the prior version as a new row with a change list, the old one marked superseded.
+Each draft records the facts it holds, as stable keys that only accumulate (a KEV listing, a fix
+version, a vendor-stated behavior by technique, a guidance item by link, a sample or IoC by value, a
+material watch development). Only a fact it does not hold revises it, from the prior version as a
+new row with a change list, the old one marked superseded; another day of coverage, more outlets, a
+development aging out of the window, or the same facts read from another brief's copy of the story
+revise nothing. A draft from before facts were kept is seeded from its whole thread, with no model call.
+A card is revised at most `CARD_REISSUES_PER_DAY` (3) times a UTC day; past that, Discord says so
+once and the new facts wait for its first sweep after midnight.
 A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
 lint-clean and in both dialects, and the model writes only what a hit means.
 Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the

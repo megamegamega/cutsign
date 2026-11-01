@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, P1_REASON } from '../lib/hype.js';
+import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, cardFacts, describeFacts, P1_REASON } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
@@ -532,4 +532,162 @@ test('coverage: the hourly tick re-checks stale cards on its own, fetches KEV on
   const c2 = await coverageOnlySweep(store, { fetchImpl: net, now: now + 3600_000 });
   assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
   assert.equal(net.calls.length, before, 'a quiet hour fetches nothing');
+});
+
+// Revisions for new facts only (2026-11-01: one AI card was re-drafted 27 times overnight, the
+// hourly tick sweeping two briefs that each carried a copy of its story with different counts).
+const DAY = 86_400_000;
+const briefRun = async (store, day) => {
+  const b = await store.insertBrief({ message_id: `m-${day}`, brief_date: day, subject: 'brief', received_at: `${day}T11:00:00Z` });
+  return store.insertRun({ brief_id: b.id, stage: 'sent' });
+};
+
+test('cardFacts: stable keys over the whole thread; a rephrased fix version or a re-extracted guidance item or sample is the same fact', async () => {
+  const store = memoryStore(); const t = store._tables;
+  const a = story(1, { cves: ['CVE-2026-1', 'CVE-2026-2'], raw_iocs: { exposure: { fixed_in: 'Appliance 7.0.3 and later' } } });
+  const b = story(2, { cves: ['CVE-2026-1'], raw_iocs: { exposure: { fixed_in: '7.0.3' } }, updates_story_id: a.id });
+  t.stories.push(a, b);
+  t.behaviors.push({ id: 'b1', story_id: a.id, attack_technique: 'T1190', pattern_kind: 'other', vendor_stated: true },
+    { id: 'b2', story_id: b.id, attack_technique: 'T1190', pattern_kind: 'other', vendor_stated: true },
+    { id: 'b3', story_id: b.id, attack_technique: 'T1059', pattern_kind: 'other', vendor_stated: false });
+  t.evidence.push({ id: 'e1', story_id: a.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://v.example.test/g#rule' },
+    { id: 'e2', story_id: b.id, kind: 'guidance', raw: 'Hunt for X, reworded', url: 'https://v.example.test/g/' },
+    { id: 'e3', story_id: a.id, kind: 'command_line', raw: 'SH -c id' }, { id: 'e4', story_id: b.id, kind: 'command_line', raw: 'sh  -c  id' });
+  t.iocs.push({ id: 'i1', type: 'domain', value_norm: 'c2.example-bad.net' });
+  t.story_iocs.push({ story_id: a.id, ioc_id: 'i1', role: 'c2' }, { story_id: b.id, ioc_id: 'i1', role: 'c2' });
+  const events = [
+    { id: 'ev1', watch_story_id: b.id, level: 'HIGH', kind: 'new_source', assessment: { material: true } },
+    { id: 'ev2', watch_story_id: b.id, level: 'HIGH', kind: 'new_source', assessment: { material: false } }, // HIGH, not material
+    { id: 'ev3', watch_story_id: uuid(9), level: 'HIGH', kind: 'kev_added' },                                   // another story's
+  ];
+  const facts = await cardFacts(store, { ids: [a.id, b.id], kev: new Map([['CVE-2026-1', { dateAdded: '2026-10-15' }]]), events });
+  assert.deepEqual(facts.filter((k) => !k.startsWith('sample:')), ['beh:T1190', 'event:ev1', 'fix:7.0.3', 'guide:https://v.example.test/g', 'ioc:domain:c2.example-bad.net', 'kev:CVE-2026-1']);
+  assert.equal(facts.filter((k) => k.startsWith('sample:command_line:')).length, 1, 'one sample, whatever its spacing and case');
+  assert.deepEqual(describeFacts(facts), ['1 new published detection guidance item', '1 new vendor-stated behavior', '1 new evidence sample', '1 new IoC',
+    'CISA KEV listed CVE-2026-1', 'a fix version is now stated: 7.0.3', '1 material development on watch']);
+});
+
+/** Two briefs a day apart, each with its own copy of one campaign (both update the first day's row), each copy with evidence the other lacks. */
+async function twoBriefs() {
+  const out = captureOutputs(); const store = memoryStore(); const t = store._tables;
+  const calls = installFakeLLM(() => DRAFT);
+  const runA = await briefRun(store, '2026-10-15'); const runB = await briefRun(store, '2026-10-16');
+  const base = { cves: ['CVE-2026-1'], threat_actor: 'UNC0000', created_at: new Date().toISOString(), raw_iocs: { exposure: { only_if: ['internet-exposed'] } },
+    source_urls: ['https://www.cisa.gov/news-events/alerts/x', 'https://a.example.test/1', 'https://b.example.test/2'] };
+  const root = story(1, { ...base, run_id: 'r0' });
+  const a = story(2, { ...base, run_id: runA.id, updates_story_id: root.id });
+  const b = story(3, { ...base, run_id: runB.id, updates_story_id: root.id });
+  t.stories.push(root, a, b);
+  t.iocs.push({ id: 'i1', type: 'domain', value_norm: 'c2.example-bad.net', first_seen_run_id: runA.id });
+  t.story_iocs.push({ story_id: a.id, ioc_id: 'i1', role: 'c2' });
+  t.evidence.push({ id: 'e1', story_id: b.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://v.example.test/g', publisher_tier: 'A' });
+  return { out, store, calls, runA, runB, a, b, kevFetch: routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }] }) };
+}
+
+test('facts: an old card reached from two briefs is seeded from both copies at once, so neither brief re-drafts it', async () => {
+  const { store, calls, runA, runB, kevFetch, a, b } = await twoBriefs();
+  // what the overnight loop left: versions drafted from each copy, the head holding a count snapshot
+  const snap = JSON.stringify({ days: 2, guidance: 1, behaviors: 0, samples: 0, iocs: 0, kev: ['CVE-2026-1'], fixed_in: null, material: 0 });
+  const row = { title: DRAFT.title, score: 12, reasons: [], draft: { ...DRAFT, cves: ['CVE-2026-1'] }, promoted_slug: 'vendor-appliance-2026', surfaced_at: '2026-10-16T12:00:00Z', fingerprint: snap };
+  const v1 = await store.insertCardDraft({ ...row, story_id: a.id, thread_ids: [uuid(1), a.id], version: 1, status: 'superseded' });
+  const v2 = await store.insertCardDraft({ ...row, story_id: b.id, thread_ids: [uuid(1), b.id], version: 2, supersedes: v1.id, status: 'promoted' });
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  for (let i = 0; i < 4; i++) await hypeSweep(store, { run: i % 2 ? runB : runA, fetchImpl: kevFetch, now: now + i * 3600_000 });
+  assert.equal(calls.length, 0, `${calls.length} drafts written`);
+  assert.deepEqual(JSON.parse((await store.getCardDraft(v2.id)).fingerprint), { v: 2, facts: ['guide:https://v.example.test/g', 'ioc:domain:c2.example-bad.net', 'kev:CVE-2026-1'] });
+});
+
+test('facts: a card reached from two briefs is revised once for what the second copy adds, never back and forth', async () => {
+  const { store, calls, runA, runB, kevFetch } = await twoBriefs();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  // the hourly tick sweeps both briefs, three hours running
+  for (let i = 0; i < 6; i++) await hypeSweep(store, { run: i % 2 ? runB : runA, fetchImpl: kevFetch, now: now + i * 3600_000 });
+  assert.equal(calls.length, 2, `${calls.length} drafts written`);
+  const all = (await store.listCardDrafts()).sort((x, y) => x.version - y.version);
+  assert.deepEqual(all.map((r) => [r.version, r.status]), [[1, 'superseded'], [2, 'draft']]);
+  assert.match(calls[1].messages[0].content, /<changes>1 new published detection guidance item<\/changes>/, 'the one fact only the second copy carries');
+  assert.match(calls[1].messages[0].content, /<published_guidance>[\s\S]*Hunt for X/, 'drafted from the copy that carries it');
+  assert.deepEqual(JSON.parse(all[1].fingerprint), { v: 2, facts: ['guide:https://v.example.test/g', 'ioc:domain:c2.example-bad.net', 'kev:CVE-2026-1'] });
+});
+
+test('facts: another day of the story, one more outlet and a development aging out of the window revise nothing; a material development does', async () => {
+  const { store, run, kevFetch, calls, hot } = await world();
+  hot.created_at = new Date().toISOString(); // a prior row for the next brief (listPriorStories reads the real clock)
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(calls.length, 1);
+  store._tables.watches.push({ id: 'w1', story_id: hot.id, title: hot.title, status: 'active' });
+  store._tables.watch_events.push({ id: 'ev1', watch_id: 'w1', created_at: '2026-10-16T14:00:00Z', kind: 'new_source', level: 'HIGH', summary: 'Exploitation confirmed.', assessment: { material: true, summary: 'Exploitation confirmed.' } });
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 2 * 3600_000 });
+  assert.equal(c2.revised, 1); assert.equal(calls.length, 2);
+  assert.match(calls[1].messages[0].content, /<changes>1 material development on watch<\/changes>/);
+  // three days on, the development is out of the 48 h window: nothing was learned, nothing is written
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3 * DAY });
+  assert.equal(c3.revised, 0, JSON.stringify(c3)); assert.equal(calls.length, 2);
+  // the next brief carries the story again, from one more outlet, with nothing new to act on
+  const run2 = await briefRun(store, '2026-10-19');
+  store._tables.stories.push(story(3, { run_id: run2.id, updates_story_id: hot.id, cves: ['CVE-2026-1'], threat_actor: 'UNC0000', source_urls: [...hot.source_urls, 'https://c.example.test/3'] }));
+  const c4 = await hypeSweep(store, { run: run2, fetchImpl: kevFetch, now: now + 3 * DAY + 3600_000 });
+  assert.equal(c4.revised + c4.drafted, 0, JSON.stringify(c4)); assert.equal(calls.length, 2);
+});
+
+test('facts: a card stored before facts were kept is seeded on its next sweep with no model call, then revised only for a new fact', async () => {
+  const { store, run, kevFetch, calls, hot } = await world();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  // the version the old loop stored: a count snapshot that differs from today's evidence
+  const old = await store.insertCardDraft({ story_id: hot.id, thread_ids: [hot.id], title: DRAFT.title, score: 10, reasons: [], draft: { ...DRAFT, cves: ['CVE-2026-1'] },
+    version: 1, status: 'draft', surfaced_at: '2026-10-16T12:00:00Z', fingerprint: JSON.stringify({ days: 1, guidance: 0, behaviors: 0, samples: 0, iocs: 0, kev: [], fixed_in: null, material: 0 }) });
+  // KEV unreadable: seeding waits (a listing missed now would read as a new fact on the next sweep)
+  const c0 = await hypeSweep(store, { run, fetchImpl: async () => new Response('down', { status: 503 }), now: now - 3600_000 });
+  assert.equal(c0.seeded, undefined); assert.equal(calls.length, 0);
+  assert.equal(JSON.parse((await store.getCardDraft(old.id)).fingerprint).v, undefined, 'still the old snapshot');
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(c1.seeded, 1); assert.equal(c1.revised, 0); assert.equal(calls.length, 0, 'the switch is not news');
+  assert.deepEqual(JSON.parse((await store.getCardDraft(old.id)).fingerprint), { v: 2, facts: ['kev:CVE-2026-1'] });
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
+  assert.equal(c2.seeded, undefined); assert.equal(calls.length, 0);
+  store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://v.example.test/g', publisher_tier: 'A' });
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 2 * 3600_000 });
+  assert.equal(c3.revised, 1); assert.equal(calls.length, 1);
+  assert.match(calls[0].messages[0].content, /<changes>1 new published detection guidance item<\/changes>/);
+});
+
+test('facts: past CARD_REISSUES_PER_DAY revisions in a UTC day the new facts wait, Discord says so once, and the next day folds them in', async (t) => {
+  t.after(() => { delete process.env.CARD_REISSUES_PER_DAY; });
+  process.env.CARD_REISSUES_PER_DAY = '1';
+  const { out, store, run, kevFetch, calls, hot } = await world();
+  const t0 = Date.parse('2026-10-16T13:00:00Z');
+  // the store dates a version by the real clock; date each one at its sweep's hour instead
+  const stamp = (ms) => { for (const r of store._tables.card_drafts) if (!r.dated) Object.assign(r, { created_at: new Date(ms).toISOString(), dated: true }); };
+  const guide = (id) => store._tables.evidence.push({ id, story_id: hot.id, kind: 'guidance', raw: 'Hunt', url: `https://v.example.test/${id}`, publisher_tier: 'A' });
+  const notes = () => out.discord.filter((l) => l.includes('revisions today (UTC)'));
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 }); stamp(t0);
+  guide('e1');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3600_000 }); stamp(t0 + 3600_000);
+  assert.equal(calls.length, 2, 'the day\'s one revision');
+  guide('e2');
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 2 * 3600_000 });
+  assert.equal(c3.revised, 0); assert.equal(c3.capped, 1); assert.equal(calls.length, 2);
+  assert.equal(notes().length, 1); assert.match(notes()[0], /new facts wait for its first sweep after midnight: 1 new published detection guidance item/);
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3 * 3600_000 });
+  assert.equal(notes().length, 1, 'said once a day'); assert.equal(calls.length, 2);
+  const c5 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-17T01:00:00Z') });
+  assert.equal(c5.revised, 1); assert.equal(calls.length, 3);
+  assert.match(calls[2].messages[0].content, /<changes>1 new published detection guidance item<\/changes>/);
+});
+
+test('a hand-written card reached through two briefs raises a development once, not once per copy', async () => {
+  const out = captureOutputs(); const store = memoryStore();
+  const calls = installFakeLLM(() => DRAFT);
+  const card = CARDS[0];
+  const runA = await briefRun(store, '2026-10-27'); const runB = await briefRun(store, '2026-10-28');
+  // two of the card's manifest rows, each in its own brief
+  store._tables.stories.push(story(1, { id: card.story_ids[0], run_id: runA.id, cves: ['CVE-2026-1'] }), story(2, { id: card.story_ids[1], run_id: runB.id, cves: ['CVE-2026-1'] }));
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24' }] }), { status: 200 });
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const cA = await hypeSweep(store, { run: runA, fetchImpl: kevLate, now });
+  assert.equal(cA.stale, 1); assert.equal(calls.length, 1);
+  const cB = await hypeSweep(store, { run: runB, fetchImpl: kevLate, now: now + 60_000 });
+  assert.equal(cB.carded, 1); assert.equal(cB.stale, 0, 'raised already, through the other copy'); assert.equal(calls.length, 1);
+  assert.equal(out.discord.filter((l) => l.startsWith(`Cutsign ▲ card ${card.slug}`)).length, 1);
 });
