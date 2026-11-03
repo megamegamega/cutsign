@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/", "destination": "/api/page" },
     { "source": "/cards", "destination": "/api/page?view=cards" },
+    { "source": "/actors", "destination": "/api/page?view=actors" },
     { "source": "/cards/:slug([a-z0-9-]+)", "destination": "/api/page?view=card&slug=:slug" }
   ],
   "functions": {

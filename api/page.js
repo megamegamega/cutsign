@@ -13,6 +13,8 @@ import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
 import { fetchKevEntries } from '../lib/hype.js';
 import { subscribeForm } from '../lib/subscribe.js';
+import { actorReport, CATEGORIES } from '../lib/actors.js';
+import { actorsBody, ACTORS_STYLE } from '../lib/actorsview.js';
 
 // Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
@@ -119,7 +121,7 @@ details{margin:6px 0} summary{cursor:pointer;color:var(--mut)} summary:hover{col
 hr{border:none;border-top:1px solid var(--line);margin:28px 0 10px}
 footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mut);font-size:12px;font-family:var(--mono)}
 /* ---- CISO view ---- */
-.tabs{display:flex;gap:6px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs a,.tabs span{font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid var(--chip-line);background:var(--chip);color:var(--mut)}
 .tabs span{background:var(--text);border-color:var(--text);color:var(--bg)}
 .tabs a:hover{color:var(--text);text-decoration:none;border-color:var(--acc)}
@@ -317,6 +319,7 @@ GET /?view=agent&amp;format=json&amp;d=DATE   a specific day — available: ${da
 GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief + watch event, all time
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)
 GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, lane, cves, story_ids, url)
+GET /?view=actors&amp;format=json         adversaries by attributed country (w=14|30|90|all, cat=state|crime|hacktivist|spyware)
 GET /cards/&lt;slug&gt;.html                 a hand-written verdict card; /cards/&lt;slug&gt; one the pipeline published; stories here carry verdict_card when one exists
 
 Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
@@ -533,7 +536,7 @@ export default async function handler(req, res) {
       let row = null;
       try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
-      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       if (row.status === 'promoted' && row.promoted_slug) { res.setHeader('Location', `/cards/${row.promoted_slug}`); return res.status(302).send(''); }
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
         `<div class="w">${printBar}${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
@@ -545,7 +548,7 @@ export default async function handler(req, res) {
       const slug = String(req.query.slug || '').toLowerCase();
       const row = aiRows.find((r) => r.promoted_slug === slug) || null;
       if (!row) return res.status(404).send(doc('Cutsign — card', '', '<div class="w"><p class="s">No such card. <a href="/?view=cards">All cards</a></p></div>', 'Cutsign'));
-      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
         `<div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
@@ -585,7 +588,7 @@ export default async function handler(req, res) {
           candidates: candidates.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
-      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Cards</span></nav>';
+      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><span>Cards</span></nav>';
       const candHtml = candidates.length ? `<h3 style="border:none">AI drafts below the publish bar (${candidates.length})</h3>`
         + candidates.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
           + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready to publish</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
@@ -618,6 +621,26 @@ export default async function handler(req, res) {
       const partsHtml = candHtml + parts.join('\n');
       return res.status(200).send(doc('Cutsign — verdict cards', tabsCards + searchForm(''),
         `${hero}<div class="w">${subscribeForm()}${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
+    }
+
+    // Adversaries by attributed country (lib/actors.js reads, lib/actorsview.js draws): every stored
+    // story, day-independent like the IoC corpus; 100 days covers the 90-day window and the 12-week trend
+    if (req.query.view === 'actors') {
+      const w = ['14', '30', '90', 'all'].includes(String(req.query.w)) ? String(req.query.w) : '30';
+      const cat = Object.keys(CATEGORIES).includes(String(req.query.cat)) ? String(req.query.cat) : null;
+      const m = req.query.m === 'adversaries' ? 'adversaries' : 'stories';
+      const rows = await store.listActorStories(w === 'all' ? 400 : 100);
+      const report = actorReport(rows, { days: w === 'all' ? null : Number(w), category: cat });
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify({ kind: 'cutsign.actors', generated: new Date().toISOString(),
+          note: 'Public OSINT only. Attribution is what the public sources state, read from each story\'s actor field, title and summary; not Cutsign\'s assessment. A story is one update chain.',
+          ...report }, null, 1));
+      }
+      const tabsActors = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Actors</span><a href="/?view=cards">Cards</a></nav>';
+      return res.status(200).send(doc('Cutsign — adversaries by country', tabsActors + searchForm(''),
+        `<style>${ACTORS_STYLE}</style><div class="w">${actorsBody(report, { w, cat, m })}</div>`,
+        'Cutsign · public OSINT digest · adversaries by the country the sources attribute them to'));
     }
 
     const runs = (await store.listRecentSentRuns(14)).reverse(); // newest first
@@ -723,7 +746,7 @@ export default async function handler(req, res) {
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
-      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=cards">Cards</a></nav>`;
+      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
         'Cutsign · public OSINT digest · cumulative IoC corpus'));
@@ -770,7 +793,7 @@ export default async function handler(req, res) {
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
       : `<a href="/?d=${encodeURIComponent(pick.date)}&view=${v}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=cards">Cards</a></nav>`;
+    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;

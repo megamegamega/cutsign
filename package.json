@@ -11,7 +11,8 @@
     "test": "LLM_MODE=replay node --test 'test/*.test.js'",
     "run-local": "node scripts/run-local.js",
     "gmail-auth": "node scripts/gmail-auth.js",
-    "update-attack": "node scripts/update-attack.js"
+    "update-attack": "node scripts/update-attack.js",
+    "update-worldmap": "node scripts/update-worldmap.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

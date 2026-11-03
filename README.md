@@ -249,8 +249,25 @@ Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), co
 analyst view, and by name in search results; never in the email or the CISO view. Nothing here runs
 against any SIEM.
 
+**Actors tab.** `/actors` (`/?view=actors`) maps every stored story's adversary to the country the
+public sources attribute it to: a world map shaded by stories (or adversaries), stories per week for
+the leading countries, a card per country listing its actors with why each was placed there, the
+tools seen in more than one story with the countries of the actors around them, and the actors
+named with no country. Windows 14 / 30 / 90 days / all (`w=`), kinds nation-state / criminal /
+hacktivist / commercial spyware (`cat=`). `lib/actors.js` reads the stored `threat_actor`, title and
+summary deterministically, with no model call: a group whose attribution is settled in public
+reporting, a vendor naming convention (Microsoft's Typhoon/Blizzard/Sandstorm/Sleet, CrowdStrike's
+Panda/Bear/Kitten/Chollima, Unit 42's Taurus/Ursa/Serpens/Pisces, Secureworks' Bronze/Iron/Cobalt/
+Nickel), or the sources' own words beside the name ("China-nexus Volt Typhoon", "North Korea's
+TraderTraitor"); a story naming no actor but saying "North Korean threat actors" counts one unnamed
+actor. A language ("Russian-speaking"), a stance ("pro-Ukrainian") or a victim places no one. Vendor
+alias tables merge one actor's names (Jade Sleet = TraderTraitor), and two groups public reporting
+keeps apart never merge, whatever a single story writes. A story is one update chain. The attribution
+is the sources', never Cutsign's. The map is Natural Earth 1:110m projected once into
+`lib/worldmap.json` (`npm run update-worldmap`), so the page draws with no script and no network.
+
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
-`/?view=cards&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
+`/?view=cards&format=json`, `/?view=actors&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
 vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
 
 ## Cost and safety rails
@@ -265,6 +282,7 @@ Every endpoint that mutates state requires a bearer secret. The site is `noindex
 npm test                                   # offline: memory store, fake network, replayed LLM responses
 node scripts/run-local.js --eml fixtures/briefs/2026-10-20-pipeline.eml   # real sources + real API → out/latest.html
 npm run update-attack                      # refresh the ATT&CK mirror when MITRE ships a release
+npm run update-worldmap                    # re-project the Actors map (pinned world-atlas@2.0.2); rarely needed
 ```
 
 `.env.example` lists every variable (names only). `LLM_MODE=replay` loads recorded model responses
