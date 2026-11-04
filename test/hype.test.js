@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, cardFacts, describeFacts, P1_REASON, DRAFT_RESERVE_MS } from '../lib/hype.js';
-import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
+import { scrub, DraftSchema, draftBody, buildDraftInput, huntsWithoutEsql, backfillEsql, lintPublicEsql } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
 import { installFakeLLM, installFakeBatch, captureOutputs } from './helpers.js';
@@ -488,6 +488,58 @@ test('coverage: the published card is re-checked daily and a lane that moved is 
   [row] = await store.listCardDrafts();
   assert.equal(row.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ coverage changed for AI card') && l.includes('Cloudflare WAF managed-ruleset changelog: nothing found → published')));
+});
+
+test('esql backfill: a card drafted before the dialect existed gets its ES|QL twins once, in place, linted and scrubbed; the hourly tick never asks', async (t) => {
+  t.after(off);
+  const { store, run, calls } = await published();
+  // two hunts stored without the esql key (pre-dialect); a third with null already (the model said: no twin)
+  const strip = ({ esql, ...h }) => h;
+  const detect = [strip(DRAFT.detect[0]), { ...strip(DRAFT.detect[0]), name: 'Second hunt', spl: 'index=* action=failure | stats count by user' }, { ...DRAFT.detect[0], name: 'No twin', esql: null }];
+  const old = await store.insertCardDraft({ story_id: uuid(8), thread_ids: [uuid(8)], title: 'Older published card', score: 10, reasons: [], cost_usd: 0.5,
+    draft: { ...DRAFT, detect, cves: ['CVE-2026-8'], coverage: { checked_at: '2026-10-16T12:00:00Z', lanes: [] } }, version: 1, status: 'promoted', promoted_slug: 'older-2026', surfaced_at: '2026-10-16T12:00:00Z' });
+  assert.equal(huntsWithoutEsql(old.draft).length, 2);
+  assert.ok(draftBody(old, { published: true }).split('data-q="esql"').length === 1, 'nothing to switch to before the backfill');
+  const twins = { hunts: [
+    { name: 'Shell from appliance process', esql: 'FROM logs-prod-endpoint | WHERE process.parent.name == "httpd" AND process.name == "sh" | STATS count = COUNT(*)' },
+    { name: 'Second hunt', esql: 'FROM logs-* | WHERE event.outcome == "failure" AND source.ip == "203.0.113.9" | STATS count = COUNT(*) BY user.name' },
+  ] };
+  const before = calls.length;
+  const base = installFakeLLM((user, n, req) => (req?.schemaName === 'esql_twins' ? twins : DRAFT));
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }] });
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c.esql_backfilled, 1, JSON.stringify(c)); assert.equal(c.errors, 0);
+  const twinCalls = base.filter((r) => r.schemaName === 'esql_twins');
+  assert.equal(twinCalls.length, 1, 'one call per card, not per hunt');
+  assert.equal(twinCalls[0].effort, 'low');
+  assert.doesNotMatch(twinCalls[0].messages[0].content, /No twin/, 'a hunt that already has its slot is not re-asked');
+  const row = await store.getCardDraft(old.id);
+  assert.equal(row.draft.detect[0].esql, 'FROM logs-* | WHERE process.parent.name == "httpd" AND process.name == "sh" | STATS count = COUNT(*)', 'a concrete data stream becomes logs-*');
+  assert.equal(row.draft.detect[1].esql, null, 'an IP literal the Splunk search did not carry fails lint and is dropped');
+  assert.equal(row.draft.detect[2].esql, null);
+  assert.equal(huntsWithoutEsql(row.draft).length, 0, 'every hunt now has its slot');
+  assert.ok(row.cost_usd > 0.5, 'the call is charged to the card');
+  assert.equal(row.version, 1, 'no new version: the text did not change');
+  assert.ok(row.draft.coverage?.checked_at, 'the daily coverage patch ran after the twins and kept them');
+  const page = draftBody(row, { published: true });
+  assert.equal(page.split('data-q="esql"').length - 1, 1); assert.equal(page.split('data-q="spl"').length - 1, 3);
+  // again: nothing left to translate, no call; the hourly coverage-only tick never translates
+  const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.esql_backfilled, undefined); assert.equal(base.filter((r) => r.schemaName === 'esql_twins').length, 1);
+  const fresh = await store.insertCardDraft({ story_id: uuid(9), thread_ids: [uuid(9)], title: 'Another old card', score: 10, reasons: [], draft: { ...DRAFT, detect: [strip(DRAFT.detect[0])], cves: [], coverage: { checked_at: '2026-10-01T12:00:00Z', lanes: [] } }, version: 1, status: 'promoted', promoted_slug: 'another-2026', surfaced_at: '2026-10-01T12:00:00Z' });
+  await coverageOnlySweep(store, { fetchImpl: net, now: now + RECHECK_MS + 1 });
+  assert.equal(huntsWithoutEsql((await store.getCardDraft(fresh.id)).draft).length, 1, 'the hourly tick left it for the daily sweep');
+  assert.equal(base.filter((r) => r.schemaName === 'esql_twins').length, 1);
+  void before;
+});
+
+test('esql backfill: an answer out of shape throws (retried another day) and a lint-clean public query passes', async () => {
+  installFakeLLM(() => ({ nonsense: true }));
+  await assert.rejects(backfillEsql({ detect: [{ name: 'x', spl: 'index=* | stats count' }] }), /failed validation/);
+  assert.ok(lintPublicEsql('FROM logs-* | WHERE process.name == "sh" | STATS c = COUNT(*)').ok);
+  assert.ok(!lintPublicEsql('FROM logs-* | WHERE user.name == "jsmith" | STATS c = COUNT(*)').ok, 'a username literal fails');
+  assert.equal((await backfillEsql({ detect: [{ name: 'y', spl: 'index=*', esql: null }] })).translated, 0, 'nothing to do, no call');
 });
 
 test('coverage: a hand-written card gets the same daily check, stored on its manifest story row for the card page', async () => {

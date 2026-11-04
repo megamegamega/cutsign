@@ -110,7 +110,10 @@ A draft never invents hunts when its thread has proposer hunts (below): its Dete
 lint-clean and in both dialects, and the model writes only what a hit means. Hunts the model writes
 itself come in both dialects too (`spl` over `index=*`, `esql` over `FROM logs-*`; a concrete index
 or data-stream name is rewritten to the wildcard), and every card page shows them behind the same
-Splunk | Elastic switch as the hand-written cards.
+Splunk | Elastic switch as the hand-written cards. A card drafted before the dialect existed gets
+its twins once, on the next daily sweep: one low-effort call translates its Splunk searches, each
+answer is scrubbed and linted (a failure is stored as null), and the draft is patched in place with no
+new version, since the card's text did not change.
 Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the
 score measures how a story is developing, and a reader who sees a P1 needs a link that day, not
 after the corroboration arrives — the banner says it is an early read and the card is revised as
