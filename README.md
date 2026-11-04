@@ -270,6 +270,23 @@ Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), co
 analyst view, and by name in search results; never in the email or the CISO view. Nothing here runs
 against any SIEM.
 
+**Batched model calls** (`lib/jobs.js`, `lib/batchmode.js`, table from
+`supabase/migrations/0007_llm_jobs.sql`). Model work that can wait an hour — the proposals above and
+the card loop's drafts, revisions and re-issue drafts — goes through the Batches API at half the
+list price (`LLM_BATCH`, default on). The queried stage submits and the brief goes out without
+waiting (its ✔ line says "n proposals pending (batch)"); the card loop submits a draft and leaves
+the thread alone while its answer is in flight, and a day-one draft waits until its story's
+proposals have landed, so its Detect section is still the proposer's hunts. The hourly watch tick
+collects first: a proposal is linted onto its story and counted on its run; a card is published,
+re-issued or revised exactly as the live path would have done it, with its coverage check, Discord
+line and mail. Batches usually answer within the hour, so AI cards and proposals land one to two
+hours after the digest instead of minutes. An answer the API cannot give (an error, a refusal, a
+batch still running after six hours — then cancelled) is finished by one live call at the list
+price; an answer nobody waits for any more (the head was dismissed or revised meanwhile) is
+abandoned. Each job records its outcome and cost. With the table missing the same calls run live,
+so the code deploys before the migration. The deep and light reads of the brief itself stay live:
+batching them would hold the morning email.
+
 **Actors tab.** `/actors` (`/?view=actors`) maps every stored story's adversary to the country the
 public sources attribute it to: a world map shaded by stories (or adversaries), stories per week for
 the leading countries, a card per country listing its actors with why each was placed there, the

@@ -9,7 +9,9 @@ import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFi
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
-import { installFakeLLM, captureOutputs } from './helpers.js';
+import { installFakeLLM, installFakeBatch, captureOutputs } from './helpers.js';
+import { collectJobs } from '../lib/jobs.js';
+import { _resetBatchMode } from '../lib/batchmode.js';
 
 // The draft-loop tests below predate auto-publishing and read the loop with it off; the
 // publishing tests at the end turn it on explicitly.
@@ -740,4 +742,127 @@ test('a hand-written card reached through two briefs raises a development once, 
   const cB = await hypeSweep(store, { run: runB, fetchImpl: kevLate, now: now + 60_000 });
   assert.equal(cB.carded, 1); assert.equal(cB.stale, 0, 'raised already, through the other copy'); assert.equal(calls.length, 1);
   assert.equal(out.discord.filter((l) => l.startsWith(`Cutsign ▲ card ${card.slug}`)).length, 1);
+});
+
+// ---- the card loop through the Batches API (lib/jobs.js collects what the sweep submitted) ----------
+
+const batched = async (t, { publish = true, carded = false } = {}) => {
+  process.env.LLM_BATCH = '1'; if (publish) process.env.CARD_AUTOPUBLISH = '1'; _resetBatchMode();
+  t.after(() => { process.env.LLM_BATCH = '0'; off(); _resetBatchMode(); });
+  return world({ carded });
+};
+
+test('batched: a draft is submitted once and finished by the collector — published with its coverage check and mail at half the cost; a later fact is a low-effort revision in place', async (t) => {
+  const { out, store, run, calls, hot } = await batched(t);
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-15' }], routes: { 'developers.cloudflare.com': CF_FEED(true) } });
+  const fake = installFakeBatch(() => DRAFT); fake.ready = false;
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c1.submitted, 1, JSON.stringify(c1)); assert.equal(c1.drafted + c1.published, 0); assert.equal(calls.length, 0, 'no live call');
+  assert.equal((await store.listCardDrafts()).length, 0, 'nothing written until the answer lands');
+  assert.equal(fake.submitted.length, 1); assert.equal(fake.submitted[0].params.output_config.effort, 'medium'); assert.ok(!('fallbacks' in fake.submitted[0].params));
+  assert.deepEqual(store._tables.llm_jobs.map((j) => [j.kind, j.status]), [['card_draft', 'pending']]);
+  // an hour on, unanswered: the sweep leaves the thread alone and the collector waits
+  const c2 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3600_000 });
+  assert.equal(c2.submitted, 0); assert.equal(c2.in_flight, 1, JSON.stringify(c2)); assert.equal(fake.submitted.length, 1);
+  const j1 = await collectJobs(store, { fetchImpl: net, now: now + 3600_000 });
+  assert.equal(j1.pending, 1); assert.equal(j1.landed, 0);
+  // answered: published with its coverage check, Discord and both mails; the story's hype state points at it
+  fake.ready = true;
+  const j2 = await collectJobs(store, { fetchImpl: net, now: now + 2 * 3600_000 });
+  assert.equal(j2.landed, 1, JSON.stringify(j2)); assert.equal(j2.live, 0);
+  const [row] = await store.listCardDrafts();
+  assert.equal(row.status, 'promoted'); assert.equal(row.promoted_slug, 'vendor-appliance-zero-day-exploited-2026'); assert.equal(row.version, 1);
+  assert.equal(row.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
+  assert.equal(row.cost_usd, 0.007, 'half of the live $0.014');
+  assert.deepEqual(JSON.parse(row.fingerprint).facts, ['kev:CVE-2026-1']);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card published') && l.includes('coverage:')), out.discord.join('\n'));
+  assert.equal(out.emails.filter((m) => /AI verdict card published/.test(m.subject)).length, 1);
+  assert.equal((await store.getStory(hot.id)).raw_iocs.hype.draft_id, row.id);
+  assert.equal(store._tables.llm_jobs[0].status, 'done'); assert.equal(store._tables.llm_jobs[0].cost_usd, 0.007); assert.equal(calls.length, 0);
+  // nothing new: nothing submitted. A vendor-stated behavior: a revision submitted at low effort, landing as v2 in place
+  const c3 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3 * 3600_000 });
+  assert.equal(c3.submitted + c3.revised + c3.drafted, 0, JSON.stringify(c3));
+  store._tables.behaviors.push({ id: 'b1', story_id: hot.id, attack_technique: 'T1190', pattern_kind: 'other', vendor_stated: true });
+  const c4 = await hypeSweep(store, { run, fetchImpl: net, now: now + 4 * 3600_000 });
+  assert.equal(c4.submitted, 1, JSON.stringify(c4)); assert.equal(fake.submitted[1].params.output_config.effort, 'low');
+  assert.match(fake.submitted[1].params.messages[0].content, /<prior_draft version="1">/);
+  assert.match(fake.submitted[1].params.messages[0].content, /<changes>1 new vendor-stated behavior<\/changes>/);
+  const j3 = await collectJobs(store, { fetchImpl: net, now: now + 5 * 3600_000 });
+  assert.equal(j3.landed, 1, JSON.stringify(j3));
+  const all = (await store.listCardDrafts()).sort((a, b) => a.version - b.version);
+  assert.deepEqual(all.map((x) => [x.version, x.status, x.promoted_slug]), [[1, 'superseded', row.promoted_slug], [2, 'promoted', row.promoted_slug]]);
+  assert.deepEqual(JSON.parse(all[1].fingerprint).facts, ['beh:T1190', 'kev:CVE-2026-1']);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card re-issued (v2)') && l.includes('Changed: 1 new vendor-stated behavior')), out.discord.join('\n'));
+  assert.equal(out.emails.filter((m) => /re-issued/.test(m.subject)).length, 0, 'a re-issue is Discord only, batched or not');
+});
+
+test('batched: a draft waits while the story\'s hunt proposals are in the batch, and is submitted the sweep after they land', async (t) => {
+  const { store, run, kevFetch, calls, hot } = await batched(t);
+  const fake = installFakeBatch(() => DRAFT);
+  hot.raw_iocs = { ...hot.raw_iocs, proposals: { at: '2026-10-16T12:00:00Z', pending: 'job-1', batched: true } };
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(c1.awaiting_hunts, 1, JSON.stringify(c1)); assert.equal(c1.submitted, 0); assert.equal(fake.submitted.length, 0); assert.equal(calls.length, 0);
+  hot.raw_iocs.proposals = { at: '2026-10-16T12:00:00Z', finished_at: '2026-10-16T13:30:00Z', batched: true };
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
+  assert.equal(c2.submitted, 1, JSON.stringify(c2)); assert.equal(c2.awaiting_hunts, 0); assert.equal(calls.length, 0);
+});
+
+test('batched: an answer the API could not give is finished by one live call; an answer whose head changed meanwhile is abandoned; a batch unanswered for six hours is cancelled and made live; without the jobs table the loop runs live', async (t) => {
+  const { store, run, kevFetch, calls, hot } = await batched(t);
+  const fake = installFakeBatch(() => DRAFT);
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  assert.equal(fake.submitted.length, 1);
+  fake.fail = 'invalid_request: The compiled grammar is too large';
+  const j = await collectJobs(store, { fetchImpl: kevFetch, now: now + 3600_000 });
+  assert.equal(j.landed, 1, JSON.stringify(j)); assert.equal(j.live, 1); assert.equal(calls.length, 1, 'one live call');
+  assert.match(store._tables.llm_jobs[0].outcome, /^live: invalid_request/);
+  const [row] = await store.listCardDrafts();
+  assert.equal(row.status, 'promoted'); assert.equal(row.cost_usd, 0.014, 'the live call at the list price');
+  // a revision submitted, then the head dismissed before it lands: abandoned, nothing written, no call
+  fake.fail = null;
+  store._tables.behaviors.push({ id: 'b1', story_id: hot.id, attack_technique: 'T1190', pattern_kind: 'other', vendor_stated: true });
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 2 * 3600_000 });
+  assert.equal(c.submitted, 1, JSON.stringify(c));
+  await store.updateCardDraft(row.id, { status: 'dismissed' });
+  const j2 = await collectJobs(store, { fetchImpl: kevFetch, now: now + 3 * 3600_000 });
+  assert.equal(j2.abandoned, 1, JSON.stringify(j2)); assert.equal((await store.listCardDrafts()).length, 1); assert.equal(calls.length, 1);
+  assert.equal(store._tables.llm_jobs[1].status, 'abandoned');
+  // six hours and no answer: cancelled and finished live
+  const w = await world();
+  const fake2 = installFakeBatch(() => DRAFT); fake2.ready = false;
+  await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now });
+  const j3 = await collectJobs(w.store, { fetchImpl: w.kevFetch, now: Date.now() + 7 * 3600_000 });
+  assert.equal(j3.live, 1, JSON.stringify(j3)); assert.deepEqual(fake2.cancelled, ['msgbatch_1']); assert.equal(w.calls.length, 1);
+  assert.match(w.store._tables.llm_jobs[0].outcome, /not answered in 6 h/);
+  assert.equal((await w.store.listCardDrafts())[0].status, 'promoted');
+  // the table missing: the loop drafts live, as before
+  const v = await world(); _resetBatchMode();
+  v.store.listJobs = async () => { throw new Error('relation "llm_jobs" does not exist'); };
+  const cv = await hypeSweep(v.store, { run: v.run, fetchImpl: v.kevFetch, now });
+  assert.equal(cv.drafted, 1, JSON.stringify(cv)); assert.equal(cv.submitted, 0); assert.equal(v.calls.length, 1);
+});
+
+test('batched: a hand-written card\'s re-issue draft goes through the batch too and lands as the surfaced draft its page links', async (t) => {
+  const { out, store, run, calls, hot } = await batched(t, { publish: false, carded: true });
+  const card = CARDS[0];
+  const fake = installFakeBatch(() => DRAFT);
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevLate, now });
+  assert.equal(c1.stale, 1); assert.equal(c1.submitted, 1, JSON.stringify(c1)); assert.equal(c1.drafted, 0); assert.equal(calls.length, 0);
+  assert.equal(store._tables.llm_jobs[0].payload.card_slug, card.slug);
+  // the development is raised once; the next sweep sees the answer in flight and submits nothing
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevLate, now: now + 60_000 });
+  assert.equal(c2.stale, 0); assert.equal(c2.submitted, 0); assert.equal(fake.submitted.length, 1);
+  const j = await collectJobs(store, { fetchImpl: kevLate, now: now + 3600_000 });
+  assert.equal(j.landed, 1, JSON.stringify(j));
+  const [d] = await store.listCardDrafts();
+  assert.ok(d.surfaced_at); assert.deepEqual(JSON.parse(d.fingerprint), { card: card.slug, devs: ['kev:CVE-2026-1'] });
+  assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-1 on 2026-10-24 (federal due 2026-10-27)']);
+  assert.ok(out.discord.some((l) => l.includes(`AI re-issue draft for card ${card.slug}`)), out.discord.join('\n'));
+  assert.equal(out.emails.filter((m) => /AI draft ready to publish/.test(m.subject)).length, 1);
+  assert.equal((await store.getStory(hot.id)).raw_iocs.hype.draft_id, d.id);
 });

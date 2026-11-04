@@ -9,6 +9,7 @@ import { postDiscord } from '../lib/discord.js';
 import { hypeSweep, coverageOnlySweep } from '../lib/hype.js';
 import { intake } from '../lib/intake.js';
 import { applyUpdate } from '../lib/update.js';
+import { collectJobs } from '../lib/jobs.js';
 
 export const config = { maxDuration: 300 };
 
@@ -27,6 +28,10 @@ export default async function handler(req, res) {
       return res.json({ ok: true, backfill: made });
     }
     const started = Date.now();
+    // Batched model answers first (lib/jobs.js): the hunt proposals and card drafts submitted earlier at
+    // half price land here — a proposal onto its story, a card published with its coverage check and mail
+    let jobs = {};
+    try { jobs = await collectJobs(store, { deadline: started + 150_000 }); } catch (e) { jobs = { error: String(e?.message || e).slice(0, 160) }; }
     // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the hourly
     // tick polls the inbox too and reads them first (a brief found here waits for the cron, as before)
     let updates = {};
@@ -55,10 +60,12 @@ export default async function handler(req, res) {
     // loop for a day, so a draft the inbound function could not finish inside its budget is written here
     let recentStoryIds = [];
     try { recentStoryIds = [...new Set((await store.listWatchEvents({ since: new Date(started - 86_400_000).toISOString() })).filter((e) => e.level === 'HIGH').map((e) => e.watch_story_id).filter(Boolean))]; } catch { /* no events table */ }
-    if (counts.events > 0 || recentStoryIds.length) {
+    // and for a run whose hunt proposals just landed (a day-one draft waited for them, lib/hype.js)
+    const landedRuns = jobs.runs || [];
+    if (counts.events > 0 || recentStoryIds.length || landedRuns.length) {
       try {
         const latest = (await store.listRecentSentRuns(3)).sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
-        const runIds = new Set(latest ? [latest.id] : []);
+        const runIds = new Set([...(latest ? [latest.id] : []), ...landedRuns]);
         for (const sid of [...(counts.event_story_ids || []), ...recentStoryIds]) { try { const s = await store.getStory(sid); if (s?.run_id) runIds.add(s.run_id); } catch { /* skip */ } }
         const runs = [];
         for (const id of [...runIds].slice(0, 4)) { const r = id === latest?.id ? latest : await store.getRun(id); if (r) runs.push(r); }
@@ -69,7 +76,7 @@ export default async function handler(req, res) {
         hype.runs = runs.length;
       } catch (e) { hype = { hype_error: String(e?.message || e).slice(0, 200) }; }
     }
-    return res.json({ ok: true, ...counts, updates, opened, coverage, hype });
+    return res.json({ ok: true, ...counts, jobs, updates, opened, coverage, hype });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting hourly
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {

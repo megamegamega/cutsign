@@ -9,7 +9,9 @@ import { driveRuns, advanceRun } from '../lib/pipeline.js';
 import { buildDigestData, renderHtml } from '../lib/render.js';
 import { generateQueries, finishProposals, storyTelemetryKeys, buildProposeInput, queryLiterals, eligible } from '../lib/queries.js';
 import { lintSpl, lintEsql } from '../lib/lint.js';
-import { fixtureMessage, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, NETSCALER_EXTRACTION } from './helpers.js';
+import { fixtureMessage, fakeFetch, installFakeLLM, installFakeBatch, defaultResponder, captureOutputs, NETSCALER_EXTRACTION } from './helpers.js';
+import { collectJobs } from '../lib/jobs.js';
+import { _resetBatchMode } from '../lib/batchmode.js';
 
 const J = (...a) => a.join('');
 const HYGIENE = [/\bindex\s*=\s*(?!\*)[a-z_]/i, /\b[a-z0-9-]+\.(corp|internal|intranet|lan)\.[a-z]{2,}\b/i, /\b(sourcetype)\s*=\s*"?[a-z]+:[a-z]/i];
@@ -185,4 +187,80 @@ test('stage queried: a proposal that fails validation twice is recorded on the s
   const ns = store._tables.stories.find((s) => s.title.startsWith('NetScaler ADC post-exploitation'));
   assert.match(ns.raw_iocs.proposals.error, /failed validation twice/);
   assert.ok(out.discord.at(-1).includes('⚠ 1 failed'));
+});
+
+// ---- the queried stage through the Batches API (lib/jobs.js collects on the hourly tick) ----------
+
+const batchedStage = async (t) => {
+  // batched proposals only: the card loop is kept out of these runs (no day-one card, a bar nothing reaches)
+  process.env.LLM_BATCH = '1'; process.env.CARD_P1_DAY_ONE = '0'; process.env.HYPE_SURFACE = '99'; _resetBatchMode();
+  t.after(() => { process.env.LLM_BATCH = '0'; delete process.env.CARD_P1_DAY_ONE; delete process.env.HYPE_SURFACE; _resetBatchMode(); });
+  const out = captureOutputs(); const store = memoryStore();
+  const calls = installFakeLLM(nsTwoResponder);
+  await intake(store, { messages: [fixtureMessage('netscaler-style.eml')] });
+  return { out, store, calls };
+};
+const nsOf = (store) => store._tables.stories.find((s) => s.title.startsWith('NetScaler ADC post-exploitation'));
+const proposalJobs = (store) => store._tables.llm_jobs.filter((j) => j.kind === 'proposal');
+
+test('stage queried, batched: the proposal is submitted at half price, the brief goes out without waiting, and the collector lints the answer onto the story and counts it on the run', async (t) => {
+  const { out, store, calls } = await batchedStage(t);
+  const fake = installFakeBatch(() => NS_PROPOSAL); fake.ready = false;
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  const run = store._tables.runs[0];
+  assert.equal(run.stage, 'sent', 'the brief did not wait');
+  const ns = nsOf(store);
+  assert.ok(ns.raw_iocs.proposals.pending); assert.equal(ns.raw_iocs.proposals.batched, true); assert.deepEqual(ns.raw_iocs.proposed_queries, []);
+  assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 0, 'no live proposer call');
+  assert.equal(proposalJobs(store).length, 1); assert.equal(proposalJobs(store)[0].status, 'pending'); assert.equal(proposalJobs(store)[0].run_id, run.id);
+  const p = fake.submitted.find((s) => s.custom_id.startsWith('proposal')).params;
+  assert.equal(p.model, 'claude-opus-5-5'); assert.equal(p.output_config.effort, 'high'); assert.ok(p.output_config.format);
+  assert.equal(p.system[0].cache_control.type, 'ephemeral'); assert.ok(!('fallbacks' in p) && !('betas' in p));
+  assert.equal(run.counts.proposals_pending, 1); assert.equal(run.counts.proposals, 0);
+  const line = out.discord.find((l) => l.startsWith('Cutsign ✔'));
+  assert.ok(line.includes('1 proposal pending (batch)'), line); assert.ok(!line.includes('proposer $'), line);
+  assert.doesNotMatch(out.emails[0].html, /Proposed hunts/);
+  // the first hourly tick: not answered yet
+  const c1 = await collectJobs(store, {});
+  assert.equal(c1.pending >= 1, true, JSON.stringify(c1)); assert.equal(c1.landed, 0); assert.deepEqual(c1.runs, []);
+  // answered: linted onto the story, counted and costed on the run at the batch rate, and the run is named for the card loop
+  fake.ready = true;
+  const costBefore = Number(run.cost_usd); // the brief's own reads; the proposal adds to it
+  const c2 = await collectJobs(store, {});
+  assert.equal(c2.landed >= 1, true, JSON.stringify(c2)); assert.deepEqual(c2.runs, [run.id]);
+  const ns2 = nsOf(store);
+  assert.equal(ns2.raw_iocs.proposed_queries.length, 1); assert.equal(ns2.raw_iocs.proposed_queries[0].tier, 'proposed'); assert.equal(ns2.raw_iocs.proposed_queries[0].model, 'claude-opus-5-5');
+  assert.ok(!ns2.raw_iocs.proposals.pending); assert.equal(ns2.raw_iocs.proposals.batched, true); assert.ok(ns2.raw_iocs.proposals.finished_at);
+  const run2 = await store.getRun(run.id);
+  assert.equal(run2.counts.calls_propose, 1); assert.equal(run2.counts.proposals, 1); assert.equal(run2.counts.proposals_pending, 0);
+  assert.ok(Math.abs(run2.counts.cost_propose - 0.007) < 1e-9, `half of the live $0.014, got ${run2.counts.cost_propose}`);
+  assert.ok(Math.abs(Number(run2.cost_usd) - costBefore - 0.007) < 1e-9, `run cost ${costBefore} → ${run2.cost_usd}`);
+  assert.equal(proposalJobs(store)[0].status, 'done'); assert.equal(proposalJobs(store)[0].cost_usd, 0.007);
+  assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 0, 'still no live call');
+  // a resumed stage finds the work done; nothing is collected twice
+  await store.updateRun(run.id, { stage: 'validated' });
+  assert.equal(await advanceRun(store, run.id, { fetchImpl: fakeFetch() }), 'sent');
+  assert.equal(proposalJobs(store).length, 1, 'no second submission');
+  assert.equal(store._tables.llm_jobs.length, 1, 'and nothing else in flight');
+  assert.equal((await collectJobs(store, {})).checked, 0, 'nothing is collected twice');
+});
+
+test('stage queried, batched: an answer the API could not give is made live, once; a batch still running after six hours is cancelled and made live', async (t) => {
+  const a = await batchedStage(t);
+  const fake = installFakeBatch(() => NS_PROPOSAL); fake.fail = 'invalid_request: The compiled grammar is too large';
+  await driveRuns(a.store, { fetchImpl: fakeFetch() });
+  const c = await collectJobs(a.store, {});
+  assert.equal(c.live >= 1, true, JSON.stringify(c)); assert.equal(a.calls.filter((x) => x.schemaName === 'proposal').length, 1, 'one live proposer call');
+  const ns = nsOf(a.store);
+  assert.equal(ns.raw_iocs.proposed_queries.length, 1); assert.equal(ns.raw_iocs.proposals.batched, false);
+  assert.match(proposalJobs(a.store)[0].outcome, /^live: invalid_request/);
+  assert.ok(Math.abs((await a.store.getRun(a.store._tables.runs[0].id)).counts.cost_propose - 0.014) < 1e-9, 'the live call at the list price');
+  // six hours and no answer
+  const b = await batchedStage(t);
+  const fake2 = installFakeBatch(() => NS_PROPOSAL); fake2.ready = false;
+  await driveRuns(b.store, { fetchImpl: fakeFetch() });
+  const c2 = await collectJobs(b.store, { now: Date.now() + 7 * 3600_000 });
+  assert.equal(c2.live >= 1, true, JSON.stringify(c2)); assert.ok(fake2.cancelled.length >= 1); assert.equal(b.calls.filter((x) => x.schemaName === 'proposal').length, 1);
+  assert.match(proposalJobs(b.store)[0].outcome, /not answered in 6 h/);
+  assert.equal(nsOf(b.store).raw_iocs.proposed_queries.length, 1);
 });

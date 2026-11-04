@@ -1,7 +1,7 @@
 // Shared test scaffolding: fixture messages, a fake fetch, a fake LLM, and captured email/Discord.
 
 import { readFileSync } from 'node:fs';
-import { _setLLM } from '../lib/llm.js';
+import { _setLLM, _setBatchAPI } from '../lib/llm.js';
 import { _setEmailSink } from '../lib/email.js';
 import { _setDiscordSink } from '../lib/discord.js';
 import { _resetRobotsCache } from '../lib/fetch-source.js';
@@ -10,6 +10,8 @@ import { _resetRobotsCache } from '../lib/fetch-source.js';
 process.env.BRIEF_SENDER_ALLOWLIST ||= 'brief@example.test,briefs@example.test';
 process.env.EMAIL_FROM ||= 'Cutsign <cutsign@example.test>';
 process.env.EMAIL_TO ||= 'reader@example.test';
+// the loop tests read model answers live; the batched path (lib/jobs.js) is turned on by the tests that cover it
+process.env.LLM_BATCH ||= '0';
 
 const fx = (p) => new URL(`../fixtures/${p}`, import.meta.url);
 export const readFixture = (p) => readFileSync(fx(p), 'utf8');
@@ -109,6 +111,32 @@ export function installFakeLLM(responder) {
     return { text: JSON.stringify(out), usage: { input_tokens: 1000, output_tokens: 500 }, model: 'claude-opus-5-5' };
   });
   return calls;
+}
+
+/**
+ * Fake Batches API, one request per batch: `responder(userText, request)` returns the JSON object the model
+ * would emit, once `fake.ready` is true; `fake.fail` (a string) makes every answer an errored result.
+ * Records every submission and cancellation.
+ */
+export function installFakeBatch(responder) {
+  const fake = { ready: true, fail: null, submitted: [], cancelled: [], batches: new Map() };
+  _setBatchAPI({
+    async create({ requests }) {
+      const id = `msgbatch_${fake.batches.size + 1}`;
+      fake.batches.set(id, requests[0]); fake.submitted.push({ id, ...requests[0] });
+      return { id, processing_status: 'in_progress' };
+    },
+    async retrieve(id) { return { id, processing_status: fake.ready ? 'ended' : 'in_progress' }; },
+    async results(id) {
+      const req = fake.batches.get(id);
+      const result = fake.fail
+        ? { type: 'errored', error: { type: String(fake.fail).split(':')[0], message: String(fake.fail).split(':').slice(1).join(':').trim() } }
+        : { type: 'succeeded', message: { model: req.params.model, stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(responder(req.params.messages[0].content, req)) }], usage: { input_tokens: 1000, output_tokens: 500 } } };
+      return (async function* () { yield { custom_id: req.custom_id, result }; })();
+    },
+    async cancel(id) { fake.cancelled.push(id); return { id, processing_status: 'canceling' }; },
+  });
+  return fake;
 }
 
 /** Default responder: NetScaler story gets the rich extraction, everything else a thin one. */
