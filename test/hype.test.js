@@ -186,6 +186,7 @@ test('sweep: the loop revises the draft when the evidence changes, superseding t
   store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
   const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
   assert.equal(c.revised, 1); assert.equal(c.drafted, 0); assert.equal(calls.length, 2);
+  assert.equal(calls[1].effort, 'low', 'a revision edits the prior draft against a change list');
   assert.match(calls[1].messages[0].content, /<prior_draft version="1">/);
   assert.match(calls[1].messages[0].content, /<changes>1 new published detection guidance item<\/changes>/);
   const all = (await store.listCardDrafts()).sort((a, b) => a.version - b.version);
@@ -196,15 +197,26 @@ test('sweep: the loop revises the draft when the evidence changes, superseding t
   assert.match(draftBody(all[1]), /Changed since version 1/);
 });
 
-test('sweep: a nominated story with nothing actionable waits, and is drafted once something lands', async () => {
-  const { store, run, kevFetch, calls } = await world({ actionableStory: false });
+test('sweep: a nominated story with nothing actionable waits; actionable but under the publish bar it is still not drafted; it is drafted the sweep it crosses', async () => {
+  const { store, run, kevFetch, calls, hot } = await world({ actionableStory: false });
   const now = Date.parse('2026-10-16T13:00:00Z');
-  // P1 2, deep 1, 3 publishers 1, primary 1, exposure 1, actor 1 = 7 → nominated, not actionable
-  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now });
-  assert.equal(c1.nominated, 1); assert.equal(c1.drafted, 0); assert.equal(c1.waiting, 1); assert.equal(calls.length, 0);
-  store._tables.evidence.push({ id: 'e1', story_id: uuid(1), kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
-  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
-  assert.equal(c2.drafted, 1); assert.equal(c2.nominated, 0, 'score unchanged, no second nomination'); assert.equal(calls.length, 1);
+  // P1 2, deep 1, 3 publishers 1, primary 1, exposure 1, actor 1 = 7 → nominated, not actionable (and not day one: the run started today, but the knob is tested elsewhere)
+  process.env.CARD_P1_DAY_ONE = '0';
+  try {
+    const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+    assert.equal(c1.nominated, 1); assert.equal(c1.drafted, 0); assert.equal(c1.waiting, 1); assert.equal(calls.length, 0);
+    // guidance lands: actionable now, score still 7 — a draft nobody would see is not written
+    store._tables.evidence.push({ id: 'e1', story_id: uuid(1), kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+    const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
+    assert.equal(c2.drafted, 0); assert.equal(c2.below_bar, 1, JSON.stringify(c2)); assert.equal(c2.nominated, 0, 'score unchanged, no second nomination'); assert.equal(calls.length, 0);
+    // a material development on watch: +2 → 9, over the bar → its first draft, with everything gathered so far
+    store._tables.watches.push({ id: 'w1', story_id: hot.id, title: hot.title, status: 'active' });
+    store._tables.watch_events.push({ id: 'ev1', watch_id: 'w1', created_at: '2026-10-16T14:30:00Z', kind: 'new_source', level: 'HIGH', summary: 'Exploitation confirmed.', assessment: { material: true, summary: 'Exploitation confirmed.' } });
+    const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 2 * 3600_000 });
+    assert.equal(c3.drafted, 1, JSON.stringify(c3)); assert.equal(c3.surfaced, 1); assert.equal(calls.length, 1);
+    assert.equal(calls[0].effort, 'medium', 'a first draft composes');
+    assert.match(calls[0].messages[0].content, /<published_guidance>/);
+  } finally { delete process.env.CARD_P1_DAY_ONE; }
 });
 
 test('sweep: a dismissed draft is left alone; a thread with a hand-written card is skipped', async () => {
@@ -670,21 +682,48 @@ test('facts: past CARD_REISSUES_PER_DAY revisions in a UTC day the new facts wai
   const t0 = Date.parse('2026-10-16T13:00:00Z');
   // the store dates a version by the real clock; date each one at its sweep's hour instead
   const stamp = (ms) => { for (const r of store._tables.card_drafts) if (!r.dated) Object.assign(r, { created_at: new Date(ms).toISOString(), dated: true }); };
-  const guide = (id) => store._tables.evidence.push({ id, story_id: hot.id, kind: 'guidance', raw: 'Hunt', url: `https://v.example.test/${id}`, publisher_tier: 'A' });
+  // vendor-stated behaviors: facts that revise at once (a guidance link alone would wait for the day's one fold-in, below)
+  const beh = (id, tech) => store._tables.behaviors.push({ id, story_id: hot.id, attack_technique: tech, pattern_kind: 'other', vendor_stated: true });
   const notes = () => out.discord.filter((l) => l.includes('revisions today (UTC)'));
   await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 }); stamp(t0);
-  guide('e1');
+  beh('b1', 'T1190');
   await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3600_000 }); stamp(t0 + 3600_000);
   assert.equal(calls.length, 2, 'the day\'s one revision');
-  guide('e2');
+  beh('b2', 'T1059');
   const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 2 * 3600_000 });
   assert.equal(c3.revised, 0); assert.equal(c3.capped, 1); assert.equal(calls.length, 2);
-  assert.equal(notes().length, 1); assert.match(notes()[0], /new facts wait for its first sweep after midnight: 1 new published detection guidance item/);
+  assert.equal(notes().length, 1); assert.match(notes()[0], /new facts wait for its first sweep after midnight: 1 new vendor-stated behavior/);
   await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3 * 3600_000 });
   assert.equal(notes().length, 1, 'said once a day'); assert.equal(calls.length, 2);
   const c5 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-17T01:00:00Z') });
   assert.equal(c5.revised, 1); assert.equal(calls.length, 3);
+  assert.match(calls[2].messages[0].content, /<changes>1 new vendor-stated behavior<\/changes>/);
+});
+
+test('revisions: a sample, IoC or guidance link alone folds in once a UTC day; a KEV listing, fix version, vendor-stated behavior or material development revises at once', async () => {
+  const { store, run, kevFetch, calls, hot } = await world();
+  const t0 = Date.parse('2026-10-16T13:00:00Z');
+  const stamp = (ms) => { for (const r of store._tables.card_drafts) if (!r.dated) Object.assign(r, { created_at: new Date(ms).toISOString(), dated: true }); };
+  const guide = (id) => store._tables.evidence.push({ id, story_id: hot.id, kind: 'guidance', raw: 'Hunt', url: `https://v.example.test/${id}`, publisher_tier: 'A' });
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 }); stamp(t0);
+  assert.equal(calls.length, 1);
+  // a guidance link an hour after the card was written: held for the day
+  guide('e1');
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3600_000 });
+  assert.equal(c2.revised, 0); assert.equal(c2.held, 1, JSON.stringify(c2)); assert.equal(calls.length, 1);
+  // a vendor-stated behavior: revised now, and the held guidance rides along
+  store._tables.behaviors.push({ id: 'b1', story_id: hot.id, attack_technique: 'T1190', pattern_kind: 'other', vendor_stated: true });
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 2 * 3600_000 }); stamp(t0 + 2 * 3600_000);
+  assert.equal(c3.revised, 1, JSON.stringify(c3)); assert.equal(calls.length, 2);
+  assert.match(calls[1].messages[0].content, /<changes>1 new published detection guidance item; 1 new vendor-stated behavior<\/changes>/);
+  // another link the same day: held again; the first sweep of the next UTC day folds it in
+  guide('e2');
+  const c4 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: t0 + 3 * 3600_000 });
+  assert.equal(c4.revised, 0); assert.equal(c4.held, 1); assert.equal(calls.length, 2);
+  const c5 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-17T00:30:00Z') });
+  assert.equal(c5.revised, 1, JSON.stringify(c5)); assert.equal(calls.length, 3);
   assert.match(calls[2].messages[0].content, /<changes>1 new published detection guidance item<\/changes>/);
+  assert.equal(calls[2].effort, 'low');
 });
 
 test('a hand-written card reached through two briefs raises a development once, not once per copy', async () => {

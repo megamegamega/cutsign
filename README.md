@@ -84,18 +84,26 @@ again from the hourly watch tick when something developed, every story thread is
 pipeline already knows — priority, deep read, a CISA KEV listing within three days, how many briefs
 the story has run, distinct publishers, a primary source, stated internet-facing exposure, a named
 actor, and 48 h of watch developments. Over `HYPE_NOMINATE` (6) the thread is nominated to Discord
-with the signals that fired. A nominated thread with something actionable (published guidance, a
-vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs) gets an
-AI-generated draft from one Opus call, shaped on the DAIR model (Detect, Verify and Triage, the
-Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic Incident Response*).
+with the signals that fired. A draft is written only for a card that will be published — a thread
+over `HYPE_SURFACE`, or a P1 on day one (below) — once it has something actionable (published
+guidance, a vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs);
+a nominee under the bar gets its Discord line and is drafted the sweep it crosses, with everything
+gathered by then (until 2026-11-04 every nominee was drafted, and half the drafts were previews of
+stories that never crossed). The draft is one Opus call, shaped on the DAIR model (Detect, Verify
+and Triage, the Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic
+Incident Response*).
 Each draft records the facts it holds, as stable keys that only accumulate (a KEV listing, a fix
 version, a vendor-stated behavior by technique, a guidance item by link, a sample or IoC by value, a
 material watch development). Only a fact it does not hold revises it, from the prior version as a
 new row with a change list, the old one marked superseded; another day of coverage, more outlets, a
 development aging out of the window, or the same facts read from another brief's copy of the story
 revise nothing. A draft from before facts were kept is seeded from its whole thread, with no model call.
-A card is revised at most `CARD_REISSUES_PER_DAY` (3) times a UTC day; past that, Discord says so
-once and the new facts wait for its first sweep after midnight.
+A fact that moves the story — a KEV listing, a fix version, a vendor-stated behavior, a material
+development — revises the card at once; a sample, an IoC or a guidance link alone folds in once a
+UTC day, together with whatever else landed. A revision is an edit of the prior draft against the
+change list and runs at low effort; a first draft composes at medium. A card is revised at most
+`CARD_REISSUES_PER_DAY` (3) times a UTC day; past that, Discord says so once and the new facts wait
+for its first sweep after midnight.
 A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
 lint-clean and in both dialects, and the model writes only what a hit means.
 Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the
@@ -254,8 +262,10 @@ sourcetype, data stream, host, user or email, read-only commands only, and no li
 record does not print. A story whose telemetry is `other` only, or names a single family, gets no
 call: single-source hunts are template territory for the consumer, and the proposer earns its cost
 only where a hunt has to cross families. The proposer runs on
-its own model tier (`LLM_MODEL_PROPOSE`, Claude Fable 5.1) and falls back to the deep tier once
+its own model tier (`LLM_MODEL_PROPOSE`; Claude Opus 5.5 since 2026-11-04 — it ran on Claude Fable
+5.1 before, about $0.90 a day, and Opus was already the fallback) and falls back to the deep tier once
 month-to-date spend passes 80% of `MAX_MONTHLY_USD`, marking the proposal `model_tier: deep`.
+Each proposal records its `model`, so a drop in the lint pass rate after the switch is measurable.
 Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), collapsed in the web
 analyst view, and by name in search results; never in the email or the CISO view. Nothing here runs
 against any SIEM.

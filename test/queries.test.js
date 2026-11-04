@@ -52,7 +52,7 @@ test('a ConnectWise-shaped story yields a lint-clean correlation with two stages
   assert.match(input, /\[behaviors\[1\]\]/); assert.match(input, /<vocabulary>/); assert.match(input, /<story_telemetry>entra_signin, m365_ual<\/story_telemetry>/);
   const calls = installFakeLLM(() => PROPOSAL());
   const r = await generateQueries({ ...CW, spent: 1, cap: 25 });
-  assert.equal(calls.length, 1); assert.equal(calls[0].tier, 'propose'); assert.equal(calls[0].schemaName, 'proposal'); assert.equal(calls[0].model, 'claude-fable-5-1');
+  assert.equal(calls.length, 1); assert.equal(calls[0].tier, 'propose'); assert.equal(calls[0].schemaName, 'proposal'); assert.equal(calls[0].model, 'claude-opus-5-5', 'the proposer runs on Opus 5.5 since 2026-11-04 (Fable 5.1 by LLM_MODEL_PROPOSE)');
   assert.equal(r.model_tier, 'propose'); assert.equal(r.dropped.length, 0, JSON.stringify(r.dropped));
   const corr = r.proposals.filter((p) => p.shape === 'correlation');
   assert.equal(corr.length, 1); assert.equal(corr[0].stages.length, 2); assert.deepEqual(corr[0].join, { on: 'appId', window: '1h' });
