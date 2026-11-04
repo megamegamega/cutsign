@@ -217,6 +217,31 @@ test('time budget: a run yields mid-extract and the next invocation finishes it'
   void calls;
 });
 
+test('send: the digest goes out once per run — a re-entered send step (cut off mid-sweep, or yielded for time) never mails it again', async () => {
+  const store = memoryStore();
+  installFakeLLM(defaultResponder);
+  const run = await runNetscaler(store);
+  assert.equal(run.stage, 'sent');
+  const digests = () => out.emails.filter((m) => m.to === process.env.EMAIL_TO && /^Cutsign — /.test(m.subject)).length;
+  assert.equal(digests(), 1);
+  assert.ok(run.counts.emailed_at, 'the mark is written with the send');
+  // an invocation killed in the card sweep after the mail went out leaves the stage at rendered: the next tick re-enters
+  await store.updateRun(run.id, { stage: 'rendered' });
+  assert.equal(await advanceRun(store, run.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 10 * 60_000 }), 'sent');
+  assert.equal(digests(), 1, 'no second digest');
+  // a run reaching the send step with too little time left: the mail goes out, the sweep yields before its
+  // first story, the stage stays put, and the chained invocation finishes the sweep without mailing again
+  const { emailed_at: _, ...rest } = store._tables.runs[0].counts;
+  await store.updateRun(run.id, { stage: 'rendered', counts: rest });
+  assert.equal(await advanceRun(store, run.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 60_000 }), 'yielded');
+  const mid = store._tables.runs[0];
+  assert.equal(mid.stage, 'rendered'); assert.ok(mid.counts.emailed_at); assert.equal(mid.counts.hype_yields, 1);
+  assert.equal(digests(), 2, 'mailed once on this pass (its mark had been removed)');
+  assert.equal(await advanceRun(store, run.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 10 * 60_000 }), 'sent');
+  assert.equal(digests(), 2, 'the finishing pass sends nothing');
+  assert.ok(!store._tables.runs[0].counts.hype?.yielded, 'the sweep finished');
+});
+
 test('an IoC seen on two different days has seen_count 2 and shows as a repeat', async () => {
   const store = memoryStore();
   installFakeLLM(defaultResponder);

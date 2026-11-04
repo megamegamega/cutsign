@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, cardFacts, describeFacts, P1_REASON } from '../lib/hype.js';
+import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, cardFacts, describeFacts, P1_REASON, DRAFT_RESERVE_MS } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput } from '../lib/carddraft.js';
 import { CARDS, cardIndex } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
@@ -139,6 +139,17 @@ function routed({ kev = [], routes = {} } = {}) {
   return impl;
 }
 const CF_FEED = (hit) => `<rss><channel>${hit ? '<item><title>WAF Release - Emergency - CVE-2026-1</title><link>https://developers.cloudflare.com/waf/change-log/x/</link></item>' : '<item><title>routine</title><link>https://developers.cloudflare.com/waf/change-log/y/</link></item>'}</channel></rss>`;
+
+test('sweep: with no time for a story it yields before starting one and writes nothing; run again, it finishes', async () => {
+  const { store, run, kevFetch, calls } = await world();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now, deadline: Date.now() + DRAFT_RESERVE_MS - 1000 });
+  assert.equal(c1.yielded, true); assert.equal(c1.scored, 0); assert.equal(c1.drafted, 0);
+  assert.equal(calls.length, 0, 'no model call started');
+  assert.equal(store._tables.card_drafts?.length || 0, 0);
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now, deadline: Date.now() + 10 * 60_000 });
+  assert.ok(!c2.yielded); assert.equal(c2.drafted, 1, JSON.stringify(c2));
+});
 
 test('sweep: nominates, writes an AI draft when actionable, emails and posts it, and does not repeat on unchanged evidence', async () => {
   const { out, store, run, kevFetch, calls, hot } = await world();
