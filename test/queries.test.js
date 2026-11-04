@@ -264,3 +264,17 @@ test('stage queried, batched: an answer the API could not give is made live, onc
   assert.match(proposalJobs(b.store)[0].outcome, /not answered in 6 h/);
   assert.equal(nsOf(b.store).raw_iocs.proposed_queries.length, 1);
 });
+
+test('stage queried, batched: a submission the API refuses is proposed live in the same step', async (t) => {
+  const { out, store, calls } = await batchedStage(t);
+  installFakeBatch(() => NS_PROPOSAL);
+  const { _setBatchAPI } = await import('../lib/llm.js');
+  _setBatchAPI({ async create() { throw new Error('400 output_config.format: unsupported'); } });
+  await driveRuns(store, { fetchImpl: fakeFetch() });
+  const ns = nsOf(store);
+  assert.equal(ns.raw_iocs.proposed_queries.length, 1); assert.ok(!ns.raw_iocs.proposals.pending); assert.ok(!ns.raw_iocs.proposals.batched);
+  assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 1, 'the live call');
+  assert.equal(store._tables.llm_jobs.length, 0);
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ⚠ batch submission failed, proposing live')), out.discord.join('\n'));
+  assert.ok(out.discord.find((l) => l.startsWith('Cutsign ✔')).includes('proposals +1'));
+});

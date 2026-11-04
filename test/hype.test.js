@@ -866,3 +866,14 @@ test('batched: a hand-written card\'s re-issue draft goes through the batch too 
   assert.equal(out.emails.filter((m) => /AI draft ready to publish/.test(m.subject)).length, 1);
   assert.equal((await store.getStory(hot.id)).raw_iocs.hype.draft_id, d.id);
 });
+
+test('batched: a submission the API refuses is drafted live instead, and said once on Discord', async (t) => {
+  const { out, store, run, kevFetch, calls } = await batched(t);
+  installFakeBatch(() => DRAFT);
+  const { _setBatchAPI } = await import('../lib/llm.js');
+  _setBatchAPI({ async create() { throw new Error('400 output_config.format: unsupported'); } });
+  const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-16T13:00:00Z') });
+  assert.equal(c.submitted, 0); assert.equal(c.batch_errors, 1); assert.equal(c.published, 1, JSON.stringify(c)); assert.equal(calls.length, 1, 'drafted live');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ⚠ batch submission failed, drafting live')), out.discord.join('\n'));
+  assert.equal(store._tables.llm_jobs.length, 0);
+});
