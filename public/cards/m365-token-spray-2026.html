@@ -188,8 +188,9 @@ AND (moves to 'RSS Feeds'/'RSS Subscriptions'/'Conversation History'
      OR conditions contain payroll/banking terms)
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — Azure Monitor diagnostic export shape (<code>category</code> / <code>properties.*</code>) for Entra, UAL shape for Exchange; tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — Splunk over the Azure Monitor diagnostic export shape (<code>category</code> / <code>properties.*</code>) for Entra and the UAL shape for Exchange; Elastic over its Azure Logs and Microsoft 365 integrations (<code>azure.signinlogs.*</code>, <code>azure.auditlogs.*</code>, <code>o365.audit.*</code>); tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # replayed sessions: successful sign-ins with the campaign's client shape, Jul 14 → now
 index=* category=SignInLogs earliest=-110d@d properties.status.errorCode=0
@@ -223,6 +224,45 @@ index=* earliest=-110d@d Operation IN ("New-InboxRule","Set-InboxRule")
 | where match(names, "^.{1,3}$") OR match(names, "^[[:punct:]]+$") OR match(folders, "RSS|Conversation History")
 
 </pre>
+    <pre data-q="esql">
+
+// replayed sessions: successful sign-ins with the campaign's client shape, Jul 14 → now
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 110 days AND event.dataset == "azure.signinlogs"
+| WHERE azure.signinlogs.properties.status.error_code == 0
+    AND (user_agent.original IN ("node", "Mozilla/5.0") OR azure.signinlogs.properties.authentication_protocol == "deviceCode")
+| EVAL campaign_net = CASE(CIDR_MATCH(source.ip, "193.26.115.0/24"), "1337 Services /24")
+| STATS count = COUNT(*), uas = VALUES(user_agent.original), asns = VALUES(source.as.number), apps = VALUES(azure.signinlogs.properties.app_display_name),
+    net = VALUES(campaign_net), first = MIN(@timestamp) BY user.name, source.ip
+
+// rogue device registrations from hosting space
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 110 days AND event.dataset == "azure.auditlogs" AND azure.auditlogs.operation_name == "Register device"
+| WHERE azure.auditlogs.properties.target_resources.0.display_name RLIKE "(DESKTOP-|Device-|Work Pc)[0-9A-F]{8}"
+| STATS count = COUNT(*), devices = VALUES(azure.auditlogs.properties.target_resources.0.display_name)
+    BY azure.auditlogs.properties.initiated_by.user.userPrincipalName, azure.auditlogs.properties.initiated_by.user.ipAddress
+
+// MFA wipe-and-replace inside 10 minutes (fixed 10-minute buckets stand in for Splunk's transaction window)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 110 days AND event.dataset == "azure.auditlogs"
+    AND azure.auditlogs.operation_name IN ("User deleted security info", "User registered security info")
+| EVAL user = azure.auditlogs.properties.target_resources.0.user_principal_name, window = DATE_TRUNC(10 minutes, @timestamp)
+| STATS ops = COUNT_DISTINCT(azure.auditlogs.operation_name), first = MIN(@timestamp), last = MAX(@timestamp) BY user, window
+| WHERE ops == 2
+| KEEP first, last, user
+
+// hidden inbox rules (Exchange / UAL)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 110 days AND event.dataset == "o365.audit" AND event.action IN ("New-InboxRule", "Set-InboxRule")
+| EVAL rule_name = o365.audit.Parameters.Name, folder = o365.audit.Parameters.MoveToFolder
+| WHERE rule_name RLIKE ".{1,3}" OR rule_name RLIKE "[^A-Za-z0-9 ]+" OR folder RLIKE ".*(RSS|Conversation History).*"
+| STATS names = VALUES(rule_name), folders = VALUES(folder) BY user.id, source.ip
+
+</pre>
+    </div>
 
     <h2>Timeline</h2>
     <ul class="tl">
@@ -292,5 +332,6 @@ index=* earliest=-110d@d Operation IN ("New-InboxRule","Set-InboxRule")
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

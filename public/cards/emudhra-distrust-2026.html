@@ -195,8 +195,9 @@ hashes (on the IoC card) in proxy/Zeek logs and local trust stores
 # also: flag code signed by the two code-signing intermediates
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — CIM Certificates field names (Zeek x509/ssl, TLS-inspection, Stream); tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Certificates field names for Splunk, ECS <code>tls.server.*</code> for Elastic (Zeek x509/ssl, TLS-inspection, Packetbeat); tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # estate-wide issuer sweep: before Oct 27 this is the replacement worklist
 index=* earliest=-30d@d (ssl_issuer="*emSign*" OR ssl_issuer="*eMudhra*" OR issuer="*emSign*" OR issuer="*eMudhra*" OR certificate.issuer="*emSign*")
@@ -215,6 +216,33 @@ index=* earliest=-1d@d ssl_issuer IN ("*emSign*","*eMudhra*")
 | where first_seen &gt; relative_time(now(), "-1d@d")
 
 </pre>
+    <pre data-q="esql">
+
+// estate-wide issuer sweep: before Oct 27 this is the replacement worklist
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE tls.server.x509.issuer.distinguished_name LIKE "*emSign*" OR tls.server.x509.issuer.distinguished_name LIKE "*eMudhra*"
+    OR tls.server.issuer LIKE "*emSign*" OR tls.server.issuer LIKE "*eMudhra*"
+| EVAL issuer = COALESCE(tls.server.x509.issuer.distinguished_name, tls.server.issuer)
+| STATS servers = COUNT_DISTINCT(destination.ip), hosts = VALUES(destination.ip), subjects = VALUES(tls.server.subject) BY issuer
+
+// exact-match sweep: the eight weak-key intermediates by SHA-256 (values on the IoC card)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE tls.server.hash.sha256 IN ("&lt;eight SHA-256 from the IoC card&gt;")
+| STATS count = COUNT(*), hosts = VALUES(destination.ip), first = MIN(@timestamp) BY tls.server.hash.sha256
+
+// after Oct 27: any NEW certificate chaining to the weak intermediates is forgery, escalate
+
+FROM logs-*
+| WHERE @timestamp &gt;= DATE_TRUNC(1 day, NOW() - 1 day)
+| WHERE tls.server.issuer LIKE "*emSign*" OR tls.server.issuer LIKE "*eMudhra*"
+| STATS first_seen = MIN(@timestamp) BY tls.server.subject, tls.server.x509.serial_number
+| SORT first_seen DESC
+
+</pre>
+    </div>
 
     <h2>Timeline</h2>
     <ul class="tl">
@@ -288,5 +316,6 @@ index=* earliest=-1d@d ssl_issuer IN ("*emSign*","*eMudhra*")
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

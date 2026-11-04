@@ -233,8 +233,9 @@ AND dest.domain not seen before (e.g. first_seen < 7d)
 → inventory which apps decode untrusted Brotli at all; those patch first
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Web field names, Sysmon names for lineage; tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Web field names for Splunk, ECS for Elastic, Sysmon names for lineage; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # node crash canary: more than a baseline of crashes per host per hour
 index=* earliest=-30d@d (process_name="node" OR Image="*/node" OR "node[") (signal IN ("SIGSEGV","SIGABRT","SIGBUS") OR "SIGSEGV" OR "SIGABRT" OR "SIGBUS")
@@ -262,6 +263,43 @@ index=* earliest=-7d@d (process_name="node" OR "node.exe") version=*
 | stats dc(host) as hosts values(host) as sample by version fixed
 
 </pre>
+    <pre data-q="esql">
+
+// node crash canary: more than a baseline of crashes per host per hour
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE (process.name == "node" OR process.executable LIKE "*/node" OR message LIKE "*node[*")
+    AND (message LIKE "*SIGSEGV*" OR message LIKE "*SIGABRT*" OR message LIKE "*SIGBUS*")
+| STATS count = COUNT(*) BY t = BUCKET(@timestamp, 1 hour), host.name
+| WHERE count &gt; 3
+
+// node spawning shells (exclude build/CI hosts where this is routine)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE process.parent.name IN ("node", "nodejs")
+    AND (process.name IN ("sh", "bash", "dash", "curl", "wget", "perl") OR process.name LIKE "python*")
+| WHERE NOT CIDR_MATCH(host.ip, "&lt;build/CI subnets&gt;")
+| STATS count = COUNT(*), cmds = VALUES(process.command_line) BY host.name, process.parent.name, process.name
+
+// response-side exposure: servers fetching Brotli from new destinations
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND message LIKE "*content-encoding: br*"
+| WHERE CIDR_MATCH(source.ip, "&lt;server subnets&gt;")
+| STATS first_seen = MIN(@timestamp), count = COUNT(*) BY source.ip, destination.ip
+| WHERE first_seen &gt; DATE_TRUNC(1 day, NOW() - 7 days)
+
+// version inventory (software-inventory or process events carrying a version string)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days
+| WHERE process.name IN ("node", "node.exe") AND package.version IS NOT NULL
+| EVAL fixed = CASE(STARTS_WITH(package.version, "26."), "26.12.1", STARTS_WITH(package.version, "24."), "24.22.1", STARTS_WITH(package.version, "22."), "22.23.4", "EOL line")
+| STATS hosts = COUNT_DISTINCT(host.name), sample = VALUES(host.name) BY package.version, fixed
+
+</pre>
+    </div>
 
     <h2>Timeline</h2>
     <ul class="tl">
@@ -333,5 +371,6 @@ index=* earliest=-7d@d (process_name="node" OR "node.exe") version=*
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

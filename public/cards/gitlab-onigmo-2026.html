@@ -199,8 +199,9 @@ HTTP responses with header X-GitLab-* OR title "GitLab" on internal ranges
 → cross-check each against the fixed-version table above
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Web field names; GitLab's own JSON logs carry <code>status</code> and <code>path</code>; tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Web field names for Splunk, ECS for Elastic; GitLab's own JSON logs carry <code>status</code> and <code>path</code>; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # worker-crash canary on GitLab hosts
 index=* earliest=-30d@d (process_name IN ("ruby","puma","sidekiq","gitlab-workhorse") OR "puma" OR "sidekiq") ("SIGSEGV" OR signal="SIGSEGV" OR "segfault")
@@ -220,6 +221,33 @@ index=* earliest=-7d@d ("X-Gitlab-Feature-Category" OR "X-GitLab-Meta" OR server
 | stats dc(dest) as instances values(dest) as hosts
 
 </pre>
+    <pre data-q="esql">
+
+// worker-crash canary on GitLab hosts
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE (process.name IN ("ruby", "puma", "sidekiq", "gitlab-workhorse") OR message LIKE "*puma*" OR message LIKE "*sidekiq*")
+    AND (message LIKE "*SIGSEGV*" OR message LIKE "*segfault*")
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, process.name
+
+// render-endpoint error bursts (production_json.log or the load balancer)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND http.response.status_code == 500
+| WHERE url.path LIKE "*preview_markdown*" OR url.path LIKE "*/render*" OR url.path LIKE "*/blob/*" OR url.path LIKE "*.org"
+| EVAL src = COALESCE(client.ip, source.ip)
+| STATS count = COUNT(*) BY t = BUCKET(@timestamp, 10 minute), src
+| WHERE count &gt; 10
+
+// pre-patch inventory: GitLab instances answering on internal ranges
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days
+| WHERE message LIKE "*X-Gitlab-Feature-Category*" OR message LIKE "*X-GitLab-Meta*" OR (message LIKE "*nginx*" AND message LIKE "*GitLab*")
+| STATS instances = COUNT_DISTINCT(destination.address), hosts = VALUES(destination.address)
+
+</pre>
+    </div>
 
     <h2>Timeline</h2>
     <ul class="tl">
@@ -290,5 +318,6 @@ index=* earliest=-7d@d ("X-Gitlab-Feature-Category" OR "X-GitLab-Meta" OR server
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

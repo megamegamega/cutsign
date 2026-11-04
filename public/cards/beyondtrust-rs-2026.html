@@ -184,8 +184,9 @@ no events from appliance for > N minutes, where the gap starts and ends
 inside one admin session window → review that session's account and source
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — field names follow the Splunk CIM (Web / Endpoint / Change); tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — field names follow the Splunk CIM (Web / Endpoint / Change) and ECS respectively; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # reverse proxy / WAF: unknown .php and WebSocket paths, since late August
 index=* earliest=-90d@d (uri_path="*.php" OR uri_path="/uidchanarge*" OR http_user_agent="*websocket*" OR "Upgrade: websocket")
@@ -205,6 +206,34 @@ index=* "&lt;appliance log signature&gt;" earliest=-30d@d
 → overlay each gap on /login sessions; a gap bounded by one admin session is tampering evidence
 
 </pre>
+    <pre data-q="esql">
+
+// reverse proxy / WAF: unknown .php and WebSocket paths, since late August
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 90 days
+| WHERE url.path LIKE "*.php" OR url.path LIKE "/uidchanarge*" OR user_agent.original LIKE "*websocket*" OR message LIKE "*Upgrade: websocket*"
+| WHERE NOT CIDR_MATCH(source.ip, "&lt;support-staff and managed-endpoint ranges&gt;")
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp), paths = VALUES(url.path) BY source.ip
+
+// host artifacts: SUID dropper, boot persistence, vault dump, sudoers edit
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 90 days
+| WHERE file.path == "/usr/bin/dbus-authd" OR file.path LIKE "*/post_boot.d/*" OR file.path LIKE "*zz-root-persist*"
+    OR file.path LIKE "*/bt-secrets.log" OR file.path LIKE "/etc/sudoers*" OR file.path LIKE "*/haproxy.conf"
+| STATS count = COUNT(*), paths = VALUES(file.path), actions = VALUES(event.action), first = MIN(@timestamp) BY host.name
+
+// syslog continuity canary: 5-minute gaps from the appliance
+// (ES|QL emits no row for an empty bucket: a missing 5-minute step in this series is the gap)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND message LIKE "*&lt;appliance log signature&gt;*"
+| STATS count = COUNT(*) BY t = BUCKET(@timestamp, 5 minute)
+| SORT t
+// overlay each gap on /login sessions; a gap bounded by one admin session is tampering evidence
+
+</pre>
+    </div>
 
     <h2>Timeline</h2>
     <ul class="tl">
@@ -278,5 +307,6 @@ index=* "&lt;appliance log signature&gt;" earliest=-30d@d
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

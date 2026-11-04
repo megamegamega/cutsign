@@ -184,8 +184,9 @@ dest.domain = litellm.dev OR dest.url contains raw.githubusercontent.com/letters
 → any hit since Oct 21 11:39 UTC is a confirmed infection, not a maybe
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>)</b> — CIM Endpoint / Network Resolution / Web field names; tune to your add-on:</p>
-    <pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Network Resolution / Web field names for Splunk, ECS for Elastic; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
 
 # host artifacts (EDR / Sysmon file events, FIM)
 index=* earliest=-30d@d (file_name IN ("cook.pth","cook.py","sitecustomize.py") OR file_path="/tmp/remote_code_loader.lock")
@@ -203,6 +204,31 @@ index=* earliest=-30d@d ("litellm==1.107.0" OR "litellm-1.107.0" OR "litellm:1.1
 | stats count by host source
 
 </pre>
+    <pre data-q="esql">
+
+// host artifacts (EDR / Sysmon file events, FIM)
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE file.name IN ("cook.pth", "cook.py", "sitecustomize.py") OR file.path == "/tmp/remote_code_loader.lock"
+| WHERE file.path LIKE "*site-packages*" OR file.path == "/tmp/remote_code_loader.lock"
+| STATS count = COUNT(*), paths = VALUES(file.path), first = MIN(@timestamp) BY host.name
+
+// egress: exfil domain and the GitHub dead drop
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE dns.question.name == "litellm.dev" OR dns.question.name LIKE "*.litellm.dev" OR destination.domain == "litellm.dev" OR url.full LIKE "*raw.githubusercontent.com/letters9813*"
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY source.ip, host.name
+
+// package install evidence (CI / build logs, pip caches)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days
+| WHERE message LIKE "*litellm==1.107.0*" OR message LIKE "*litellm-1.107.0*" OR message LIKE "*litellm:1.107.0*"
+| STATS count = COUNT(*) BY host.name, log.file.path
+
+</pre>
+    </div>
 
     <h2>Timeline — Oct 21–22 (UTC)</h2>
     <ul class="tl">
@@ -276,5 +302,6 @@ index=* earliest=-30d@d ("litellm==1.107.0" OR "litellm-1.107.0" OR "litellm:1.1
 })();
 </script>
 <script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
 </body>
 </html>

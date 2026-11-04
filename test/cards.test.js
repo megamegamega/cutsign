@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor } from "../lib/cards.js";
+import { ESQL_ALLOW } from '../lib/lint.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -15,6 +16,42 @@ test('every manifest card has a page, and every page is in the manifest', () => 
   const slugs = CARDS.map((c) => c.slug);
   assert.deepEqual(new Set(files), new Set(slugs.map((s) => `${s}.html`)));
   assert.equal(new Set(slugs).size, slugs.length, 'duplicate slug');
+});
+
+// Every Splunk block on a hand card has an Elastic ES|QL twin in the same switchable block
+// (public/cards/qswitch.js). The ES|QL reads FROM logs-* (the twin of index=*), uses read-only
+// commands only, and never names a Splunk index; the Splunk side keeps the index=* rule.
+test('every hand card prints its hunts in both dialects, switchable, read-only, generic', () => {
+  const unescape = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  for (const c of CARDS) {
+    const t = readFileSync(new URL(`${c.slug}.html`, dir), 'utf8');
+    assert.ok(t.includes('/cards/qswitch.js'), `${c.slug}: missing the dialect switch script`);
+    const blocks = [...t.matchAll(/<div class="qs">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
+    assert.ok(blocks.length >= 1, `${c.slug}: no switchable query block`);
+    // statements: runs of non-comment lines; a Splunk statement is one that reads index=*
+    const statements = (text, comment) => unescape(text).split('\n').filter((l) => !comment.test(l)).join('\n').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+    let splunkQueries = 0; let esqlQueries = 0;
+    for (const b of blocks) {
+      const spl = b.match(/<pre data-q="spl">([\s\S]*?)<\/pre>/); const esql = b.match(/<pre data-q="esql">([\s\S]*?)<\/pre>/);
+      assert.ok(spl && esql, `${c.slug}: a block lacks one dialect`);
+      assert.ok(!/<pre(?! data-q=)/.test(b), `${c.slug}: an unlabelled <pre> inside a switch block`);
+      assert.ok(!/\bindex\s*=/i.test(esql[1]), `${c.slug}: a Splunk index clause inside the ES|QL block`);
+      splunkQueries += statements(spl[1], /^\s*#/).filter((s) => /index=\*/.test(s)).length;
+      // each ES|QL statement starts FROM logs-* and pipes only allowed commands
+      const stmts = statements(esql[1], /^\s*\/\//);
+      assert.ok(stmts.length >= 1, `${c.slug}: empty ES|QL block`);
+      for (const s of stmts) {
+        assert.match(s, /^FROM logs-\*/, `${c.slug}: ES|QL statement must start FROM logs-*: ${s.slice(0, 60)}`);
+        const stripped = s.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+        for (const seg of stripped.split('|').slice(1)) {
+          const cmd = (seg.trim().match(/^([A-Za-z_]+)/) || [])[1]?.toUpperCase();
+          assert.ok(cmd && ESQL_ALLOW.has(cmd), `${c.slug}: ES|QL command not allowed: ${cmd || seg.trim().slice(0, 20)}`);
+        }
+        esqlQueries++;
+      }
+    }
+    assert.equal(esqlQueries, splunkQueries, `${c.slug}: ${splunkQueries} Splunk searches but ${esqlQueries} ES|QL statements`);
+  }
 });
 
 test('manifest entries are well-formed and story ids are unique UUIDs', () => {

@@ -72,7 +72,9 @@ its watch in place. HIGH events alert immediately; everything appears in the nex
 **Verdict cards** come two ways. Hand-written ones live in `public/cards/` (manifest in
 `lib/cards.js`): one per campaign, re-issued in place (the as-of date and the manifest date move
 together — a test enforces it), with a lifecycle of `active → archived → superseded`. Every card
-ends with inferred, tool-neutral detections and a runnable Splunk block over `index=*`; every bare
+ends with inferred, tool-neutral detections and a runnable hunt block in two dialects — Splunk over
+`index=*` and Elastic ES|QL over `FROM logs-*` (ECS field names) — behind a Splunk | Elastic switch
+(`public/cards/qswitch.js`; the choice is remembered for the whole site, PDFs print both); every bare
 identifier printed is labeled. The pipeline's own cards are published automatically from the draft
 loop below at `/cards/<slug>` and carry an "AI-generated, published automatically" banner. Both
 kinds carry an **automated detection-coverage check** (next section) and both are kept current
@@ -105,7 +107,10 @@ change list and runs at low effort; a first draft composes at medium. A card is 
 `CARD_REISSUES_PER_DAY` (3) times a UTC day; past that, Discord says so once and the new facts wait
 for its first sweep after midnight.
 A draft never invents hunts when its thread has proposer hunts (below): its Detect section is those,
-lint-clean and in both dialects, and the model writes only what a hit means.
+lint-clean and in both dialects, and the model writes only what a hit means. Hunts the model writes
+itself come in both dialects too (`spl` over `index=*`, `esql` over `FROM logs-*`; a concrete index
+or data-stream name is rewritten to the wildcard), and every card page shows them behind the same
+Splunk | Elastic switch as the hand-written cards.
 Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the
 score measures how a story is developing, and a reader who sees a P1 needs a link that day, not
 after the corroboration arrives — the banner says it is an early read and the card is revised as

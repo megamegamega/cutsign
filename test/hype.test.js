@@ -90,9 +90,12 @@ test('fingerprint, actionability and change description', () => {
 const dirty = (parts) => parts.join('');
 test('scrub applies the repo hygiene rules to machine text', () => {
   const spl = dirty(['index', '=prod_main source', 'type="xyz:abc" host=db1.', 'corp.example.com | stats count']);
-  const d = scrub({ title: 'x', verdict: 'v', detect: [{ name: 'h', log_source: 'EDR', spl, hit_means: 'm' }],
+  const esql = dirty(['FROM logs-prod-web, <entra_signin>, metrics-x | WHERE host.name == "db1.', 'corp.example.com" | STATS c = COUNT(*)']);
+  const d = scrub({ title: 'x', verdict: 'v', detect: [{ name: 'h', log_source: 'EDR', spl, esql, hit_means: 'm' }, { name: 'n', log_source: 'x', spl: 'index=*', esql: null, hit_means: 'm' }],
     what_happened: [dirty(['seen on fs01.', 'internal.example.net'])], scope: { affected: [dirty(['srv.', 'lan.example.org'])] } });
   assert.equal(d.detect[0].spl, 'index=* sourcetype=<xyz:abc> host=<host> | stats count');
+  assert.equal(d.detect[0].esql, 'FROM logs-*, <entra_signin> | WHERE host.name == "<host>" | STATS c = COUNT(*)', 'concrete data streams become logs-*; placeholders stay; duplicates collapse');
+  assert.equal(d.detect[1].esql, null, 'a hunt with no ES|QL twin stays without one');
   assert.equal(d.what_happened[0], 'seen on <host>');
   assert.equal(d.scope.affected[0], '<host>');
 });
@@ -102,7 +105,8 @@ const DRAFT = {
   confidence: 'high', confidence_reason: 'Vendor primary source confirms exploitation.',
   what_happened: ['Vendor confirmed exploitation. [S1]', 'CISA added the CVE to KEV. [S2]'],
   timeline: [{ date: '2026-10-15', event: 'Advisory published', source: 'S1' }],
-  detect: [{ name: 'Shell from appliance process', log_source: 'appliance syslog', spl: ['index', '=main parent=httpd child=sh | stats count'].join(''), hit_means: 'post-exploitation' }],
+  detect: [{ name: 'Shell from appliance process', log_source: 'appliance syslog', spl: ['index', '=main parent=httpd child=sh | stats count'].join(''),
+    esql: 'FROM logs-* | WHERE process.parent.name == "httpd" AND process.name == "sh" | STATS count = COUNT(*)', hit_means: 'post-exploitation' }],
   verify: ['Confirm the child process is not the vendor backup job.'],
   triage: { priority: 'P1', why: 'Exploited in the wild, internet-facing.' },
   scope: { affected: ['Appliance versions before 1.2'], only_if: ['management interface exposed'], not_affected_if: ['1.2 or later'], fixed_in: '1.2', enumerate: ['Every appliance and its version'] },
@@ -294,7 +298,7 @@ test('a draft takes its Detect section from the thread\'s proposer hunts instead
   const row = store._tables.stories.find((s) => s.id === hot.id);
   row.raw_iocs = { ...(row.raw_iocs || {}), proposed_queries: [hunt] };
   // the model writes its own (unlinted) hunt plus a hit_means for the proposer's; only the latter survives
-  const draftCalls = installFakeLLM(() => ({ ...DRAFT, detect: [{ name: 'sp_token_then_mail_access', log_source: 'x', spl: 'index=* ignored', hit_means: 'a listed app read a mailbox it never touched before' }, { name: 'invented', log_source: 'y', spl: 'index=* parent=x', hit_means: 'z' }] }));
+  const draftCalls = installFakeLLM(() => ({ ...DRAFT, detect: [{ name: 'sp_token_then_mail_access', log_source: 'x', spl: 'index=* ignored', esql: null, hit_means: 'a listed app read a mailbox it never touched before' }, { name: 'invented', log_source: 'y', spl: 'index=* parent=x', esql: 'FROM logs-* | WHERE x == 1', hit_means: 'z' }] }));
   assert.equal(calls.length, 0, 'the fixture fake was replaced before any call');
   const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: Date.parse('2026-10-16T13:00:00Z') });
   assert.equal(c.drafted, 1, JSON.stringify(c));
@@ -306,6 +310,18 @@ test('a draft takes its Detect section from the thread\'s proposer hunts instead
   assert.match(input, /<proposed_hunts>\n- sp_token_then_mail_access \[entra_signin → m365_ual\] derived:/);
   const page = draftBody(d);
   assert.match(page, /proposer hunt, derived/); assert.match(page, /LOOKUP JOIN &lt;m365_ual&gt;/); assert.match(page, /Noise: the backup job/);
+  // both dialects sit in one switchable block (public/cards/qswitch.js adds the Splunk | Elastic tabs)
+  assert.match(page, /<div class="qs"><pre data-q="spl">index=&lt;entra_signin&gt;[^<]*<\/pre><pre data-q="esql">FROM &lt;entra_signin&gt;[^<]*<\/pre><\/div>/);
+});
+
+test('a model-written hunt renders its ES|QL twin beside the Splunk search, and only the Splunk block when it has none', () => {
+  const page = draftBody({ id: 'd1', version: 1, status: 'draft', score: 9, reasons: [], created_at: '2026-10-16T13:00:00Z',
+    draft: { ...DRAFT, detect: [DRAFT.detect[0], { name: 'splunk only', log_source: 'x', spl: 'index=* a=1', esql: null, hit_means: 'y' }] } });
+  // draftBody renders what it is given (scrub runs in the pipeline), so the fixture's raw index name shows here
+  assert.match(page, /<div class="qs"><pre data-q="spl">index=\w+ parent=httpd child=sh \| stats count<\/pre><pre data-q="esql">FROM logs-\* \| WHERE process\.parent\.name == &quot;httpd&quot;[^<]*<\/pre><\/div>/);
+  assert.match(page, /<div class="qs"><pre data-q="spl">index=\* a=1<\/pre><\/div>/);
+  assert.ok(DraftSchema.safeParse(DRAFT).success, 'the fixture draft is a valid answer');
+  assert.ok(!DraftSchema.safeParse({ ...DRAFT, detect: [{ name: 'h', log_source: 'x', spl: 'index=*', hit_means: 'm' }] }).success, 'esql is required (nullable), so the model always answers it');
 });
 
 test('cardDevelopments: nothing before the card date, KEV and HIGH events after it', () => {
