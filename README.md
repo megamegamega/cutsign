@@ -215,6 +215,17 @@ within three days), each with an unsubscribe link and `List-Unsubscribe` headers
 included. Addresses are never rendered, logged or sent anywhere but the mail sender; the sign-up
 page never echoes one; a honeypot field and a site-wide cap of thirty requests an hour keep bots
 out. Revisions of a published card are not mailed.
+
+**Card PDFs** (`lib/pdf.js`, `lib/pdfrender.js`, `api/pdf.js`). `/cards/<slug>.pdf` is the card printed by headless
+Chromium (`@sparticuz/chromium` with `puppeteer-core`, both pinned) from its own print stylesheet:
+the pages a reader gets from Print → Save as PDF, Letter, dark. The page may load only this site
+and the two Google Fonts hosts while it prints. Hand-written cards print from their `.html`; an AI
+card prints only when its page answers, so an unknown slug never starts the browser. The edge caches
+the file (ten minutes, then served stale while it re-renders); any other query on the URL is
+redirected to the plain one, so each card has one cache key. A card mail fetches that URL once per
+card and attaches the file to every subscriber's message; a PDF that cannot be had (the render
+failed, the answer is not a PDF, or it is over 8 MB) leaves the mail link-only. Only `api/pdf.js`
+imports the renderer, so no other function bundles Chromium.
 `/api/health` reports `shodan` from the key's account record (plan and query credits left, never
 the key). Nothing but the generic filter ever leaves the host: the scope half stays placeholders.
 
@@ -283,6 +294,7 @@ npm test                                   # offline: memory store, fake network
 node scripts/run-local.js --eml fixtures/briefs/2026-10-20-pipeline.eml   # real sources + real API → out/latest.html
 npm run update-attack                      # refresh the ATT&CK mirror when MITRE ships a release
 npm run update-worldmap                    # re-project the Actors map (pinned world-atlas@2.0.2); rarely needed
+CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" node -e "import('./lib/pdfrender.js').then(async (m) => process.stdout.write(await m.renderPdf('https://cutsign.vercel.app/cards/<slug>')))" > card.pdf   # a card PDF with desktop Chrome
 ```
 
 `.env.example` lists every variable (names only). `LLM_MODE=replay` loads recorded model responses

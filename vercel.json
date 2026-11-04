@@ -4,6 +4,7 @@
     { "source": "/", "destination": "/api/page" },
     { "source": "/cards", "destination": "/api/page?view=cards" },
     { "source": "/actors", "destination": "/api/page?view=actors" },
+    { "source": "/cards/:slug([a-z0-9-]+).pdf", "destination": "/api/pdf?slug=:slug" },
     { "source": "/cards/:slug([a-z0-9-]+)", "destination": "/api/page?view=card&slug=:slug" }
   ],
   "functions": {
@@ -18,6 +19,10 @@
     },
     "api/watch.js": {
       "maxDuration": 300
+    },
+    "api/pdf.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
     }
   },
   "crons": [
