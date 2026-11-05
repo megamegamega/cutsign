@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Agentic intrusion hunt pack — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+h3{font:800 14px/1.3 var(--disp);margin:16px 0 6px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 100px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.flip{background:var(--lane-bg);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0}
+.flip h3{margin-top:0}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since,.flip{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2,h3{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt + deceive</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Framework-agnostic</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Agentic intrusion</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE</span>
+    <span class="asof">as of 2026-11-05</span>
+  </div>
+  <div class="inner">
+    <h1>Agentic intrusion hunt pack — detect the loop, not the framework</h1>
+    <p class="sub">ARTEX, PentAGI, Cairn, CyberStrikeAI and Hexstrike are open-source wrappers around the same thing: a language model driving commodity offensive tools in a plan–act–observe loop. GTIG/Mandiant (Nov 2) report PRC-nexus UNC7228 and financially motivated groups running them in real intrusions since late August; CrowdStrike (Oct 22, Oct 30) names four actors including VAPOR PANDA; Microsoft ties ARTEX to Storm-0940 and to North Korean operators; CERT-In's "Crafty Falcon" runs all four against banking and crypto targets; WorkOS and Chainalysis disclosed breaches by the same tooling. Anyone can clone the repositories and rename everything, so this pack keys on what no fork can remove.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-11-02&view=analyst#s-ad4e6c6e">brief story 11-02</a>
+      <a href="/?d=2026-11-02&view=ciso#s-ad4e6c6e">CISO card</a>
+      <a href="/?view=iocs#s-ad4e6c6e">IoC card</a>
+      <a href="/?q=agentic">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: stop building detections per framework. Name-based indicators (<code>artex-probe-*</code>, <code>ArtexProbe</code>, <code>artex-enrich/1.0</code>) are a cheap first layer that a fork erases in an afternoon.</b> The durable signal is the agent loop itself: machine-speed bursts separated by model "think" pauses, permission probing before action, retry-with-variation on errors, a compressed kill chain from first contact to privilege, the same open-source tool chain under every wrapper, and a dependence on supplied valid credentials rather than novel exploits. Hunt those six properties with the twelve searches below, and flip the script with deception: agents act on every credential they find within seconds, so canary credentials are a near-zero-false-positive tripwire. Thresholds here are starting points set from the published cadence (27 control-plane calls in 23 seconds); the Bluesign lab run that clones the four frameworks will reset them from recordings.</p>
+
+    <h2>30-second read</h2>
+    <p>Six loop properties, each with a hunt below. <b>A1 Tempo</b>: bursts of 2–25 seconds, then a pause, then another burst — a bimodal timing distribution from one principal that neither a person nor a constant-rate scanner produces. <b>A2 Permission probing</b>: DryRun calls, deployment validation, write-read-delete of a test object, identity lookups across every service — the agent asks "what can I do" before doing it. <b>A3 Retry with variation</b>: the same request repeated with one parameter changed, many times in a minute. <b>A4 Kill-chain compression</b>: first sight of a source to a privileged action in minutes, with no dwell. <b>A5 Commodity tool chain</b>: nmap, nuclei, ffuf, sqlmap, impacket and curl-to-callback under every framework. <b>A6 Supplied credentials</b>: success from never-seen infrastructure with a scripted client, immediately followed by activity. <b>A7</b> is the tripwire: any use of a canary credential is an incident.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Long-lived credentials exist to be found: static IAM keys, Kudu/SCM publishing credentials, SAS tokens, service-principal secrets in code or config</li>
+          <li class="bad">Internet-facing management or application SQL interfaces accept password authentication</li>
+          <li class="bad">No per-principal velocity controls on cloud control planes or identity providers</li>
+          <li class="bad">Detections keyed to framework names or published IP lists only</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Phishing-resistant MFA, short-lived tokens, no static keys — the frameworks are breadth machines that mostly stall without a valid credential (GTIG: ARTEX ran on supplied credentials, not zero-days)</li>
+          <li class="ok">Control-plane and identity velocity alerts are live (A1, A2, A4 scheduled)</li>
+          <li class="ok">Canary credentials seeded where an agent would look (A7)</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Detection coverage — as of Nov 5</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Primary research</td><td><a href="https://cloud.google.com/blog/topics/threat-intelligence/artex-and-friends-enter-agentic-offensive-frameworks/">GTIG / Mandiant</a></td><td><span class="ok">Behavioral guidance published</span> — five generic detection notes (control-plane velocity, egress to unseen webhook/OAST services, DMZ-origin LDAP/Kerberos/SMB, bursts of resets and account creation, AD CS enrollment) rendering live below; they are the seed for A1–A5</td></tr>
+      <tr><td>Vendor reporting</td><td><a href="https://www.crowdstrike.com/en-us/blog/vapor-panda-uses-artex-to-scale-global-campaign/">CrowdStrike</a> · <a href="https://www.microsoft.com/en-us/security/blog/2026/10/29/tracking-ai-adoption-in-north-korean-threat-actor-tradecraft/">Microsoft</a></td><td><span class="ok">Actor context</span> — four actors using agentic frameworks (Oct 22), VAPOR PANDA at 200+ orgs (Oct 30), Storm-0940 and DPRK operators with ARTEX; name-based artifacts only, no loop-level detections</td></tr>
+      <tr><td>Framework-specific IoCs</td><td>Cutsign ARTEX brief (Nov 5)</td><td><span class="ok">Short-lived layer</span> — self-naming files, accounts, roles, comments and user agents; keep as cheap early warning, expect them to age out as forks appear</td></tr>
+      <tr><td>Ecosystem</td><td><a href="https://thehackernews.com/2026/11/backdoored-docker-image-for-artex-ai.html">The Hacker News</a></td><td><span class="bad">Supply-chain hazard</span> — a backdoored ARTEX Docker image gave an unauthenticated root shell on 62 exposed consoles; anyone cloning these tools for a lab must build from pinned source, never pull an image</td></tr>
+      <tr><td>Vendor SIEM content</td><td>Splunk ES / Elastic prebuilt rules</td><td><span class="bad">Not surveyed</span> — no loop-level prebuilt content was checked for this card; the pack below is the coverage until the lab run validates it</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Schedule A1, A2 and A4 against cloud control-plane and identity logs — these three catch the loop regardless of framework</li>
+          <li>Seed canary credentials this week (checklist below) and wire A7 as an incident-severity alert</li>
+          <li>Run A5 and A6 over the last 30 days as a one-time hunt; keep the ARTEX name-based layer running beside them</li>
+          <li>Inventory long-lived credentials the frameworks feed on: static IAM keys, Kudu publishing credentials, SAS tokens, SP secrets — rotate to short-lived where possible</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any A7 hit → incident lane immediately; a canary has no benign caller</li>
+          <li>A1 or A2 from a principal that then performs a privileged action (A4 ≤ 15 min) → contain the principal, not just the source</li>
+          <li>A5 tool chain spawned by a server process → treat as hands-on-keyboard equivalent; see the ARTEX brief's MySQL log-poisoning webshell hunt</li>
+          <li>A6 success followed by A1 tempo within the hour → revoke sessions, rotate, review what the credential could reach</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Flip the script</h2>
+    <div class="flip">
+      <h3>Deception — start this week, no lab required</h3>
+      <p>An agent explores breadth-first and tries every credential it finds, usually within seconds. A human attacker sits on one. That asymmetry makes canaries the highest-leverage, lowest-noise control against this tooling. Seed them where the loop looks:</p>
+      <ul>
+        <li><b>Cloud key</b> — one IAM user with no permissions, its access key placed in an environment variable and a config file on an internet-facing host. Alert on any call with that key id (A7); CloudTrail logs the attempt even when it is denied.</li>
+        <li><b>App Service / Kudu credential</b> — a publishing profile for an empty app, left in a deployment script.</li>
+        <li><b>Directory account</b> — a disabled-looking service account with a description that suggests privilege and a password in a share. Alert on 4624/4625/4768/4769/4771 for it; a Kerberoast of that SPN is itself the hit.</li>
+        <li><b>Document token</b> — a canary file named like a credential backup in the home directory of a server process; the agent reads it and the token calls home.</li>
+        <li><b>Storage</b> — a bucket or container named like backups with a canary object; A2's write-read-delete probe lands on it first.</li>
+      </ul>
+      <p class="src">Rules: never a real credential, never a name that could collide with production, each canary documented in the deception register with its owner and expiry, and every hit routed to incident severity — there is no "tune before trusting" for A7.</p>
+    </div>
+    <div class="flip">
+      <h3>Lab baselines — Bluesign run M7</h3>
+      <p>The four frameworks are open source, which cuts both ways: the defender can record exactly what the loop looks like before it arrives. The scoped run clones them from pinned source into a disposable range the operator owns (a web app with MySQL, a scoped cloud account, a small directory), runs them by hand against it, and captures the control-plane, web-access, process and authentication telemetry. Bluesign reads only the resulting telemetry drop and derives the numbers this card currently estimates: burst length and gap distribution, distinct actions per window, retry variants per minute, time-to-privilege, tool list, object-naming habits. Noise recordings from the same range — a Terraform apply, a CI deploy, a backup job — are what keep A1 and A2 honest, since those are the legitimate bursty callers. The six templates then validate fire-on-signal, silent-on-noise, and this card is re-issued with measured thresholds. Detonation stays a human act in a range the human owns; nothing in Cutsign or Bluesign initiates it.</p>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">GTIG's published guidance (live above) is the seed; these are the generic-SIEM hunts over the six loop properties plus the canary tripwire. Thresholds are starting points, tune on your baseline until the lab run resets them:</p>
+    <pre>
+
+A1 tempo        ≥15 calls across ≥8 actions in 30 s, ≥3 such bursts, duty cycle &lt;60% (bursts with gaps)
+A2 probing      denied / dry-run calls across ≥5 services in 5 min; write→read→delete of one object in 2 min
+A3 retry        ≥8 errors on one path in 60 s with ≥6 distinct query strings
+A4 compression  first sight of a source → first privileged action ≤15 min
+A5 tool chain   commodity offensive tools spawned on servers; scanner UAs at the edge; egress to OAST/callback services
+A6 credentials  success from a user/ASN pair unseen in 30 days with a scripted or empty user agent
+A7 tripwire     any use of a canary key or honey account
+
+</pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — Splunk over CIM-shaped fields with <code>&lt;placeholder&gt;</code> sourcetypes; Elastic over the AWS CloudTrail, Azure Logs, web-server, Endpoint and Windows integrations (<code>aws.cloudtrail.*</code>, <code>azure.signinlogs.*</code>, <code>url.*</code>, <code>process.*</code>, <code>event.code</code>). Tune field names to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# A1 tempo — control plane: bursts of ≥15 calls across ≥8 distinct actions in 30 s, repeated, with gaps between them
+index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d
+| rename userIdentity.arn as principal, sourceIPAddress as src, eventName as action
+| bin _time span=30s
+| stats count as n dc(action) as actions by principal src _time
+| where n&gt;=15 AND actions&gt;=8
+| stats count as bursts max(n) as peak min(_time) as first max(_time) as last by principal src
+| where bursts&gt;=3
+| eval duty=round((bursts*30)/(last-first+30), 2)
+| where duty&lt;0.6
+| table first last principal src bursts peak duty
+
+# A1 tempo — web: one source fans out across ≥40 paths in 30 s, more than once
+index=* sourcetype=&lt;web_access&gt; earliest=-7d
+| bin _time span=30s
+| stats count as n dc(uri_path) as paths by src _time
+| where n&gt;=60 AND paths&gt;=40
+| stats count as bursts max(paths) as peak_paths min(_time) as first max(_time) as last by src
+| where bursts&gt;=2
+| table first last src bursts peak_paths
+
+# A2 permission probing — denied or dry-run calls fanning out across ≥5 services in 5 min
+index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d (errorCode IN ("AccessDenied","UnauthorizedOperation","Client.UnauthorizedOperation","Client.DryRunOperation","AuthorizationError") OR eventName IN ("GetCallerIdentity","SimulatePrincipalPolicy","ListAttachedUserPolicies","GetAccountAuthorizationDetails"))
+| rename userIdentity.arn as principal, sourceIPAddress as src
+| bin _time span=5m
+| stats count as n dc(eventSource) as services dc(eventName) as actions values(errorCode) as errors by principal src _time
+| where services&gt;=5 AND n&gt;=20
+| table _time principal src n services actions errors
+
+# A2 permission probing — storage write→read→delete of one object inside 2 minutes (the "can I write here?" test)
+index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d eventName IN ("PutObject","GetObject","DeleteObject")
+| rename userIdentity.arn as principal, requestParameters.key as object
+| transaction principal object maxspan=2m
+| where eventcount&gt;=3 AND searchmatch("PutObject") AND searchmatch("DeleteObject")
+| table _time principal object duration eventcount
+
+# A3 retry with variation — same source, same path, ≥8 errors in 60 s with ≥6 distinct query strings
+index=* sourcetype=&lt;web_access&gt; earliest=-7d status&gt;=400
+| bin _time span=60s
+| stats count as n dc(uri_query) as variants dc(http_method) as methods values(status) as codes by src uri_path _time
+| where n&gt;=8 AND variants&gt;=6
+| table _time src uri_path n variants methods codes
+
+# A4 kill-chain compression — a source first seen ≤15 min before its first privileged action (7-day baseline)
+index=* earliest=-7d (sourcetype=&lt;cloud_audit&gt; OR sourcetype=&lt;windows_eventlog&gt;)
+| eval src=coalesce(sourceIPAddress, src_ip, Source_Network_Address)
+| eval priv=if(eventName IN ("CreateUser","CreateAccessKey","AttachUserPolicy","PutUserPolicy","AddUserToGroup","CreateLoginProfile","UpdateAssumeRolePolicy") OR EventCode IN (4720,4724,4728,4732,4756,4662,4794), _time, null())
+| stats min(_time) as first_seen min(priv) as first_priv count as events by src
+| where isnotnull(first_priv)
+| eval ttp_min=round((first_priv-first_seen)/60, 1)
+| where ttp_min&lt;=15
+| table first_seen first_priv ttp_min src events
+
+# A5 tool chain — the open-source tools every framework wraps, spawned on a server
+index=* sourcetype=&lt;endpoint_process&gt; earliest=-7d
+| rename process_name as proc, process as cmd, parent_process_name as parent, dest as host
+| where match(proc, "(?i)^(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo)") OR match(cmd, "(?i)(secretsdump|GetUserSPNs|GetNPUsers|psexec\.py|wmiexec|smbexec|ntlmrelayx|mimikatz|rubeus|sharphound)")
+| stats count values(proc) as tools values(parent) as parents min(_time) as first by host user
+| table first host user count tools parents
+
+# A5 tool chain — scanner and script user agents at the edge, fanning out
+index=* sourcetype=&lt;web_access&gt; earliest=-7d
+| regex http_user_agent="(?i)(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/)"
+| stats count dc(uri_path) as paths values(http_user_agent) as uas by src
+| where count&gt;=50 AND paths&gt;=20
+
+# A5 tool chain — server egress to out-of-band callback services (the agent's cheapest exfil and liveness check)
+index=* (sourcetype=&lt;dns&gt; OR sourcetype=&lt;proxy&gt;) earliest=-7d
+| eval dest=coalesce(query, dest_host, url_domain)
+| regex dest="(?i)(webhook\.site|oast\.(fun|live|me|online|pro|site)|oastify\.com|interact\.sh|burpcollaborator\.net|requestbin|pipedream\.net|ngrok\.io|ngrok-free\.app|trycloudflare\.com|dnslog\.cn)"
+| stats count min(_time) as first values(dest) as dests by src
+
+# A6 supplied credentials — a success from a user/ASN pair unseen in 30 days, with a scripted or empty client
+index=* sourcetype=&lt;entra_signin&gt; earliest=-30d category=SignInLogs properties.status.errorCode=0
+| rename properties.userPrincipalName as user, properties.autonomousSystemNumber as asn, properties.userAgent as ua
+| eval ua=coalesce(ua, ""), scripted=if(match(ua, "(?i)^(python|axios|node|go-http|curl|okhttp|aiohttp|java/|libwww)") OR ua="", 1, 0)
+| stats min(_time) as first_seen max(_time) as last_seen count as n max(scripted) as scripted values(ua) as uas by user asn
+| where first_seen&gt;=relative_time(now(), "-1d@d") AND scripted=1
+| table first_seen last_seen user asn n uas
+
+# A7 tripwire — any use of a canary cloud key is an incident; there is no benign case
+index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d userIdentity.accessKeyId IN (&lt;canary_key_ids&gt;)
+| rename userIdentity.accessKeyId as key, sourceIPAddress as src
+| stats min(_time) as first count values(eventName) as actions values(src) as srcs by key
+
+# A7 tripwire — any authentication touching a honey account, including a Kerberoast of its SPN
+index=* sourcetype=&lt;windows_eventlog&gt; earliest=-7d EventCode IN (4624,4625,4768,4769,4771,4776) user IN (&lt;honey_accounts&gt;)
+| stats min(_time) as first count values(EventCode) as codes values(src) as srcs values(dest) as targets by user
+
+</pre>
+    <pre data-q="esql">
+
+// A1 tempo — control plane: bursts of ≥15 calls across ≥8 distinct actions in 30 s, repeated, with gaps between them
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "aws.cloudtrail"
+| EVAL w = DATE_TRUNC(30 seconds, @timestamp)
+| STATS n = COUNT(*), actions = COUNT_DISTINCT(event.action) BY user.name, source.ip, w
+| WHERE n &gt;= 15 AND actions &gt;= 8
+| STATS bursts = COUNT(*), peak = MAX(n), first = MIN(w), last = MAX(w) BY user.name, source.ip
+| WHERE bursts &gt;= 3
+| EVAL duty = ROUND(TO_DOUBLE(bursts * 30) / TO_DOUBLE(DATE_DIFF("seconds", first, last) + 30), 2)
+| WHERE duty &lt; 0.6
+| KEEP first, last, user.name, source.ip, bursts, peak, duty
+
+// A1 tempo — web: one source fans out across ≥40 paths in 30 s, more than once
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("nginx.access", "apache.access", "iis.access")
+| EVAL w = DATE_TRUNC(30 seconds, @timestamp)
+| STATS n = COUNT(*), paths = COUNT_DISTINCT(url.path) BY source.ip, w
+| WHERE n &gt;= 60 AND paths &gt;= 40
+| STATS bursts = COUNT(*), peak_paths = MAX(paths), first = MIN(w), last = MAX(w) BY source.ip
+| WHERE bursts &gt;= 2
+| KEEP first, last, source.ip, bursts, peak_paths
+
+// A2 permission probing — denied or dry-run calls fanning out across ≥5 services in 5 min
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "aws.cloudtrail"
+    AND (aws.cloudtrail.error_code IN ("AccessDenied", "UnauthorizedOperation", "Client.UnauthorizedOperation", "Client.DryRunOperation", "AuthorizationError")
+         OR event.action IN ("GetCallerIdentity", "SimulatePrincipalPolicy", "ListAttachedUserPolicies", "GetAccountAuthorizationDetails"))
+| EVAL w = DATE_TRUNC(5 minutes, @timestamp)
+| STATS n = COUNT(*), services = COUNT_DISTINCT(event.provider), actions = COUNT_DISTINCT(event.action), errors = VALUES(aws.cloudtrail.error_code) BY user.name, source.ip, w
+| WHERE services &gt;= 5 AND n &gt;= 20
+| KEEP w, user.name, source.ip, n, services, actions, errors
+
+// A2 permission probing — storage write→read→delete of one object inside 2 minutes (fixed 2-minute buckets stand in for Splunk's transaction window)
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "aws.cloudtrail" AND event.action IN ("PutObject", "GetObject", "DeleteObject")
+| EVAL w = DATE_TRUNC(2 minutes, @timestamp)
+| STATS ops = COUNT_DISTINCT(event.action), first = MIN(@timestamp), last = MAX(@timestamp) BY user.name, aws.cloudtrail.request_parameters, w
+| WHERE ops == 3
+| KEEP first, last, user.name, aws.cloudtrail.request_parameters
+
+// A3 retry with variation — same source, same path, ≥8 errors in 60 s with ≥6 distinct query strings
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("nginx.access", "apache.access", "iis.access") AND http.response.status_code &gt;= 400
+| EVAL w = DATE_TRUNC(60 seconds, @timestamp)
+| STATS n = COUNT(*), variants = COUNT_DISTINCT(url.query), methods = COUNT_DISTINCT(http.request.method), codes = VALUES(http.response.status_code) BY source.ip, url.path, w
+| WHERE n &gt;= 8 AND variants &gt;= 6
+| KEEP w, source.ip, url.path, n, variants, methods, codes
+
+// A4 kill-chain compression — a source first seen ≤15 min before its first privileged action (7-day baseline)
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("aws.cloudtrail", "system.security")
+| EVAL priv = CASE(event.action IN ("CreateUser", "CreateAccessKey", "AttachUserPolicy", "PutUserPolicy", "AddUserToGroup", "CreateLoginProfile", "UpdateAssumeRolePolicy")
+    OR event.code IN ("4720", "4724", "4728", "4732", "4756", "4662", "4794"), @timestamp)
+| STATS first_seen = MIN(@timestamp), first_priv = MIN(priv), events = COUNT(*) BY source.ip
+| WHERE first_priv IS NOT NULL
+| EVAL ttp_min = DATE_DIFF("minutes", first_seen, first_priv)
+| WHERE ttp_min &lt;= 15
+| KEEP first_seen, first_priv, ttp_min, source.ip, events
+
+// A5 tool chain — the open-source tools every framework wraps, spawned on a server
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.category == "process" AND event.type == "start"
+| EVAL proc = TO_LOWER(process.name), cmd = TO_LOWER(process.command_line)
+| WHERE proc RLIKE "(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo).*"
+    OR cmd RLIKE ".*(secretsdump|getuserspns|getnpusers|psexec\\.py|wmiexec|smbexec|ntlmrelayx|mimikatz|rubeus|sharphound).*"
+| STATS count = COUNT(*), tools = VALUES(process.name), parents = VALUES(process.parent.name), first = MIN(@timestamp) BY host.name, user.name
+| KEEP first, host.name, user.name, count, tools, parents
+
+// A5 tool chain — scanner and script user agents at the edge, fanning out
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("nginx.access", "apache.access", "iis.access")
+| EVAL ua = TO_LOWER(user_agent.original)
+| WHERE ua RLIKE ".*(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/).*"
+| STATS count = COUNT(*), paths = COUNT_DISTINCT(url.path), uas = VALUES(user_agent.original) BY source.ip
+| WHERE count &gt;= 50 AND paths &gt;= 20
+
+// A5 tool chain — server egress to out-of-band callback services (the agent's cheapest exfil and liveness check)
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND (event.category == "network" OR event.dataset RLIKE ".*(dns|proxy).*")
+| EVAL dest = TO_LOWER(COALESCE(dns.question.name, url.domain, destination.domain))
+| WHERE dest RLIKE ".*(webhook\\.site|oast\\.(fun|live|me|online|pro|site)|oastify\\.com|interact\\.sh|burpcollaborator\\.net|requestbin|pipedream\\.net|ngrok\\.io|ngrok-free\\.app|trycloudflare\\.com|dnslog\\.cn).*"
+| STATS count = COUNT(*), first = MIN(@timestamp), dests = VALUES(dest) BY source.ip
+
+// A6 supplied credentials — a success from a user/ASN pair unseen in 30 days, with a scripted or empty client
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND event.dataset == "azure.signinlogs" AND azure.signinlogs.properties.status.error_code == 0
+| EVAL ua = TO_LOWER(COALESCE(user_agent.original, "")), scripted = CASE(ua RLIKE "(python|axios|node|go-http|curl|okhttp|aiohttp|java/|libwww).*" OR ua == "", 1, 0)
+| STATS first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), n = COUNT(*), scripted = MAX(scripted), uas = VALUES(user_agent.original) BY user.name, source.as.number
+| WHERE first_seen &gt;= NOW() - 1 day AND scripted == 1
+| KEEP first_seen, last_seen, user.name, source.as.number, n, uas
+
+// A7 tripwire — any use of a canary cloud key is an incident; there is no benign case
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "aws.cloudtrail" AND aws.cloudtrail.user_identity.access_key_id IN (&lt;canary_key_ids&gt;)
+| STATS first = MIN(@timestamp), count = COUNT(*), actions = VALUES(event.action), srcs = VALUES(source.ip) BY aws.cloudtrail.user_identity.access_key_id
+
+// A7 tripwire — any authentication touching a honey account, including a Kerberoast of its SPN
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "system.security" AND event.code IN ("4624", "4625", "4768", "4769", "4771", "4776") AND user.name IN (&lt;honey_accounts&gt;)
+| STATS first = MIN(@timestamp), count = COUNT(*), codes = VALUES(event.code), srcs = VALUES(source.ip), targets = VALUES(host.name) BY user.name
+
+</pre>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">Late Aug 2026</span><span>Earliest intrusions GTIG/Mandiant attribute to operators of open-source agentic frameworks</span></li>
+      <li><span class="d">Oct 21</span><span>Autonomous agents using the open-source Cairn tool breach 100+ company websites (brief)</span></li>
+      <li><span class="d">Oct 22</span><span>CrowdStrike reports four threat actors using agentic frameworks; Microsoft ties Storm-0940's ConnectWise Cloud Backup compromise to ARTEX</span></li>
+      <li><span class="d">Oct 27</span><span>South Korean police name seven suspects in ARTEX-assisted breaches of 90+ organizations</span></li>
+      <li><span class="d">Oct 30</span><span>CrowdStrike: VAPOR PANDA runs ARTEX against 200+ orgs, BLOODALCHEMY at nine; Microsoft documents DPRK operators adopting ARTEX</span></li>
+      <li><span class="d">Nov 2</span><span>GTIG/Mandiant publish the cross-framework analysis (ARTEX, PentAGI, CAIRN, Hexstrike) with behavioral detection guidance; Chainalysis discloses a breach by "offensive agentic techniques"</span></li>
+      <li><span class="d">Nov 3–4</span><span>WorkOS discloses an ARTEX-driven breach of an internal sales app; user agents <code>artex-enrich/1.0</code> and <code>norma/0.4</code> published</span></li>
+      <li><span class="d">Nov 5</span><span>Backdoored ARTEX Docker image found on 62 exposed consoles; CERT-In attributes attacks on banking and crypto targets to "Crafty Falcon" using ARTEX, PentAGI, Cairn and CyberStrikeAI. This card issued</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://cloud.google.com/blog/topics/threat-intelligence/artex-and-friends-enter-agentic-offensive-frameworks/">GTIG / Mandiant — agentic offensive frameworks (primary)</a> ·
+      <a href="https://www.crowdstrike.com/en-us/blog/vapor-panda-uses-artex-to-scale-global-campaign/">CrowdStrike — VAPOR PANDA</a> ·
+      <a href="https://www.microsoft.com/en-us/security/blog/2026/10/29/tracking-ai-adoption-in-north-korean-threat-actor-tradecraft/">Microsoft — AI adoption in DPRK tradecraft</a> ·
+      <a href="https://www.bleepingcomputer.com/news/security/workos-says-attacker-used-artex-ai-to-breach-internal-sales-app/">BleepingComputer — WorkOS</a> ·
+      <a href="https://www.bleepingcomputer.com/news/security/chainalysis-discloses-data-breach-from-offensive-agentic-techniques/">BleepingComputer — Chainalysis</a> ·
+      <a href="https://thehackernews.com/2026/11/backdoored-docker-image-for-artex-ai.html">The Hacker News — backdoored ARTEX image, CERT-In</a> ·
+      <a href="/?q=Cairn">Cutsign — Cairn (Oct 21)</a> ·
+      <a href="/?q=agentic">Cutsign — agentic frameworks (all stories)</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 11-02 (deep read) + Oct 21 / Oct 22 / Nov 2 / Nov 4 threads</span>
+  </div>
+</div>
+
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-11-05', QUERY = 'agentic';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance — live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching “' + esc(QUERY) + '”. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' · ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' · <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+<script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
+</body>
+</html>
