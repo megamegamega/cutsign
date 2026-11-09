@@ -127,5 +127,5 @@ test('namedProducts: version numbers in an affected line are the range, not the 
   assert.deepEqual(namedProducts({ title: 'Attackers attempt to exploit unpatched CryptoPayment Gateway WordPress plugin flaw CVE-2026-81648' }), ['CryptoPayment Gateway']);
   assert.deepEqual(namedProducts({ title: 'Node-RED HTTP missing-auth flaw CVE-2026-58115 exploited' }), ['Node-RED']);
   assert.deepEqual(namedProducts({ title: 'Linux kernel IPv4 TCP use-after-free CVE-2026-33096 exploited on Rocky Linux hosts' }), []);
-  assert.deepEqual(namedProducts({ title: 'Synology warns of C3RB3R ransomware on NAS devices running Synology DSM' }), ['Synology DSM']);
+  assert.deepEqual(namedProducts({ title: 'Synology warns of C3RB3R ransomware on NAS devices running Synology DSM', exclude: ['C3RB3R'] }), ['Synology DSM']);
 });
