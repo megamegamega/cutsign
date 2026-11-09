@@ -102,6 +102,12 @@ test('discoveryText / relevant: distinctive words only; a facet value must share
   assert.equal(relevant('Pro-Support CloudDrive', rs), false);
   assert.equal(relevant('BeyondTrust Remote Support', rs), true);
   assert.equal(relevant('Remote Support Portal', rs), true, 'the whole name, with a generic tail');
+  // live junk from the Node.js card: a household vendor's name in an unrelated banner, and a shop title sharing "b2b"
+  assert.equal(relevant('Google Tag Manager', { vendor: 'google', product: 'brotli' }), false);
+  assert.equal(relevant('B2B Smoking - Ihr Onlineshop für besonderen Raucherbedarf', { vendor: 'adobe', product: 'commerce_b2b' }), false);
+  assert.equal(relevant('Adobe Commerce', { vendor: 'adobe', product: 'commerce' }), true);
+  assert.equal(relevant('Magento Admin', { vendor: 'adobe', product: 'magento' }), true);
+  assert.equal(relevant('Brotli', { vendor: 'google', product: 'brotli' }), true);
 });
 
 test('validateExposure: every Shodan query counted, a product Shodan spells differently gets its own spelling, totals become a trend point', async () => {
