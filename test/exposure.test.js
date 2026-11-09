@@ -53,9 +53,13 @@ test('exposureQueries: a CVE query per CVE, three product queries per CPE, a sco
     { vulnerable: true, criteria: 'cpe:2.3:a:v5:embedder_five:*:*:*:*:*:*:*:*' },
   ]));
   const ranked = exposureQueries({ cves: [CVE], cpes: many, terms: ['Widget-Server', 'Nothing'] });
-  assert.deepEqual(ranked.products, ['widgetry:widget_server', 'lib:brotlish', 'v3:embedder_three', 'v4:embedder_four']);
-  assert.match(ranked.note, /1 more affected product \(/);
+  assert.deepEqual(ranked.products, ['widgetry:widget_server'], 'the named product alone; embedders are not padded in beside it');
+  assert.match(ranked.note, /4 more affected products \(/);
   assert.ok(!JSON.stringify(ranked).includes('debian'), 'operating systems are the platform, not the service');
+  // nothing named: NVD's order, the library first, four at most, distributions never
+  const unnamed = exposureQueries({ cves: [CVE], cpes: many.concat(nvdCpes(nvd([{ vulnerable: true, criteria: 'cpe:2.3:a:redhat:enterprise_linux_server_update_services_for_sap_solutions:*:*:*:*:*:*:*:*' }]))), terms: ['Nothing'] });
+  assert.deepEqual(unnamed.products, ['lib:brotlish', 'widgetry:widget_server', 'v3:embedder_three', 'v4:embedder_four']);
+  assert.ok(!JSON.stringify(unnamed).includes('redhat'), 'a distribution re-shipping the library is not an internet service');
 
   const noCpe = exposureQueries({ cves: [CVE], cpes: [] });
   assert.equal(noCpe.items.length, 1); assert.match(noCpe.note, /NVD has not published CPE/);
@@ -119,4 +123,9 @@ test('countHtml: the number is a badge, a hit in accent and a zero muted, the tr
 test('namedProducts: version numbers in an affected line are the range, not the name', () => {
   assert.deepEqual(namedProducts({ title: 'Drupal Commerce Core access bypass CVE-2026-118539', affected: ['Drupal Commerce Core 0.0.0 through 2.39', 'Drupal Commerce Core 3.0.0 before 3.0.5'] }), ['Drupal Commerce Core']);
   assert.deepEqual(namedProducts({ title: 'GitLab 19.5.1 critical release' }), ['GitLab']);
+  // platform words at the tail of a phrase, and phrases that are only an operating system, are not products
+  assert.deepEqual(namedProducts({ title: 'Attackers attempt to exploit unpatched CryptoPayment Gateway WordPress plugin flaw CVE-2026-81648' }), ['CryptoPayment Gateway']);
+  assert.deepEqual(namedProducts({ title: 'Node-RED HTTP missing-auth flaw CVE-2026-58115 exploited' }), ['Node-RED']);
+  assert.deepEqual(namedProducts({ title: 'Linux kernel IPv4 TCP use-after-free CVE-2026-33096 exploited on Rocky Linux hosts' }), []);
+  assert.deepEqual(namedProducts({ title: 'Synology warns of C3RB3R ransomware on NAS devices running Synology DSM' }), ['Synology DSM']);
 });
