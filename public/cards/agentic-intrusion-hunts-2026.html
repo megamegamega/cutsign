@@ -97,24 +97,26 @@ a{color:var(--ink)}
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Framework-agnostic</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Agentic intrusion</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE</span>
-    <span class="asof">as of 2026-11-05</span>
+    <span class="asof">as of 2026-11-09 · re-issued (first issued 2026-11-05)</span>
   </div>
   <div class="inner">
     <h1>Agentic intrusion hunt pack — detect the loop, not the framework</h1>
-    <p class="sub">ARTEX, PentAGI, Cairn, CyberStrikeAI and Hexstrike are open-source wrappers around the same thing: a language model driving commodity offensive tools in a plan–act–observe loop. GTIG/Mandiant (Nov 2) report PRC-nexus UNC7228 and financially motivated groups running them in real intrusions since late August; CrowdStrike (Oct 22, Oct 30) names four actors including VAPOR PANDA; Microsoft ties ARTEX to Storm-0940 and to North Korean operators; CERT-In's "Crafty Falcon" runs all four against banking and crypto targets; WorkOS and Chainalysis disclosed breaches by the same tooling. Anyone can clone the repositories and rename everything, so this pack keys on what no fork can remove.</p>
+    <p class="sub">ARTEX, PentAGI, Cairn, CyberStrikeAI and Hexstrike are open-source wrappers around the same thing: a language model driving commodity offensive tools in a plan–act–observe loop. GTIG/Mandiant (Nov 2) report PRC-nexus UNC7228 and financially motivated groups running them in real intrusions since late August; CrowdStrike (Oct 22, Oct 30) names four actors including VAPOR PANDA; Microsoft ties ARTEX to Storm-0940 and to North Korean operators; CERT-In's "Crafty Falcon" runs all four against banking and crypto targets; WorkOS and Chainalysis disclosed breaches by the same tooling. Since the first issue: Check Point (Nov 6) counted 2,557 hosts that run or ran an ARTEX panel, 1,608 live, and read ten operators' databases — the runs were autonomous after the goal was typed; Microsoft (Nov 5, Nov 6) showed agents going from a GitHub secret search to Key Vault exfiltration in five minutes, and named Cambodia-based Storm-3358 running ARTEX against banks with web shells, curl/netcat download cradles and WISP, vshell and AdaptixC2. Anyone can clone the repositories and rename everything, so this pack keys on what no fork can remove.</p>
 
     <div class="cl">
       <span>On Cutsign:</span>
       <a href="/?d=2026-11-02&view=analyst#s-ad4e6c6e">brief story 11-02</a>
+      <a href="/?d=2026-11-06&view=analyst#s-cb203966">Check Point 11-06</a>
+      <a href="/?d=2026-11-09&view=analyst#s-bf4b735d">Storm-3358 11-09</a>
       <a href="/?d=2026-11-02&view=ciso#s-ad4e6c6e">CISO card</a>
       <a href="/?view=iocs#s-ad4e6c6e">IoC card</a>
       <a href="/?q=agentic">news &amp; updates (live)</a>
     </div>
 
-    <p class="verdict"><b>Verdict: stop building detections per framework. Name-based indicators (<code>artex-probe-*</code>, <code>ArtexProbe</code>, <code>artex-enrich/1.0</code>) are a cheap first layer that a fork erases in an afternoon.</b> The durable signal is the agent loop itself: machine-speed bursts separated by model "think" pauses, permission probing before action, retry-with-variation on errors, a compressed kill chain from first contact to privilege, the same open-source tool chain under every wrapper, and a dependence on supplied valid credentials rather than novel exploits. Hunt those six properties with the twelve searches below, and flip the script with deception: agents act on every credential they find within seconds, so canary credentials are a near-zero-false-positive tripwire. Thresholds here are starting points set from the published cadence (27 control-plane calls in 23 seconds); the Bluesign lab run that clones the four frameworks will reset them from recordings.</p>
+    <p class="verdict"><b>Verdict: stop building detections per framework. Name-based indicators (<code>artex-probe-*</code>, <code>ArtexProbe</code>, <code>artex-enrich/1.0</code>) are a cheap first layer that a fork erases in an afternoon.</b> The durable signal is the agent loop itself: machine-speed bursts separated by model "think" pauses, permission probing before action, retry-with-variation on errors, a compressed kill chain from first contact to privilege, the same open-source tool chain under every wrapper, and a dependence on supplied valid credentials rather than novel exploits. Hunt those six properties with the twelve searches below, and flip the script with deception: agents act on every credential they find within seconds, so canary credentials are a near-zero-false-positive tripwire. Thresholds here are starting points set from the two published cadence figures (GTIG: 27 control-plane calls in 23 seconds; Check Point: 400,791 agent messages against 292 domains in four days, about 70 a minute sustained); the Bluesign lab run that clones the four frameworks will reset them from recordings. Microsoft now states that decoys and "fake wins" cut the traffic reaching real assets in its own testing, so the deception half of this card is no longer a hypothesis.</p>
 
     <h2>30-second read</h2>
-    <p>Six loop properties, each with a hunt below. <b>A1 Tempo</b>: bursts of 2–25 seconds, then a pause, then another burst — a bimodal timing distribution from one principal that neither a person nor a constant-rate scanner produces. <b>A2 Permission probing</b>: DryRun calls, deployment validation, write-read-delete of a test object, identity lookups across every service — the agent asks "what can I do" before doing it. <b>A3 Retry with variation</b>: the same request repeated with one parameter changed, many times in a minute. <b>A4 Kill-chain compression</b>: first sight of a source to a privileged action in minutes, with no dwell. <b>A5 Commodity tool chain</b>: nmap, nuclei, ffuf, sqlmap, impacket and curl-to-callback under every framework. <b>A6 Supplied credentials</b>: success from never-seen infrastructure with a scripted client, immediately followed by activity. <b>A7</b> is the tripwire: any use of a canary credential is an incident.</p>
+    <p>Six loop properties, each with a hunt below. <b>A1 Tempo</b>: bursts of 2–25 seconds, then a pause, then another burst — a bimodal timing distribution from one principal that neither a person nor a constant-rate scanner produces. <b>A2 Permission probing</b>: DryRun calls, deployment validation, write-read-delete of a test object, identity lookups across every service — the agent asks "what can I do" before doing it. <b>A3 Retry with variation</b>: the same request repeated with one parameter changed, many times in a minute. <b>A4 Kill-chain compression</b>: first sight of a source to a privileged action in minutes, with no dwell. <b>A5 Commodity tool chain</b>: nmap, nuclei, ffuf, sqlmap, impacket and curl-to-callback under every framework. <b>A6 Supplied credentials</b>: success from never-seen infrastructure with a scripted client, immediately followed by activity — count residential-proxy ASNs as never-seen, since Check Point found operators routing through them to beat WAF blocks. <b>A7</b> is the tripwire: any touch of a canary credential, honey account or decoy endpoint is an incident.</p>
 
     <div class="cols">
       <div>
@@ -124,6 +126,7 @@ a{color:var(--ink)}
           <li class="bad">Internet-facing management or application SQL interfaces accept password authentication</li>
           <li class="bad">No per-principal velocity controls on cloud control planes or identity providers</li>
           <li class="bad">Detections keyed to framework names or published IP lists only</li>
+          <li class="bad">Web applications with credentials hardcoded in front-end bundles, unauthenticated APIs, anonymous file upload or SSRF — the flaws Check Point and Microsoft watched agents exploit with no supplied credential at all</li>
         </ul>
       </div>
       <div>
@@ -131,16 +134,19 @@ a{color:var(--ink)}
         <ul>
           <li class="ok">Phishing-resistant MFA, short-lived tokens, no static keys — the frameworks are breadth machines that mostly stall without a valid credential (GTIG: ARTEX ran on supplied credentials, not zero-days)</li>
           <li class="ok">Control-plane and identity velocity alerts are live (A1, A2, A4 scheduled)</li>
-          <li class="ok">Canary credentials seeded where an agent would look (A7)</li>
+          <li class="ok">Canary credentials seeded where an agent would look (A7), plus one decoy that returns a convincing success</li>
+          <li class="ok">External surface reviewed in the order an agent chains it — exposed credentials, identity and permission, reachable admin planes, known bugs on reachable services, egress — so the canaries sit where the loop lands first</li>
         </ul>
       </div>
     </div>
 
-    <h2>Detection coverage — as of Nov 5</h2>
+    <h2>Detection coverage — as of Nov 9</h2>
     <table>
       <tr><th>Category</th><th>Source</th><th>Status</th></tr>
       <tr><td>Primary research</td><td><a href="https://cloud.google.com/blog/topics/threat-intelligence/artex-and-friends-enter-agentic-offensive-frameworks/">GTIG / Mandiant</a></td><td><span class="ok">Behavioral guidance published</span> — five generic detection notes (control-plane velocity, egress to unseen webhook/OAST services, DMZ-origin LDAP/Kerberos/SMB, bursts of resets and account creation, AD CS enrollment) rendering live below; they are the seed for A1–A5</td></tr>
       <tr><td>Vendor reporting</td><td><a href="https://www.crowdstrike.com/en-us/blog/vapor-panda-uses-artex-to-scale-global-campaign/">CrowdStrike</a> · <a href="https://www.microsoft.com/en-us/security/blog/2026/10/29/tracking-ai-adoption-in-north-korean-threat-actor-tradecraft/">Microsoft</a></td><td><span class="ok">Actor context</span> — four actors using agentic frameworks (Oct 22), VAPOR PANDA at 200+ orgs (Oct 30), Storm-0940 and DPRK operators with ARTEX; name-based artifacts only, no loop-level detections</td></tr>
+      <tr><td>Operator-side census</td><td><a href="https://research.checkpoint.com/2026/hacking-on-autopilot-inside-artex-cybercrime-campaigns/">Check Point Research</a></td><td><span class="ok">Autonomy and cost measured</span> — 2,557 hosts with ARTEX panels (1,608 live; US 54%, Hong Kong 18%, China 6%), ten exposed operator databases read; "most attacks were fully autonomous besides the initial goal setup"; a two-week run cost $700–1,500 in tokens; agents validated every credential they found (OCSP checks on stolen signing certs, live sampling of 190,000 game logins) and believed API "success" responses, some of which were hallucinated. No loop-level detections, but three C2 clusters with ASNs and ranges for an egress hunt, and the evidence behind the deception runbook below</td></tr>
+      <tr><td>Vendor hunting content</td><td><a href="https://www.microsoft.com/en-us/security/blog/2026/11/05/threat-actors-use-agentic-ai-tooling-to-find-and-abuse-exposed-secrets/">Microsoft Nov 5</a> · <a href="https://www.microsoft.com/en-us/security/blog/2026/11/06/artex-abuse-expands-as-cybercriminals-target-financial-sector/">Microsoft Nov 6</a></td><td><span class="ok">Queries and deception guidance published</span> — Defender XDR query for curl downloads unseen in seven days, Sentinel ASIM query over eight C2/ARTEX IPs, Entra service-principal sign-in failure→success pattern; Microsoft recommends honeypots, decoys, tarpits and fake wins outright and says they reduced attack traffic reaching real assets. Rendered live below as the pipeline stores it</td></tr>
       <tr><td>Framework-specific IoCs</td><td>Cutsign ARTEX brief (Nov 5)</td><td><span class="ok">Short-lived layer</span> — self-naming files, accounts, roles, comments and user agents; keep as cheap early warning, expect them to age out as forks appear</td></tr>
       <tr><td>Ecosystem</td><td><a href="https://thehackernews.com/2026/11/backdoored-docker-image-for-artex-ai.html">The Hacker News</a></td><td><span class="bad">Supply-chain hazard</span> — a backdoored ARTEX Docker image gave an unauthenticated root shell on 62 exposed consoles; anyone cloning these tools for a lab must build from pinned source, never pull an image</td></tr>
       <tr><td>Vendor SIEM content</td><td>Splunk ES / Elastic prebuilt rules</td><td><span class="bad">Not surveyed</span> — no loop-level prebuilt content was checked for this card; the pack below is the coverage until the lab run validates it</td></tr>
@@ -151,7 +157,8 @@ a{color:var(--ink)}
         <h2>Do now</h2>
         <ul>
           <li>Schedule A1, A2 and A4 against cloud control-plane and identity logs — these three catch the loop regardless of framework</li>
-          <li>Seed canary credentials this week (checklist below) and wire A7 as an incident-severity alert</li>
+          <li>Seed canary credentials this week (runbook below) and wire A7 as an incident-severity alert</li>
+          <li>Stand up one fake win beside them — a decoy admin API that accepts any credential and returns success; the agent records the win and moves on, and you get the source, the credential it tried and the timing</li>
           <li>Run A5 and A6 over the last 30 days as a one-time hunt; keep the ARTEX name-based layer running beside them</li>
           <li>Inventory long-lived credentials the frameworks feed on: static IAM keys, Kudu publishing credentials, SAS tokens, SP secrets — rotate to short-lived where possible</li>
         </ul>
@@ -169,16 +176,26 @@ a{color:var(--ink)}
 
     <h2>Flip the script</h2>
     <div class="flip">
-      <h3>Deception — start this week, no lab required</h3>
-      <p>An agent explores breadth-first and tries every credential it finds, usually within seconds. A human attacker sits on one. That asymmetry makes canaries the highest-leverage, lowest-noise control against this tooling. Seed them where the loop looks:</p>
-      <ul>
-        <li><b>Cloud key</b> — one IAM user with no permissions, its access key placed in an environment variable and a config file on an internet-facing host. Alert on any call with that key id (A7); CloudTrail logs the attempt even when it is denied.</li>
-        <li><b>App Service / Kudu credential</b> — a publishing profile for an empty app, left in a deployment script.</li>
-        <li><b>Directory account</b> — a disabled-looking service account with a description that suggests privilege and a password in a share. Alert on 4624/4625/4768/4769/4771 for it; a Kerberoast of that SPN is itself the hit.</li>
-        <li><b>Document token</b> — a canary file named like a credential backup in the home directory of a server process; the agent reads it and the token calls home.</li>
-        <li><b>Storage</b> — a bucket or container named like backups with a canary object; A2's write-read-delete probe lands on it first.</li>
-      </ul>
-      <p class="src">Rules: never a real credential, never a name that could collide with production, each canary documented in the deception register with its owner and expiry, and every hit routed to incident severity — there is no "tune before trusting" for A7.</p>
+      <h3>Deception — the runbook, start this week, no lab required</h3>
+      <p>An agent explores breadth-first and tries every credential it finds, usually within seconds, then validates it and reports success from whatever the API returns. Check Point watched agents OCSP-check stolen certificates and sample stolen logins for liveness; it also saw them record wins that never happened because an endpoint said "success". A human attacker sits on one credential and checks the result. That asymmetry makes canaries the lowest-noise control against this tooling, and makes a decoy that says "yes" a way to end the run. Microsoft's Nov 6 post says the same in its own testing. Run it in this order:</p>
+      <ol>
+        <li><b>Pick the landing spots.</b> Take the three places an external loop reaches first in your estate: the internet-facing web apps and their front-end bundles and <code>.env</code>/config paths (Check Point: hardcoded admin passwords in SPA JavaScript), the cloud control plane the exposed hosts can reach, and the identity plane behind them. If you have a surface report, use its top row per bucket; if not, the DMZ web tier, the cloud account it runs in and the directory it authenticates to.</li>
+        <li><b>Build the canaries</b> — each one is real enough to be tried and useless when it is:
+          <ul>
+            <li><b>Cloud key</b> — one IAM user or service principal with no attached policy and a deny-all boundary. Drop its key in an environment file and a commented-out line in a deploy script on an internet-facing host. CloudTrail / Entra sign-in logs record the attempt even when it is denied; alert on the key id or app id (A7).</li>
+            <li><b>App Service / Kudu credential</b> — a publishing profile for an empty app, left in a deployment script. Alert on any SCM-site authentication for that app.</li>
+            <li><b>Directory account</b> — an account with an SPN, a description that implies privilege ("svc_backup_admin — DO NOT DISABLE"), logon hours set to never, and its password in a text file on a readable share. Alert on 4624/4625/4768/4769/4771/4776 for the name; a Kerberoast of that SPN is itself the hit.</li>
+            <li><b>Document token</b> — a file named like a credential export (<code>passwords-backup.xlsx</code>, <code>id_rsa.bak</code>) in the home directory of a server process, carrying a token that calls a URL you control when opened. The agent reads everything in reach.</li>
+            <li><b>Storage</b> — a bucket or container named like backups with a canary object and access logging on; A2's write-read-delete probe lands on it first.</li>
+            <li><b>Front-end bait</b> — one commented "temporary" API key in a JavaScript bundle that only unlocks the decoy below. Check Point's agents read bundles for exactly this.</li>
+          </ul>
+        </li>
+        <li><b>Build one fake win and one tarpit.</b> The fake win is a decoy admin API or login page on a host of its own, reachable from the internet, that accepts any credential and returns a realistic 200 with a plausible body and a session cookie, then logs the source, the credential tried, the user agent and the timing. Nothing behind it; it proxies to nothing. The tarpit is the same host answering the paths scanners walk (<code>/.env</code>, <code>/.git/config</code>, <code>/actuator</code>, <code>/wp-login.php</code>) slowly with a 200 and junk, so A3 retries burn the operator's token budget rather than yours. Microsoft reports agents stopping on a false success; Check Point's Campaign 2 is 400,791 messages that moved no money for the same reason.</li>
+        <li><b>Wire the alerts before you plant anything.</b> A7 has three queries below: canary key, honey account, decoy endpoint. All three go to the incident lane at high severity with no tuning stage, because nothing legitimate ever calls them. Test each by firing it yourself from a known address and confirming the alert, the ticket and the page arrive. Repeat that test monthly; a canary nobody checks is a false sense of safety.</li>
+        <li><b>Plant, register, expire.</b> Every canary goes in the deception register with owner, location, the alert that covers it, a creation date and an expiry of twelve months. Names must be plausible and must never collide with a real principal, path or host; never a real permission, never a decoy that proxies to production, never a canary whose "value" could embarrass you if it leaks (it will). Rotate the whole set when one fires; the operator's notes now contain it.</li>
+        <li><b>Measure.</b> Record time from planting to first touch per canary, and per hit the source ASN (residential proxy or not), the user agent, what was tried next and how fast. Those become the A1, A4 and A6 inputs for your own baseline, which is the measurement the lab run below exists to produce.</li>
+      </ol>
+      <p class="src">The gap this card still has: no public write-up yet shows a canary hit from one of these agents with its timing. First organisation to publish that gives everyone the A4 number for free.</p>
     </div>
     <div class="flip">
       <h3>Lab baselines — Bluesign run M7</h3>
@@ -196,8 +213,8 @@ A2 probing      denied / dry-run calls across ≥5 services in 5 min; write→re
 A3 retry        ≥8 errors on one path in 60 s with ≥6 distinct query strings
 A4 compression  first sight of a source → first privileged action ≤15 min
 A5 tool chain   commodity offensive tools spawned on servers; scanner UAs at the edge; egress to OAST/callback services
-A6 credentials  success from a user/ASN pair unseen in 30 days with a scripted or empty user agent
-A7 tripwire     any use of a canary key or honey account
+A6 credentials  success from a user/ASN pair unseen in 30 days with a scripted or empty user agent (residential-proxy ASNs count as unseen)
+A7 tripwire     any use of a canary key or honey account; any request to a decoy endpoint
 
 </pre>
     <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — Splunk over CIM-shaped fields with <code>&lt;placeholder&gt;</code> sourcetypes; Elastic over the AWS CloudTrail, Azure Logs, web-server, Endpoint and Windows integrations (<code>aws.cloudtrail.*</code>, <code>azure.signinlogs.*</code>, <code>url.*</code>, <code>process.*</code>, <code>event.code</code>). Tune field names to your add-on or integration:</p>
@@ -260,13 +277,13 @@ index=* earliest=-7d (sourcetype=&lt;cloud_audit&gt; OR sourcetype=&lt;windows_e
 # A5 tool chain — the open-source tools every framework wraps, spawned on a server
 index=* sourcetype=&lt;endpoint_process&gt; earliest=-7d
 | rename process_name as proc, process as cmd, parent_process_name as parent, dest as host
-| where match(proc, "(?i)^(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo)") OR match(cmd, "(?i)(secretsdump|GetUserSPNs|GetNPUsers|psexec\.py|wmiexec|smbexec|ntlmrelayx|mimikatz|rubeus|sharphound)")
+| where match(proc, "(?i)^(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo|ncat|netcat)") OR match(cmd, "(?i)(secretsdump|GetUserSPNs|GetNPUsers|psexec\.py|wmiexec|smbexec|ntlmrelayx|mimikatz|rubeus|sharphound)")
 | stats count values(proc) as tools values(parent) as parents min(_time) as first by host user
 | table first host user count tools parents
 
 # A5 tool chain — scanner and script user agents at the edge, fanning out
 index=* sourcetype=&lt;web_access&gt; earliest=-7d
-| regex http_user_agent="(?i)(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/)"
+| regex http_user_agent="(?i)(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/|wget/|headlesschrome|norma/)"
 | stats count dc(uri_path) as paths values(http_user_agent) as uas by src
 | where count&gt;=50 AND paths&gt;=20
 
@@ -292,6 +309,11 @@ index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d userIdentity.accessKeyId IN 
 # A7 tripwire — any authentication touching a honey account, including a Kerberoast of its SPN
 index=* sourcetype=&lt;windows_eventlog&gt; earliest=-7d EventCode IN (4624,4625,4768,4769,4771,4776) user IN (&lt;honey_accounts&gt;)
 | stats min(_time) as first count values(EventCode) as codes values(src) as srcs values(dest) as targets by user
+
+# A7 tripwire — any request to the decoy host or decoy paths; the fake win logs what was tried
+index=* sourcetype=&lt;web_access&gt; earliest=-7d (host IN (&lt;decoy_hosts&gt;) OR uri_path IN (&lt;decoy_paths&gt;))
+| stats min(_time) as first max(_time) as last count dc(uri_path) as paths values(http_user_agent) as uas values(status) as statuses by src
+| eval seconds=last-first
 
 </pre>
     <pre data-q="esql">
@@ -359,7 +381,7 @@ FROM logs-*
 FROM logs-*
 | WHERE @timestamp &gt; NOW() - 7 days AND event.category == "process" AND event.type == "start"
 | EVAL proc = TO_LOWER(process.name), cmd = TO_LOWER(process.command_line)
-| WHERE proc RLIKE "(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo).*"
+| WHERE proc RLIKE "(nmap|masscan|nuclei|ffuf|gobuster|feroxbuster|dirsearch|sqlmap|nikto|hydra|netexec|nxc|crackmapexec|evil-winrm|responder|certipy|bloodhound-python|kerbrute|chisel|ligolo|ncat|netcat).*"
     OR cmd RLIKE ".*(secretsdump|getuserspns|getnpusers|psexec\\.py|wmiexec|smbexec|ntlmrelayx|mimikatz|rubeus|sharphound).*"
 | STATS count = COUNT(*), tools = VALUES(process.name), parents = VALUES(process.parent.name), first = MIN(@timestamp) BY host.name, user.name
 | KEEP first, host.name, user.name, count, tools, parents
@@ -368,7 +390,7 @@ FROM logs-*
 FROM logs-*
 | WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("nginx.access", "apache.access", "iis.access")
 | EVAL ua = TO_LOWER(user_agent.original)
-| WHERE ua RLIKE ".*(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/).*"
+| WHERE ua RLIKE ".*(nuclei|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|masscan|nmap|wpscan|python-requests|python-httpx|go-http-client|aiohttp|axios|okhttp|curl/|wget/|headlesschrome|norma/).*"
 | STATS count = COUNT(*), paths = COUNT_DISTINCT(url.path), uas = VALUES(user_agent.original) BY source.ip
 | WHERE count &gt;= 50 AND paths &gt;= 20
 
@@ -397,6 +419,12 @@ FROM logs-*
 | WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "system.security" AND event.code IN ("4624", "4625", "4768", "4769", "4771", "4776") AND user.name IN (&lt;honey_accounts&gt;)
 | STATS first = MIN(@timestamp), count = COUNT(*), codes = VALUES(event.code), srcs = VALUES(source.ip), targets = VALUES(host.name) BY user.name
 
+// A7 tripwire — any request to the decoy host or decoy paths; the fake win logs what was tried
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset IN ("nginx.access", "apache.access") AND (host.name IN (&lt;decoy_hosts&gt;) OR url.path IN (&lt;decoy_paths&gt;))
+| STATS first = MIN(@timestamp), last = MAX(@timestamp), count = COUNT(*), paths = COUNT_DISTINCT(url.path), uas = VALUES(user_agent.original), statuses = VALUES(http.response.status_code) BY source.ip
+| EVAL seconds = DATE_DIFF("seconds", first, last)
+
 </pre>
     </div>
 
@@ -409,7 +437,10 @@ FROM logs-*
       <li><span class="d">Oct 30</span><span>CrowdStrike: VAPOR PANDA runs ARTEX against 200+ orgs, BLOODALCHEMY at nine; Microsoft documents DPRK operators adopting ARTEX</span></li>
       <li><span class="d">Nov 2</span><span>GTIG/Mandiant publish the cross-framework analysis (ARTEX, PentAGI, CAIRN, Hexstrike) with behavioral detection guidance; Chainalysis discloses a breach by "offensive agentic techniques"</span></li>
       <li><span class="d">Nov 3–4</span><span>WorkOS discloses an ARTEX-driven breach of an internal sales app; user agents <code>artex-enrich/1.0</code> and <code>norma/0.4</code> published</span></li>
-      <li><span class="d">Nov 5</span><span>Backdoored ARTEX Docker image found on 62 exposed consoles; CERT-In attributes attacks on banking and crypto targets to "Crafty Falcon" using ARTEX, PentAGI, Cairn and CyberStrikeAI. This card issued</span></li>
+      <li><span class="d">Nov 5</span><span>Backdoored ARTEX Docker image found on 62 exposed consoles; CERT-In attributes attacks on banking and crypto targets to "Crafty Falcon" using ARTEX, PentAGI, Cairn and CyberStrikeAI. This card first issued</span></li>
+      <li><span class="d">Nov 5</span><span>Microsoft: ARTEX agents search GitHub for secrets, sign in as the leaked service principals and reach Key Vault in five minutes; Entra hunting pattern published</span></li>
+      <li><span class="d">Nov 6</span><span>Check Point census: 2,557 ARTEX panel hosts, 1,608 live, three campaigns read from operators' databases, autonomous after goal entry. Microsoft names Storm-3358 (Cambodia) running ARTEX against banks: upload and SSRF flaws, web shells, curl/netcat cradles, WISP, vshell, AdaptixC2; eight IPs and two hunting queries published; deception recommended</span></li>
+      <li><span class="d">Nov 9</span><span>WorkOS attributes its breach to a researcher's agent that escaped a test sandbox. This card re-issued: Check Point and Storm-3358 folded in, deception runbook made explicit, third A7 query added</span></li>
     </ul>
 
     <h2>Sources</h2>
@@ -420,6 +451,9 @@ FROM logs-*
       <a href="https://www.bleepingcomputer.com/news/security/workos-says-attacker-used-artex-ai-to-breach-internal-sales-app/">BleepingComputer — WorkOS</a> ·
       <a href="https://www.bleepingcomputer.com/news/security/chainalysis-discloses-data-breach-from-offensive-agentic-techniques/">BleepingComputer — Chainalysis</a> ·
       <a href="https://thehackernews.com/2026/11/backdoored-docker-image-for-artex-ai.html">The Hacker News — backdoored ARTEX image, CERT-In</a> ·
+      <a href="https://research.checkpoint.com/2026/hacking-on-autopilot-inside-artex-cybercrime-campaigns/">Check Point Research — Hacking on Autopilot: inside ARTEX cybercrime campaigns</a> ·
+      <a href="https://www.microsoft.com/en-us/security/blog/2026/11/05/threat-actors-use-agentic-ai-tooling-to-find-and-abuse-exposed-secrets/">Microsoft — agentic tooling finds and abuses exposed secrets</a> ·
+      <a href="https://www.microsoft.com/en-us/security/blog/2026/11/06/artex-abuse-expands-as-cybercriminals-target-financial-sector/">Microsoft — ARTEX abuse expands to the financial sector (Storm-3358)</a> ·
       <a href="/?q=Cairn">Cutsign — Cairn (Oct 21)</a> ·
       <a href="/?q=agentic">Cutsign — agentic frameworks (all stories)</a>
     </p>
@@ -428,7 +462,7 @@ FROM logs-*
     <span>Public OSINT only — contains no internal data</span>
     <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
     <span>Lane and triggers per CIRT triage-flow draft</span>
-    <span>Tracked story: Cutsign 11-02 (deep read) + Oct 21 / Oct 22 / Nov 2 / Nov 4 threads</span>
+    <span>Tracked story: Cutsign 11-02 (deep read) + Oct 21 / Oct 22 / Nov 2 / Nov 4 / Nov 6 / Nov 9 threads</span>
   </div>
 </div>
 
@@ -437,7 +471,7 @@ FROM logs-*
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-11-05', QUERY = 'agentic';
+  const AS_OF = '2026-11-09', QUERY = 'agentic';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
