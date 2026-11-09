@@ -117,6 +117,16 @@ test('checkCoverage: every lane answers with an honest status; feeds match the C
   assert.equal(net.calls.filter((u) => u.includes('api.shodan.io')).length, 0);
 });
 
+test('checkCoverage: exposureCves narrows the exposure rows to the CVEs a hand card declares; the lanes still cover the thread', async () => {
+  const cov = await checkCoverage({ cves: [CVE], exposureCves: [], fetchImpl: fakeNet(), githubToken: '', ...quick });
+  assert.ok(cov.lanes.some((l) => l.id === `nvd:${CVE}` && l.status === 'published'), 'NVD still checked for the thread CVE');
+  assert.ok(cov.lanes.some((l) => l.id === `kev:${CVE}`), 'KEV still checked for the thread CVE');
+  assert.equal(cov.exposure.items.length, 0); assert.match(cov.exposure.note, /No CVE/);
+  assert.ok(!JSON.stringify(cov.exposure).includes('widgetry'), 'the thread CVE puts no product rows on the card');
+  const same = await checkCoverage({ cves: [CVE], exposureCves: [CVE], fetchImpl: fakeNet(), githubToken: '', ...quick });
+  assert.ok(same.exposure.items.some((i) => i.query === 'product:"Widget Server"'));
+});
+
 test('checkCoverage: with a Shodan key every Shodan query is counted after NVD names the products, the trend is carried from the previous check, and the first counts are a change', async () => {
   const net = fakeNet();
   const now = Date.parse('2026-10-28T12:00:00Z');
