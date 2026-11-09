@@ -125,6 +125,13 @@ test('checkCoverage: exposureCves narrows the exposure rows to the CVEs a hand c
   assert.ok(!JSON.stringify(cov.exposure).includes('widgetry'), 'the thread CVE puts no product rows on the card');
   const same = await checkCoverage({ cves: [CVE], exposureCves: [CVE], fetchImpl: fakeNet(), githubToken: '', ...quick });
   assert.ok(same.exposure.items.some((i) => i.query === 'product:"Widget Server"'));
+  // the default keeps every thread CVE and says where each came from
+  const explained = await checkCoverage({ cves: [CVE], cveOrigins: { [CVE]: 'Widgets breached by agents (brief 2026-10-21)', 'CVE-2020-0001': 'elsewhere' }, fetchImpl: fakeNet(), githubToken: '', ...quick });
+  assert.ok(explained.exposure.items.some((i) => i.query === 'product:"Widget Server"'));
+  assert.deepEqual(explained.exposure.origins, { [CVE]: 'Widgets breached by agents (brief 2026-10-21)' }, 'origins are kept for the CVEs on the card only');
+  const { exposureTable } = await import('../lib/exposure.js');
+  assert.match(exposureTable(explained.exposure), /Where each CVE comes from: <code>CVE-\d{4}-\d+<\/code> — Widgets breached by agents \(brief 2026-10-21\)\. A product row answers/);
+  assert.ok(!exposureTable(same.exposure).includes('Where each CVE comes from'), 'no origins given, no line');
 });
 
 test('checkCoverage: with a Shodan key every Shodan query is counted after NVD names the products, the trend is carried from the previous check, and the first counts are a change', async () => {
