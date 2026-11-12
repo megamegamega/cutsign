@@ -96,7 +96,7 @@ pipeline already knows — priority, deep read, a CISA KEV listing within three 
 the story has run, distinct publishers, a primary source, stated internet-facing exposure, a named
 actor, and 48 h of watch developments. Over `HYPE_NOMINATE` (6) the thread is nominated to Discord
 with the signals that fired. A draft is written only for a card that will be published — a thread
-over `HYPE_SURFACE`, or a P1 on day one (below) — once it has something actionable (published
+over `HYPE_SURFACE`, or one of the brief's top P1s on day one (below) — once it has something actionable (published
 guidance, a vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs);
 a nominee under the bar gets its Discord line and is drafted the sweep it crosses, with everything
 gathered by then (until 2026-11-04 every nominee was drafted, and half the drafts were previews of
@@ -123,10 +123,12 @@ Splunk | Elastic switch as the hand-written cards. A card drafted before the dia
 its twins once, on the next daily sweep: one low-effort call translates its Splunk searches, each
 answer is scrubbed and linted (a failure is stored as null), and the draft is patched in place with no
 new version, since the card's text did not change.
-Over `HYPE_SURFACE` (9), or **on day one for any P1 story** (`CARD_P1_DAY_ONE`, default on; the
-score measures how a story is developing, and a reader who sees a P1 needs a link that day, not
-after the corroboration arrives — the banner says it is an early read and the card is revised as
-the story develops), the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
+Over `HYPE_SURFACE` (9), or **on day one for a brief's top P1 stories** (`CARD_P1_DAY_ONE`, default
+on; the score measures how a story is developing, and a reader who sees a P1 needs a link that day,
+not after the corroboration arrives — the banner says it is an early read and the card is revised
+as the story develops; the first `CARD_P1_PER_DAY` (3) P1 threads in brief order get one, since each
+draft is a deep-tier call and a brief carries five to nine P1s, and the others get their card the
+sweep their score crosses the bar), the draft is **published** (`CARD_AUTOPUBLISH`, default on): it becomes
 an AI verdict card at `/cards/<slug>`, with a "Verdict card" chip on its story in the CISO view,
 `verdict_card` in the agent JSON, a place on the Cards tab, and a "published" email. Revisions
 re-issue it in place (same URL, old version superseded) with a Discord line and no email;

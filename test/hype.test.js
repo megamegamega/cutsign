@@ -408,6 +408,27 @@ test('publish: a P1 is drafted and published on day one even with a score far be
   assert.ok(w3.out.discord.some((l) => l.includes('P1 without anything actionable yet')), w3.out.discord.join('\n'));
 });
 
+/** Four more P1s behind the world's hot story: quick reads from two outlets, each with a fix version (actionable), far under the bar. */
+const moreP1s = (w) => { for (const n of [3, 4, 5, 6]) w.store._tables.stories.push(story(n, { run_id: w.run.id, selected: false, source_urls: ['https://news.example.test/a', 'https://news.example.test/b'], raw_iocs: { exposure: { fixed_in: `2.4.${n}` } } })); };
+
+test('publish: day-one cards go to the brief\'s first CARD_P1_PER_DAY P1s (3); the others are counted and wait for the publish bar, sweep after sweep', async (t) => {
+  t.after(() => { off(); delete process.env.CARD_P1_PER_DAY; });
+  const w = await published(); moreP1s(w);
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  const c = await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now });
+  assert.equal(c.published, 3, JSON.stringify(c)); assert.equal(c.day_one_capped, 2); assert.equal(w.calls.length, 3);
+  const rows = await w.store.listCardDrafts();
+  assert.deepEqual(rows.map((r) => r.story_id).sort(), [uuid(1), uuid(3), uuid(4)], 'the top story and the next two P1s in brief order');
+  assert.equal(w.out.emails.filter((m) => /AI verdict card published/.test(m.subject)).length, 3);
+  // the cards existing changes nothing: no slot passes to the fourth P1 on a later sweep
+  const c2 = await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now: now + 3600_000 });
+  assert.equal(c2.published, 0, JSON.stringify(c2)); assert.equal(c2.day_one_capped, 2); assert.equal(w.calls.length, 3);
+  // the knob raised: every P1 gets its card
+  process.env.CARD_P1_PER_DAY = '9';
+  const c3 = await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now: now + 7200_000 });
+  assert.equal(c3.published, 2, JSON.stringify(c3)); assert.ok(!c3.day_one_capped); assert.equal(w.calls.length, 5);
+});
+
 test('publish: a revision re-issues the published card in place (same slug, old version superseded); dismissing unpublishes', async (t) => {
   t.after(off);
   const { store, run, kevFetch, calls, hot, out } = await published();
@@ -974,6 +995,33 @@ test('batched: a failed card draft gets its live call inside the tick\'s own dea
   const j5 = await collectJobs(u.store, { fetchImpl: u.kevFetch, now: Date.now() + 49 * 3600_000 });
   assert.equal(j5.failed, 1, JSON.stringify(j5)); assert.equal(j5.pending, 0); assert.equal(u.calls.length, 0);
   assert.match(u.store._tables.llm_jobs[0].outcome, /could not be read: fetch failed.*too old for a live rerun/);
+});
+
+test('batched: a failed day-one draft of a P1 outside the brief\'s day-one cards is dropped, not rerun at list price; the others get their live call', async (t) => {
+  const w = await batched(t); moreP1s(w);
+  t.after(() => { delete process.env.CARD_P1_PER_DAY; });
+  const fake = installFakeBatch(() => DRAFT);
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  // five drafts submitted while every P1 had a day-one card (as before the cap)
+  process.env.CARD_P1_PER_DAY = '9';
+  const c = await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now });
+  assert.equal(c.submitted, 5, JSON.stringify(c));
+  delete process.env.CARD_P1_PER_DAY;
+  fake.fail = 'api_error: usage limit reached';
+  const j = await collectJobs(w.store, { fetchImpl: w.kevFetch, now: now + 3600_000 });
+  assert.equal(j.live, 3, JSON.stringify(j)); assert.equal(j.abandoned, 2); assert.equal(w.calls.length, 3, 'three live calls, not five');
+  const dropped = w.store._tables.llm_jobs.filter((x) => x.status === 'abandoned');
+  assert.deepEqual(dropped.map((x) => x.story_id).sort(), [uuid(5), uuid(6)]);
+  for (const x of dropped) assert.match(x.outcome, /usage limit reached.*no live rerun/);
+  assert.equal((await w.store.listCardDrafts()).length, 3);
+  // an answer that did arrive for a P1 outside the cap is paid for: it is used
+  const v = await batched(t); moreP1s(v);
+  installFakeBatch(() => DRAFT);
+  process.env.CARD_P1_PER_DAY = '9';
+  await hypeSweep(v.store, { run: v.run, fetchImpl: v.kevFetch, now });
+  delete process.env.CARD_P1_PER_DAY;
+  const j2 = await collectJobs(v.store, { fetchImpl: v.kevFetch, now: now + 3600_000 });
+  assert.equal(j2.landed, 5, JSON.stringify(j2)); assert.equal(j2.abandoned, 0); assert.equal(v.calls.length, 0);
 });
 
 test('batched: a hand-written card\'s re-issue draft goes through the batch too and lands as the surfaced draft its page links', async (t) => {
