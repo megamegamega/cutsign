@@ -237,65 +237,84 @@ find &lt;code roots&gt; -maxdepth 5 \( -path '*/.claude/setup.mjs' -o -path '*/.
 osv-scanner --lockfile=&lt;path to lockfile&gt;
 
 </pre>
-    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Network Resolution / Web field names for Splunk, ECS for Elastic; tune to your add-on or integration:</p>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Network Resolution / Web field names for Splunk, ECS for Elastic; tune to your add-on or integration. Each returns one row per host, earliest first, with first and last seen as readable timestamps:</p>
     <div class="qs">
     <pre data-q="spl">
 
-# install evidence (CI / build logs, registry-proxy access logs)
+# install evidence (CI / build logs, registry-proxy access logs): which version, where, when, and the latest matching log line
 index=* earliest="05/19/2026:00:00:00" ("jest-canvas-mock-2.5.3" OR "jest-canvas-mock@2.5.3" OR "jest-canvas-mock-2.6.3" OR "jest-canvas-mock@2.6.3" OR "jest-canvas-mock-2.7.3" OR "jest-canvas-mock@2.7.3" OR "@antv/setup" OR "1916faa365f2788b6e193514872d51a242876569")
-| stats count min(_time) as first max(_time) as last by host source
+| rex "(?&lt;matched&gt;jest-canvas-mock[-@]2\.[567]\.3|@antv/setup|1916faa365f2788b6e193514872d51a242876569)"
+| stats count min(_time) as first_seen max(_time) as last_seen values(matched) as matched values(sourcetype) as log_types latest(_raw) as sample by host source
+| sort 0 first_seen
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S %Z"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S %Z")
 
 # payload execution: Bun running index.js, or Bun spawned by node/npm
 index=* earliest="05/19/2026:00:00:00" (process="*bun* run index.js*" OR (process_name IN ("bun","bun.exe") parent_process_name IN ("node","node.exe","npm","npm.cmd")))
-| stats count min(_time) as first values(process) as cmd values(parent_process_name) as parent by host user
+| stats count min(_time) as first_seen max(_time) as last_seen values(process) as cmd values(parent_process_name) as parent by host user
+| sort 0 first_seen
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S %Z"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S %Z")
 
 # egress: exfil domain, its reported address, and the Session file service (expect benign Session use)
 index=* earliest="05/19/2026:00:00:00" (query IN ("t.m-kosche.com","filev2.getsession.org") OR dest IN ("t.m-kosche.com","filev2.getsession.org","185.95.159.32") OR url IN ("*t.m-kosche.com*","*filev2.getsession.org*"))
-| stats count min(_time) as first max(_time) as last by src host
+| eval indicator=coalesce(query, url, dest)
+| stats count min(_time) as first_seen max(_time) as last_seen values(indicator) as indicator by src host
+| sort 0 first_seen
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S %Z"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S %Z")
 
 # persistence files (EDR / Sysmon file events, FIM)
 index=* earliest="05/19/2026:00:00:00" (file_name IN ("kitty-monitor.service","com.user.kitty-monitor.plist","gh-token-monitor.sh",".gh_update_state") OR file_path IN ("*/.local/share/kitty/cat.py","*/.claude/setup.mjs","*/.vscode/setup.mjs","*/.claude/package/index.js","*/.codex/package/index.js"))
-| stats count values(file_path) as paths min(_time) as first by host user
+| stats count min(_time) as first_seen max(_time) as last_seen values(file_path) as paths by host user
+| sort 0 first_seen
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S %Z"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S %Z")
 
 # GitHub audit log: exfil repos, injected branch and workflow (Dune word list is partial)
 index=* earliest="05/19/2026:00:00:00" (action="repo.create" OR "chore/add-codeql-static-analysis" OR "Run Copilot" OR "niagA oG eW ereH")
 | eval repo_name=lower(coalesce(repo, repository, ""))
 | where coalesce(action,"")!="repo.create" OR match(repo_name, "/(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[a-z]+-\d{1,3}$") OR match(repo_name, "/[a-z]+-(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-\d{1,3}$")
-| stats count min(_time) as first values(action) as actions by actor repo_name
+| stats count min(_time) as first_seen max(_time) as last_seen values(action) as actions by actor repo_name
+| sort 0 first_seen
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S %Z"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S %Z")
 
 </pre>
     <pre data-q="esql">
 
-// install evidence (CI / build logs, registry-proxy access logs)
+// install evidence (CI / build logs, registry-proxy access logs): which version, where and when
 FROM logs-*
 | WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
 | WHERE message LIKE "*jest-canvas-mock-2.5.3*" OR message LIKE "*jest-canvas-mock@2.5.3*" OR message LIKE "*jest-canvas-mock-2.6.3*" OR message LIKE "*jest-canvas-mock@2.6.3*" OR message LIKE "*jest-canvas-mock-2.7.3*" OR message LIKE "*jest-canvas-mock@2.7.3*" OR message LIKE "*@antv/setup*" OR message LIKE "*1916faa365f2788b6e193514872d51a242876569*"
-| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, log.file.path
+| EVAL matched = CASE(message RLIKE ".*jest-canvas-mock[-@]2\\.5\\.3.*", "2.5.3", message RLIKE ".*jest-canvas-mock[-@]2\\.6\\.3.*", "2.6.3", message RLIKE ".*jest-canvas-mock[-@]2\\.7\\.3.*", "2.7.3", "@antv/setup or payload commit")
+| STATS count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), matched = VALUES(matched) BY host.name, log.file.path
+| SORT first_seen
 
 // payload execution: Bun running index.js, or Bun spawned by node/npm
 FROM logs-*
 | WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
 | WHERE process.command_line RLIKE ".*bun.* run index\\.js.*" OR (process.name IN ("bun", "bun.exe") AND process.parent.name IN ("node", "node.exe", "npm", "npm.cmd"))
-| STATS count = COUNT(*), first = MIN(@timestamp), cmd = VALUES(process.command_line), parent = VALUES(process.parent.name) BY host.name, user.name
+| STATS count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), cmd = VALUES(process.command_line), parent = VALUES(process.parent.name) BY host.name, user.name
+| SORT first_seen
 
 // egress: exfil domain, its reported address, and the Session file service (expect benign Session use)
 FROM logs-*
 | WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
 | WHERE dns.question.name IN ("t.m-kosche.com", "filev2.getsession.org") OR destination.domain IN ("t.m-kosche.com", "filev2.getsession.org") OR destination.ip == TO_IP("185.95.159.32") OR url.full LIKE "*t.m-kosche.com*" OR url.full LIKE "*filev2.getsession.org*"
-| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY source.ip, host.name
+| EVAL indicator = COALESCE(dns.question.name, url.full, destination.domain, TO_STRING(destination.ip))
+| STATS count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), indicator = VALUES(indicator) BY source.ip, host.name
+| SORT first_seen
 
 // persistence files (EDR / Sysmon file events, FIM)
 FROM logs-*
 | WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
 | WHERE file.name IN ("kitty-monitor.service", "com.user.kitty-monitor.plist", "gh-token-monitor.sh", ".gh_update_state") OR file.path LIKE "*/.local/share/kitty/cat.py" OR file.path LIKE "*/.claude/setup.mjs" OR file.path LIKE "*/.vscode/setup.mjs" OR file.path LIKE "*/.claude/package/index.js" OR file.path LIKE "*/.codex/package/index.js"
-| STATS count = COUNT(*), paths = VALUES(file.path), first = MIN(@timestamp) BY host.name, user.name
+| STATS count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), paths = VALUES(file.path) BY host.name, user.name
+| SORT first_seen
 
 // GitHub audit log: exfil repos, injected branch and workflow (Dune word list is partial; github.* fields per the GitHub integration)
 FROM logs-*
 | WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
 | EVAL repo_name = TO_LOWER(COALESCE(github.repo, ""))
 | WHERE message LIKE "*chore/add-codeql-static-analysis*" OR message LIKE "*Run Copilot*" OR message LIKE "*niagA oG eW ereH*" OR (event.action == "repo.create" AND (repo_name RLIKE ".*/(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[a-z]+-[0-9]{1,3}" OR repo_name RLIKE ".*/[a-z]+-(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[0-9]{1,3}"))
-| STATS count = COUNT(*), first = MIN(@timestamp), actions = VALUES(event.action) BY user.name, repo_name
+| STATS count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), actions = VALUES(event.action) BY user.name, repo_name
+| SORT first_seen
 
 </pre>
     </div>
