@@ -20,7 +20,7 @@ test('deep stories use the deep model, everything else the light model, all item
   const deep = t.stories.filter((s) => s.selected).length;
   assert.equal(calls.filter((c) => c.tier === 'light').length, t.stories.length, 'every item gets a light read first');
   assert.equal(calls.filter((c) => c.tier === 'deep').length, deep, 'then only the selected ones get the deep read');
-  assert.ok(calls.filter((c) => c.tier === 'deep').every((c) => c.model === 'claude-opus-5-5'));
+  assert.ok(calls.filter((c) => c.tier === 'deep').every((c) => c.model === 'claude-sonnet-5-5'), 'the deep tier is Sonnet 5.5 by default since 2026-11-12');
   assert.ok(calls.filter((c) => c.tier === 'light').every((c) => c.model === 'claude-haiku-5-5'));
   // light-read stories fetch only their first link (the rest are kept in case of a deep read)
   for (const s of t.stories.filter((x) => !x.selected)) {

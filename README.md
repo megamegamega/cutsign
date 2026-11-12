@@ -44,7 +44,7 @@ fails the build on anything shaped like an internal identifier.
 ```
 brief email ─ Resend inbound ─┐
 Vercel crons (UTC) ───────────┴─ /api/cron ─ intake ─ driveRuns ─ stages… ─ email + site + Discord ✔/✖
-hourly ──────────────────────────  /api/watch  (story watches: page diffs, KEV, feeds, NVD, GitHub)
+daily 14:30–23:30, ten ticks ───  /api/watch  (story watches: page diffs, KEV, feeds, NVD, GitHub; batch answers; card coverage)
 daily 13:45 ─────────────────────  /api/selfcheck (validates the public contracts the site and cards depend on)
 ```
 
@@ -64,7 +64,16 @@ and the next tick retries from that stage (3 attempts), resuming what was persis
 | normalized → … → sent | email, site, Discord. The `validated` / `queried` stages are seams for the detection-validation companion (see below) |
 
 **Watches.** Each day's deep-read stories become watches (14 days, extended by material changes,
-capped at 30). Hourly checks are free; models run only on a change, reading just the added text. A
+capped at 30). Since 2026-11-12 the watch tick runs as one daily block after the brief has been read
+(ten Vercel crons an hour apart, 14:30–23:30 UTC; it was hourly before, cut to stop paying for
+re-reads through the day). Each watch is read once per block (`WATCH_MIN_INTERVAL_H`, 18): its pages
+and the feeds are fetched in the block's first ticks, and a model runs only on a change, reading just
+the added text. The rest of the block reads no page and assesses nothing: it collects the batched
+answers, runs the free checks (KEV on every tick; NVD status and public PoC repos once a day per
+watch, a few watches per tick, the one checked longest ago first, spaced by `WATCH_SLOW_GAP_MS`) and
+spends what is left of each tick on card coverage. The one model call such a tick can still make is
+the small title check, when a free check has just found something material. What changes overnight
+is found at the next day's block. A
 development that falsifies a title's outcome claim ("no confirmed compromises") retitles the story and
 its watch in place. HIGH events alert immediately; everything appears in the next morning's email under
 "Developments on tracked stories".
@@ -82,7 +91,7 @@ without a hand: a hand-written card's page links the AI re-issue draft the pipel
 something develops after its as-of date, and corrects its KEV row from the live catalog.
 
 **AI drafts, the card loop** (`lib/hype.js`, `lib/carddraft.js`): after each brief is sent, and
-again from the hourly watch tick when something developed, every story thread is scored on what the
+again from the watch tick when something developed, every story thread is scored on what the
 pipeline already knows — priority, deep read, a CISA KEV listing within three days, how many briefs
 the story has run, distinct publishers, a primary source, stated internet-facing exposure, a named
 actor, and 48 h of watch developments. Over `HYPE_NOMINATE` (6) the thread is nominated to Discord
@@ -91,7 +100,7 @@ over `HYPE_SURFACE`, or a P1 on day one (below) — once it has something action
 guidance, a vendor-stated behavior, a fix version, a fresh KEV listing, evidence samples or IoCs);
 a nominee under the bar gets its Discord line and is drafted the sweep it crosses, with everything
 gathered by then (until 2026-11-04 every nominee was drafted, and half the drafts were previews of
-stories that never crossed). The draft is one Opus call, shaped on the DAIR model (Detect, Verify
+stories that never crossed). The draft is one deep-tier call, shaped on the DAIR model (Detect, Verify
 and Triage, the Scope / Contain / Eradicate / Recover loop, Debrief; Joshua Wright, *Dynamic
 Incident Response*).
 Each draft records the facts it holds, as stable keys that only accumulate (a KEV listing, a fix
@@ -185,10 +194,11 @@ list: a plan without the filter gets total 0 rather than an error, so once an ho
 it is a real zero ("Shodan has tagged no banner with this CVE yet"), a zero means the filter is off
 and the CVE rows say so instead of claiming "0 services". The product queries are counted either
 way. A product none of whose queries matched also says whether the text search for its name found
-anything, or that Shodan refused the search. A check made without a key is stale the moment the key exists, and the hourly watch
-tick re-checks stale cards on its own, in a bounded slice before the watches (no scoring, no
-models, the KEV catalog fetched only when a card is actually stale; new cards start for 90 s and
-the rest take the next hour), so no card waits for tomorrow's brief.
+anything, or that Shodan refused the search. A check made without a key is stale the moment the key exists, and the watch
+tick re-checks stale cards on its own, after the watches, in whatever the tick has left (no scoring,
+no models, the KEV catalog fetched only when a card is actually stale; the stalest card first, none
+started after 200 s, the rest take the next tick). With ten ticks a day instead of twenty-four a
+card's check comes round every day or two rather than daily.
 
 **Banner spellings** (`lib/scannernames.js`). NVD names a product as the vendor's catalogue does
 today (Catalyst SD-WAN Manager, VeloCloud Orchestrator under Arista); Shodan's banners print the
@@ -270,8 +280,10 @@ sourcetype, data stream, host, user or email, read-only commands only, and no li
 record does not print. A story whose telemetry is `other` only, or names a single family, gets no
 call: single-source hunts are template territory for the consumer, and the proposer earns its cost
 only where a hunt has to cross families. The proposer runs on
-its own model tier (`LLM_MODEL_PROPOSE`; Claude Opus 5.5 since 2026-11-04 — it ran on Claude Fable
-5.1 before, about $0.90 a day, and Opus was already the fallback) and falls back to the deep tier once
+its own model tier (`LLM_MODEL_PROPOSE`; Claude Sonnet 5.5 since 2026-11-12, when the deep tier
+moved to Sonnet too, at half Opus's price per token. It ran on Claude Opus 5.5 from 2026-11-04 and on
+Claude Fable 5.1 before that, about $0.90 a day; `LLM_MODEL_PROPOSE` and `LLM_MODEL_DEEP` set to
+`claude-opus-5-5` restore Opus) and falls back to the deep tier once
 month-to-date spend passes 80% of `MAX_MONTHLY_USD`, marking the proposal `model_tier: deep`.
 Each proposal records its `model`, so a drop in the lint pass rate after the switch is measurable.
 Proposals appear in the agent JSON as `proposed_queries[]` (tier `proposed`), collapsed in the web
@@ -279,18 +291,22 @@ analyst view, and by name in search results; never in the email or the CISO view
 against any SIEM.
 
 **Batched model calls** (`lib/jobs.js`, `lib/batchmode.js`, table from
-`supabase/migrations/0007_llm_jobs.sql`). Model work that can wait an hour — the proposals above and
+`supabase/migrations/0007_llm_jobs.sql`). Model work that can wait an hour or more — the proposals above and
 the card loop's drafts, revisions and re-issue drafts — goes through the Batches API at half the
 list price (`LLM_BATCH`, default on). The queried stage submits and the brief goes out without
 waiting (its ✔ line says "n proposals pending (batch)"); the card loop submits a draft and leaves
 the thread alone while its answer is in flight, and a day-one draft waits until its story's
-proposals have landed, so its Detect section is still the proposer's hunts. The hourly watch tick
+proposals have landed, so its Detect section is still the proposer's hunts. Every watch tick
 collects first: a proposal is linted onto its story and counted on its run; a card is published,
 re-issued or revised exactly as the live path would have done it, with its coverage check, Discord
-line and mail. Batches usually answer within the hour, so AI cards and proposals land one to two
-hours after the digest instead of minutes. An answer the API cannot give (an error, a refusal, a
-batch still running after six hours — then cancelled) is finished by one live call at the list
-price; an answer nobody waits for any more (the head was dismissed or revised meanwhile) is
+line and mail. Batches usually answer within the hour and are collected by the daily block of ticks:
+proposals land at its first tick (one to two and a half hours after the digest), a day-one AI card
+a tick later, and whatever is submitted by the block's last tick lands the next day. An answer the
+API cannot give (an error, a refusal, a batch still running after six hours — then cancelled) is
+finished by one live call at the list price, except a card draft whose batch failed more than 48
+hours ago: that job is closed and the card loop drafts the story again (batched) if it still clears
+the bar. A tick on which the batch API cannot be reached cancels nothing and asks again. An answer
+nobody waits for any more (the head was dismissed or revised meanwhile) is
 abandoned. Each job records its outcome and cost. With the table missing the same calls run live,
 so the code deploys before the migration. The deep and light reads of the brief itself stay live:
 batching them would hold the morning email.

@@ -119,14 +119,14 @@ export function installFakeLLM(responder) {
  * Records every submission and cancellation.
  */
 export function installFakeBatch(responder) {
-  const fake = { ready: true, fail: null, submitted: [], cancelled: [], batches: new Map() };
+  const fake = { ready: true, fail: null, down: false, submitted: [], cancelled: [], batches: new Map() };
   _setBatchAPI({
     async create({ requests }) {
       const id = `msgbatch_${fake.batches.size + 1}`;
       fake.batches.set(id, requests[0]); fake.submitted.push({ id, ...requests[0] });
       return { id, processing_status: 'in_progress' };
     },
-    async retrieve(id) { return { id, processing_status: fake.ready ? 'ended' : 'in_progress' }; },
+    async retrieve(id) { if (fake.down) throw new Error('fetch failed'); return { id, processing_status: fake.ready ? 'ended' : 'in_progress' }; },
     async results(id) {
       const req = fake.batches.get(id);
       const result = fake.fail

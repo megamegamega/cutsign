@@ -54,7 +54,7 @@ test('a ConnectWise-shaped story yields a lint-clean correlation with two stages
   assert.match(input, /\[behaviors\[1\]\]/); assert.match(input, /<vocabulary>/); assert.match(input, /<story_telemetry>entra_signin, m365_ual<\/story_telemetry>/);
   const calls = installFakeLLM(() => PROPOSAL());
   const r = await generateQueries({ ...CW, spent: 1, cap: 25 });
-  assert.equal(calls.length, 1); assert.equal(calls[0].tier, 'propose'); assert.equal(calls[0].schemaName, 'proposal'); assert.equal(calls[0].model, 'claude-opus-5-5', 'the proposer runs on Opus 5.5 since 2026-11-04 (Fable 5.1 by LLM_MODEL_PROPOSE)');
+  assert.equal(calls.length, 1); assert.equal(calls[0].tier, 'propose'); assert.equal(calls[0].schemaName, 'proposal'); assert.equal(calls[0].model, 'claude-sonnet-5-5', 'the proposer runs on Sonnet 5.5 since 2026-11-12 (Opus 5.5 or Fable 5.1 by LLM_MODEL_PROPOSE)');
   assert.equal(r.model_tier, 'propose'); assert.equal(r.dropped.length, 0, JSON.stringify(r.dropped));
   const corr = r.proposals.filter((p) => p.shape === 'correlation');
   assert.equal(corr.length, 1); assert.equal(corr[0].stages.length, 2); assert.deepEqual(corr[0].join, { on: 'appId', window: '1h' });
@@ -89,7 +89,7 @@ test('finishProposals drops what the rules forbid and lists the reason', () => {
 test('at or past 80% of the monthly cap the proposer runs on the deep tier and says so', async () => {
   const calls = installFakeLLM(() => PROPOSAL());
   const r = await generateQueries({ ...CW, spent: 8, cap: 10 });
-  assert.equal(calls[0].tier, 'deep'); assert.equal(calls[0].model, 'claude-opus-5-5');
+  assert.equal(calls[0].tier, 'deep'); assert.equal(calls[0].model, 'claude-sonnet-5-5');
   assert.equal(r.model_tier, 'deep'); assert.equal(r.proposals[0].model_tier, 'deep');
   const r2 = await generateQueries({ ...CW, spent: 7.9, cap: 10 });
   assert.equal(r2.model_tier, 'propose');
@@ -214,7 +214,7 @@ test('stage queried, batched: the proposal is submitted at half price, the brief
   assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 0, 'no live proposer call');
   assert.equal(proposalJobs(store).length, 1); assert.equal(proposalJobs(store)[0].status, 'pending'); assert.equal(proposalJobs(store)[0].run_id, run.id);
   const p = fake.submitted.find((s) => s.custom_id.startsWith('proposal')).params;
-  assert.equal(p.model, 'claude-opus-5-5'); assert.equal(p.output_config.effort, 'high'); assert.ok(p.output_config.format);
+  assert.equal(p.model, 'claude-sonnet-5-5'); assert.equal(p.output_config.effort, 'high'); assert.ok(p.output_config.format);
   assert.equal(p.system[0].cache_control.type, 'ephemeral'); assert.ok(!('fallbacks' in p) && !('betas' in p));
   assert.equal(run.counts.proposals_pending, 1); assert.equal(run.counts.proposals, 0);
   const line = out.discord.find((l) => l.startsWith('Cutsign ✔'));
@@ -229,13 +229,13 @@ test('stage queried, batched: the proposal is submitted at half price, the brief
   const c2 = await collectJobs(store, {});
   assert.equal(c2.landed >= 1, true, JSON.stringify(c2)); assert.deepEqual(c2.runs, [run.id]);
   const ns2 = nsOf(store);
-  assert.equal(ns2.raw_iocs.proposed_queries.length, 1); assert.equal(ns2.raw_iocs.proposed_queries[0].tier, 'proposed'); assert.equal(ns2.raw_iocs.proposed_queries[0].model, 'claude-opus-5-5');
+  assert.equal(ns2.raw_iocs.proposed_queries.length, 1); assert.equal(ns2.raw_iocs.proposed_queries[0].tier, 'proposed'); assert.equal(ns2.raw_iocs.proposed_queries[0].model, 'claude-sonnet-5-5');
   assert.ok(!ns2.raw_iocs.proposals.pending); assert.equal(ns2.raw_iocs.proposals.batched, true); assert.ok(ns2.raw_iocs.proposals.finished_at);
   const run2 = await store.getRun(run.id);
   assert.equal(run2.counts.calls_propose, 1); assert.equal(run2.counts.proposals, 1); assert.equal(run2.counts.proposals_pending, 0);
-  assert.ok(Math.abs(run2.counts.cost_propose - 0.007) < 1e-9, `half of the live $0.014, got ${run2.counts.cost_propose}`);
-  assert.ok(Math.abs(Number(run2.cost_usd) - costBefore - 0.007) < 1e-9, `run cost ${costBefore} → ${run2.cost_usd}`);
-  assert.equal(proposalJobs(store)[0].status, 'done'); assert.equal(proposalJobs(store)[0].cost_usd, 0.007);
+  assert.ok(Math.abs(run2.counts.cost_propose - 0.0035) < 1e-9, `half of Sonnet's live $0.007, got ${run2.counts.cost_propose}`);
+  assert.ok(Math.abs(Number(run2.cost_usd) - costBefore - 0.0035) < 1e-9, `run cost ${costBefore} → ${run2.cost_usd}`);
+  assert.equal(proposalJobs(store)[0].status, 'done'); assert.equal(proposalJobs(store)[0].cost_usd, 0.0035);
   assert.equal(calls.filter((c) => c.schemaName === 'proposal').length, 0, 'still no live call');
   // a resumed stage finds the work done; nothing is collected twice
   await store.updateRun(run.id, { stage: 'validated' });

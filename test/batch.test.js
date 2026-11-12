@@ -36,6 +36,10 @@ test('batch: collecting maps a running batch, a succeeded answer, an error, an e
   const got = await collectStructured(job);
   assert.equal(got.status, 'ok'); assert.deepEqual(got.data, { a: 'b' }); assert.equal(got.model, 'claude-opus-5-5');
   assert.equal(costOf('claude-opus-5-5', { input_tokens: 1000, output_tokens: 500 }), 0.014);
+  // an id the price table does not carry is priced as its family, not as Opus
+  assert.equal(costOf('claude-sonnet-5-5-20261001', { input_tokens: 1000, output_tokens: 500 }), costOf('claude-sonnet-5-5', { input_tokens: 1000, output_tokens: 500 }));
+  assert.equal(costOf('claude-haiku-5-5-latest', { input_tokens: 1000, output_tokens: 500 }), costOf('claude-haiku-5-5', { input_tokens: 1000, output_tokens: 500 }));
+  assert.equal(costOf('some-other-model', { input_tokens: 1000, output_tokens: 500 }), 0.014, 'an unknown family is priced at the Opus row');
   assert.equal(got.cost, 0.007, 'half of the live price');
   out = [{ custom_id: 'c', result: { type: 'errored', error: { type: 'invalid_request', message: 'The compiled grammar is too large' } } }];
   assert.deepEqual(await collectStructured(job), { status: 'failed', error: 'invalid_request: The compiled grammar is too large' });

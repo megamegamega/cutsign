@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   const source = process.env.INBOUND_SOURCE === 'gmail' ? 'gmail' : 'resend';
   const missing = [...BASE, ...BY_SOURCE[source]].filter((k) => !process.env[k]);
   const tables = {};
-  let lastWatchTick = null; // when the hourly tick last touched a watch: the one liveness signal readable without logs
+  let lastWatchTick = null; // when the watch tick last read a watch (once a day since 2026-11-12): the one liveness signal readable without logs
   let lastMail = null;
   try {
     const { createClient } = await import('@supabase/supabase-js');

@@ -265,3 +265,178 @@ test('watchMatchesStory / normUrl / dedupeEvents: the same story row or a shared
   const h = dedupeEvents([mk(1, { assessment: { text_hash: 'h1' } }), mk(2, { assessment: { text_hash: 'h1' } }), mk(3, { assessment: { text_hash: 'h2' } })]);
   assert.deepEqual(h.map((e) => e.id).sort(), ['e2', 'e3'], 'with hashes, two different changes to one page both stay');
 });
+
+// ---- once a day (2026-11-12): the tick runs as a daily block; a watch is read once per block ----
+
+const DAY_GATE = 18 * 3600_000;
+
+test('once a day: a watch read inside the interval is not read again and reaches no model; a day later the same change is assessed', async () => {
+  const llm = { next: () => assessment() };
+  const { store, calls } = await setup(llm);
+  const w = world();
+  const row = store._tables.watches[0];
+  // an update mail can stamp a watch before its first read: it has no baseline yet, so it is still due
+  row.last_checked_at = new Date().toISOString();
+  const c0 = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE }); // baseline
+  assert.equal(c0.checked, 1); assert.equal(c0.fresh, 0);
+  assert.ok(row.state.seeded && row.state.pages[ADVISORY], 'the baseline is taken');
+  const checkedAt = row.last_checked_at;
+  assert.ok(checkedAt && row.state.read_at === checkedAt, 'the baseline pass starts the daily clock');
+  w.advisory = w.advisory.replace('No file hashes were recovered.', 'Update Oct 22: the actor now also beacons to second-c2[.]net.');
+  w.feed.push({ title: 'CVE-2026-88779 exploited again', link: 'https://news.fixture.test/a', summary: 'New wave against NetScaler CVE-2026-88779.' });
+  const fetched = [];
+  const c = await runWatchTick(store, { fetchImpl: (u, o) => { fetched.push(String(u)); return w.fetch(u, o); }, minIntervalMs: DAY_GATE });
+  assert.equal(c.fresh, 1); assert.equal(c.checked, 0); assert.equal(c.events, 0); assert.equal(c.llm_calls, 0);
+  assert.equal(calls.filter((x) => x.schemaName === 'watch_assessment').length, 0, 'nothing is sent to a model');
+  assert.ok(!fetched.includes(ADVISORY), 'the page is not fetched again');
+  assert.ok(!fetched.some((u) => /bleepingcomputer/.test(u)), 'with no watch due, no feed is fetched');
+  assert.equal(row.last_checked_at, checkedAt, 'the daily clock is untouched');
+  // the next day's block: the change made yesterday is still found, once
+  // a reader's update mail stamps last_checked_at; that is not a read and does not reset the clock
+  row.state.read_at = new Date(Date.now() - DAY_GATE - 60_000).toISOString();
+  row.last_checked_at = new Date().toISOString();
+  const c2 = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  assert.equal(c2.checked, 1); assert.equal(c2.fresh, 0);
+  assert.ok(c2.llm_calls >= 1);
+  assert.ok(store._tables.watch_events.some((e) => e.kind === 'page_changed'), 'yesterday\'s edit is assessed today');
+  assert.ok(store._tables.watch_events.some((e) => e.kind === 'new_source'), 'and so is the write-up');
+  // a watch from before the gate has no read_at: its last check counts as its read
+  delete row.state.read_at; row.last_checked_at = new Date().toISOString();
+  const c3 = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  assert.equal(c3.fresh, 1); assert.equal(c3.checked, 0);
+});
+
+test('once a day: a fresh watch still gets the checks that reach no model: a KEV listing alerts, a PoC repo is recorded, the daily clock stays', async () => {
+  const llm = { next: () => assessment() };
+  const { store, calls, out } = await setup(llm);
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  const row = store._tables.watches[0];
+  const checkedAt = row.last_checked_at;
+  row.created_at = new Date(Date.now() - 3600_000).toISOString(); // the watch is older than this test's few milliseconds
+  w.kev.push('CVE-2026-88779');
+  w.repos.push({ full_name: 'someone/CVE-2026-88779-poc', html_url: 'https://github.com/someone/CVE-2026-88779-poc', description: 'poc', stargazers_count: 3 });
+  row.state.slow_at = Date.now() - 7 * 3600_000; // 6 h is the cadence without the gate; with it, once a day
+  const early = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  assert.ok(!store._tables.watch_events.some((e) => e.kind === 'poc_repo'), 'GitHub is not asked again inside the day');
+  assert.ok(early.events >= 1, 'KEV is, on every tick');
+  row.state.slow_at = Date.now() - DAY_GATE - 60_000;
+  const c = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  assert.equal(c.fresh, 1); assert.equal(c.checked, 0);
+  const ev = store._tables.watch_events;
+  assert.ok(ev.some((e) => e.kind === 'kev_added' && e.level === 'HIGH'), 'KEV is deterministic and free');
+  assert.ok(ev.some((e) => e.kind === 'poc_repo'), 'so are NVD and GitHub');
+  assert.equal(calls.filter((x) => x.schemaName === 'watch_assessment').length, 0);
+  assert.equal(calls.filter((x) => x.schemaName === 'title_check').length, 1, 'the KEV listing gets its one title check (Haiku), the only model call a fresh watch makes');
+  assert.ok(out.discord.some((l) => l.startsWith('Cutsign ⚡')), 'the HIGH event still alerts at once');
+  assert.equal(row.last_checked_at, checkedAt, 'free checks do not move the daily clock');
+  assert.ok(row.state.kev.includes('CVE-2026-88779') && row.state.repos.includes('someone/CVE-2026-88779-poc'), 'what was learned is saved');
+  // and it is said once: the next fresh tick has nothing new
+  const c2 = await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  assert.equal(c2.events, 0);
+});
+
+test('slow checks are spaced: a fresh watch waits for the gap; a watch being read does not wait, its turn comes later', async () => {
+  const llm = { next: () => assessment() };
+  const { store } = await setup(llm);
+  const first = store._tables.watches[0];
+  store._tables.watches.push({ ...structuredClone(first), id: 'w-second', story_id: null, title: 'Second thing', urls: [], cves: ['CVE-2026-1'], terms: [], state: {} });
+  const w = world();
+  w.repos.push({ full_name: 'old/CVE-2026-1-poc', html_url: 'https://github.com/old/CVE-2026-1-poc', description: 'was there before the watch', stargazers_count: 80 });
+  const at = [];
+  const fetchImpl = (u, o) => { if (String(u).includes('services.nvd.nist.gov')) at.push(Date.now()); return w.fetch(u, o); };
+  // both due: the first asks NVD, the second is inside the gap and is neither asked nor made to wait
+  const t0 = Date.now();
+  await runWatchTick(store, { fetchImpl, minIntervalMs: DAY_GATE, slowGapMs: 60_000 });
+  assert.equal(at.length, 1, 'the read of a due watch is never held up');
+  assert.ok(Date.now() - t0 < 5000);
+  const skipped = store._tables.watches.find((x) => !x.state.slow_at);
+  assert.ok(skipped, 'the watch that was not asked keeps its slow check owed');
+  // the next tick of the block: both are fresh; the owed check runs first, and the other waits for the gap
+  const asked = store._tables.watches.find((x) => x.state.slow_at);
+  asked.state.slow_at = Date.now() - DAY_GATE - 60_000;
+  at.length = 0;
+  const cves = (x) => Math.min(3, x.cves.length);
+  const c = await runWatchTick(store, { fetchImpl, minIntervalMs: DAY_GATE, slowGapMs: 120 });
+  assert.equal(at.length, cves(asked) + cves(skipped), 'one NVD question per CVE');
+  assert.ok(at.every((t, i) => i === 0 || t - at[i - 1] >= 100), `every question waited for the one before (${at.map((t) => t - at[0])})`);
+  assert.equal(c.events, 0, 'a watch\'s first slow check is a baseline: the repos that already existed are not news');
+  assert.ok(skipped.state.repos.includes('old/CVE-2026-1-poc'));
+  // a repo that appears afterwards is news for both
+  w.repos.push({ full_name: 'new/CVE-2026-1-poc', html_url: 'https://github.com/new/CVE-2026-1-poc', description: 'new', stargazers_count: 1 });
+  for (const x of store._tables.watches) x.state.slow_at = Date.now() - DAY_GATE - 60_000;
+  await runWatchTick(store, { fetchImpl, minIntervalMs: DAY_GATE, slowGapMs: 1 });
+  const pocs = store._tables.watch_events.filter((e) => e.kind === 'poc_repo');
+  assert.equal(pocs.length, 2); assert.ok(pocs.every((e) => /new\/CVE-2026-1-poc/.test(e.summary)));
+});
+
+test('slow checks rotate: with fewer slots than watches, the watch checked longest ago goes first; a watch without CVEs takes no slot', async () => {
+  const llm = { next: () => assessment() };
+  const { store } = await setup(llm);
+  const first = store._tables.watches[0];
+  const mk = (id, cves) => ({ ...structuredClone(first), id, story_id: null, title: id, urls: [], cves, terms: [], state: {} });
+  store._tables.watches.push(mk('w-b', ['CVE-2026-2']), mk('w-c', ['CVE-2026-3']), mk('w-none', []));
+  const w = world();
+  process.env.WATCH_SLOW_PER_TICK = '1';
+  try {
+    await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE }); // all read; one slow slot used
+    const rows = store._tables.watches;
+    assert.ok(rows.every((x) => x.state.seeded));
+    const old = Date.now() - DAY_GATE - 3600_000;
+    rows.find((x) => x.id === first.id).state.slow_at = old + 3000;
+    rows.find((x) => x.id === 'w-b').state.slow_at = old + 2000;
+    rows.find((x) => x.id === 'w-c').state.slow_at = old + 1000;
+    delete rows.find((x) => x.id === 'w-none').state.slow_at;
+    const order = [];
+    for (let i = 0; i < 3; i++) {
+      const before = new Map(rows.map((x) => [x.id, x.state.slow_at]));
+      await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+      order.push(...rows.filter((x) => x.state.slow_at !== before.get(x.id)).map((x) => x.id));
+    }
+    assert.deepEqual(order, ['w-c', 'w-b', first.id], 'one per tick, oldest check first');
+    assert.equal(rows.find((x) => x.id === 'w-none').state.slow_at, undefined, 'nothing to ask, no slot taken');
+  } finally { delete process.env.WATCH_SLOW_PER_TICK; }
+});
+
+test('once a day: in a mixed tick the due watch is read and the fresh one is not, even when a feed item names both', async () => {
+  const llm = { next: () => assessment() };
+  const { store, calls } = await setup(llm);
+  const first = store._tables.watches[0];
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE }); // the first watch is read today
+  // a second watch on the same CVE, seeded yesterday and due today
+  store._tables.watches.push({ ...structuredClone(first), id: 'w-due', story_id: null, title: 'Same CVE, other story', urls: [], terms: [],
+    state: { seeded: true, read_at: new Date(Date.now() - DAY_GATE - 60_000).toISOString(), slow_at: Date.now() }, last_checked_at: new Date(Date.now() - DAY_GATE - 60_000).toISOString() });
+  first.state.slow_at = Date.now();
+  w.feed.push({ title: 'CVE-2026-88779 exploited again', link: 'https://news.fixture.test/b', summary: 'New wave against NetScaler CVE-2026-88779.' });
+  w.advisory = w.advisory.replace('No file hashes were recovered.', 'Update: the actor now also beacons to second-c2[.]net.');
+  const fetched = [];
+  const c = await runWatchTick(store, { fetchImpl: (u, o) => { fetched.push(String(u)); return w.fetch(u, o); }, minIntervalMs: DAY_GATE });
+  assert.equal(c.checked, 1); assert.equal(c.fresh, 1);
+  assert.ok(fetched.some((u) => /bleepingcomputer/.test(u)), 'a watch is due, so the feeds are read');
+  assert.ok(!fetched.includes(ADVISORY), 'the fresh watch\'s page is not fetched');
+  const ev = store._tables.watch_events;
+  assert.ok(ev.some((e) => e.watch_id === 'w-due' && e.kind === 'new_source'), 'the due watch gets the write-up');
+  assert.ok(!ev.some((e) => e.watch_id === first.id), 'the fresh watch gets nothing until its own read tomorrow');
+  assert.equal(calls.filter((x) => x.schemaName === 'watch_assessment').length, 1, 'one assessment, for the due watch');
+  assert.ok(!first.state.news.includes('https://news.fixture.test/b'), 'the item is not marked seen for the fresh watch, so tomorrow\'s read still finds it');
+});
+
+test('schedule: the watch ticks are one daily block after the brief polls; the tick is asked for the daily gate', async () => {
+  const { readFileSync } = await import('node:fs');
+  const crons = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')).crons;
+  const hour = (c) => Number(c.schedule.split(' ')[1]);
+  const brief = crons.filter((c) => c.path.startsWith('/api/cron'));
+  const watch = crons.filter((c) => c.path.startsWith('/api/watch'));
+  assert.ok(brief.length >= 4, 'the brief is still polled across its arrival window');
+  const firstReads = Math.max(...brief.filter((c) => !/tick=pm/.test(c.path)).map(hour));
+  assert.ok(watch.length >= 4 && watch.length <= 12, `a block, not an hourly tick (${watch.length})`);
+  // Hobby crons fire anywhere inside their hour, so the first tick's hour comes after the last morning poll's
+  assert.ok(Math.min(...watch.map(hour)) > firstReads, 'no watch tick before the brief has been read');
+  const hours = watch.map(hour).sort((a, b) => a - b);
+  assert.ok(hours.every((h, i) => i === 0 || h === hours[i - 1] + 1), 'contiguous: batched answers are collected an hour apart');
+  assert.ok(hours.at(-1) - hours[0] < 18, 'the block is shorter than the 18 h gate, so each watch is read once per block');
+  const handler = readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8');
+  assert.match(handler, /runWatchTick\(store, \{[^}]*minIntervalMs: WATCH_EVERY_MS\(\)/);
+  assert.match(handler, /num\('WATCH_MIN_INTERVAL_H', 18\)/);
+});

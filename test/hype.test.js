@@ -627,6 +627,23 @@ test('coverage: the hourly tick re-checks stale cards on its own, fetches KEV on
   assert.equal(net.calls.length, before, 'a quiet hour fetches nothing');
 });
 
+test('coverage: stale cards are checked stalest first, whatever order they are listed in', async (t) => {
+  t.after(off);
+  const { store } = await published();
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const mk = (n, checked_at) => store.insertCardDraft({ story_id: uuid(n), thread_ids: [uuid(n)], title: `Card ${n}`, score: 10, reasons: [], draft: { ...DRAFT, cves: [`CVE-2026-${n}`], ...(checked_at ? { coverage: { checked_at, lanes: [], exposure: null } } : {}) }, version: 1, status: 'promoted', promoted_slug: `card-${n}-2026`, surfaced_at: '2026-10-20T12:00:00Z' });
+  const recent = await mk(31, '2026-10-27T12:00:00Z');
+  const never = await mk(32, null);
+  const oldest = await mk(33, '2026-10-22T12:00:00Z');
+  const fresh = await mk(34, '2026-10-28T12:00:00Z');
+  const order = [];
+  const update = store.updateCardDraft.bind(store);
+  store.updateCardDraft = async (id, patch) => { if (patch.draft?.coverage) order.push(id); return update(id, patch); };
+  const c = await coverageOnlySweep(store, { fetchImpl: routed({}), now });
+  assert.equal(c.errors, 0, JSON.stringify(c));
+  assert.deepEqual(order.filter((id) => [recent.id, never.id, oldest.id, fresh.id].includes(id)), [never.id, oldest.id, recent.id], 'never checked, then the oldest check; a fresh one is left alone');
+});
+
 // Revisions for new facts only (2026-11-01: one AI card was re-drafted 27 times overnight, the
 // hourly tick sweeping two briefs that each carried a copy of its story with different counts).
 const DAY = 86_400_000;
@@ -842,12 +859,12 @@ test('batched: a draft is submitted once and finished by the collector — publi
   const [row] = await store.listCardDrafts();
   assert.equal(row.status, 'promoted'); assert.equal(row.promoted_slug, 'vendor-appliance-zero-day-exploited-2026'); assert.equal(row.version, 1);
   assert.equal(row.draft.coverage.lanes.find((l) => l.id === 'cloudflare_waf').status, 'published');
-  assert.equal(row.cost_usd, 0.007, 'half of the live $0.014');
+  assert.equal(row.cost_usd, 0.0035, "half of Sonnet's live $0.007");
   assert.deepEqual(JSON.parse(row.fingerprint).facts, ['kev:CVE-2026-1']);
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ▣ AI verdict card published') && l.includes('coverage:')), out.discord.join('\n'));
   assert.equal(out.emails.filter((m) => /AI verdict card published/.test(m.subject)).length, 1);
   assert.equal((await store.getStory(hot.id)).raw_iocs.hype.draft_id, row.id);
-  assert.equal(store._tables.llm_jobs[0].status, 'done'); assert.equal(store._tables.llm_jobs[0].cost_usd, 0.007); assert.equal(calls.length, 0);
+  assert.equal(store._tables.llm_jobs[0].status, 'done'); assert.equal(store._tables.llm_jobs[0].cost_usd, 0.0035); assert.equal(calls.length, 0);
   // nothing new: nothing submitted. A vendor-stated behavior: a revision submitted at low effort, landing as v2 in place
   const c3 = await hypeSweep(store, { run, fetchImpl: net, now: now + 3 * 3600_000 });
   assert.equal(c3.submitted + c3.revised + c3.drafted, 0, JSON.stringify(c3));
@@ -911,6 +928,52 @@ test('batched: an answer the API could not give is finished by one live call; an
   v.store.listJobs = async () => { throw new Error('relation "llm_jobs" does not exist'); };
   const cv = await hypeSweep(v.store, { run: v.run, fetchImpl: v.kevFetch, now });
   assert.equal(cv.drafted, 1, JSON.stringify(cv)); assert.equal(cv.submitted, 0); assert.equal(v.calls.length, 1);
+});
+
+test('batched: a failed card draft gets its live call inside the tick\'s own deadline; one that failed two days ago is closed without a call; a retrieve that throws cancels nothing', async (t) => {
+  const { readFileSync } = await import('node:fs');
+  const { store, run, kevFetch, calls } = await batched(t);
+  const fake = installFakeBatch(() => DRAFT);
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  fake.fail = 'invalid_request: The compiled grammar is too large';
+  // without the room a live card draft needs (150 s) the job waits for a later tick
+  const j0 = await collectJobs(store, { fetchImpl: kevFetch, now: now + 3600_000, deadline: Date.now() + 149_000 });
+  assert.equal(j0.pending, 1, JSON.stringify(j0)); assert.equal(calls.length, 0);
+  // the deadline the tick passes (api/watch.js) has that room: it once equalled it, and the call never started
+  const m = readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8').match(/collectJobs\(store, \{ deadline: started \+ ([\d_]+) \}\)/);
+  assert.ok(m, 'the tick passes collectJobs a deadline');
+  const j = await collectJobs(store, { fetchImpl: kevFetch, now: now + 3600_000, deadline: Date.now() + Number(m[1].replace(/_/g, '')) });
+  assert.equal(j.live, 1, JSON.stringify(j)); assert.equal(calls.length, 1);
+  assert.equal((await store.listCardDrafts())[0].status, 'promoted');
+  // a batch that failed two days ago: closed, no model call, nothing published
+  const w = await world();
+  const fake2 = installFakeBatch(() => DRAFT);
+  await hypeSweep(w.store, { run: w.run, fetchImpl: w.kevFetch, now });
+  fake2.fail = 'api_error: Overloaded';
+  const j2 = await collectJobs(w.store, { fetchImpl: w.kevFetch, now: Date.now() + 49 * 3600_000 });
+  assert.equal(j2.failed, 1, JSON.stringify(j2)); assert.equal(j2.live, 0); assert.equal(w.calls.length, 0, 'no live call at list price');
+  assert.equal(w.store._tables.llm_jobs[0].status, 'failed'); assert.match(w.store._tables.llm_jobs[0].outcome, /too old for a live rerun/);
+  assert.equal((await w.store.listCardDrafts()).length, 0);
+  assert.equal((await collectJobs(w.store, { fetchImpl: w.kevFetch, now: Date.now() + 50 * 3600_000 })).checked, 0, 'and it is not asked about again');
+  // the batch API unreachable for a tick, seven hours in: nothing is cancelled or rerun; the answer is collected when it answers
+  const v = await world();
+  const fake3 = installFakeBatch(() => DRAFT);
+  await hypeSweep(v.store, { run: v.run, fetchImpl: v.kevFetch, now });
+  fake3.down = true;
+  const j3 = await collectJobs(v.store, { fetchImpl: v.kevFetch, now: Date.now() + 7 * 3600_000 });
+  assert.equal(j3.pending, 1, JSON.stringify(j3)); assert.deepEqual(fake3.cancelled, []); assert.equal(v.calls.length, 0);
+  fake3.down = false;
+  const j4 = await collectJobs(v.store, { fetchImpl: v.kevFetch, now: Date.now() + 8 * 3600_000 });
+  assert.equal(j4.landed, 1, JSON.stringify(j4)); assert.equal(j4.live, 0); assert.equal(v.calls.length, 0, 'collected at the batch price');
+  // unreachable for more than two days: the batch is taken for gone and the job closed, so the story's card is not held back for ever
+  const u = await world();
+  const fake4 = installFakeBatch(() => DRAFT);
+  await hypeSweep(u.store, { run: u.run, fetchImpl: u.kevFetch, now });
+  fake4.down = true;
+  const j5 = await collectJobs(u.store, { fetchImpl: u.kevFetch, now: Date.now() + 49 * 3600_000 });
+  assert.equal(j5.failed, 1, JSON.stringify(j5)); assert.equal(j5.pending, 0); assert.equal(u.calls.length, 0);
+  assert.match(u.store._tables.llm_jobs[0].outcome, /could not be read: fetch failed.*too old for a live rerun/);
 });
 
 test('batched: a hand-written card\'s re-issue draft goes through the batch too and lands as the surfaced draft its page links', async (t) => {

@@ -1,5 +1,9 @@
-// Hourly story-watch tick (24 daily Vercel crons, one per hour — Hobby allows daily jobs only, 100 of them).
-// Re-checks watched stories' pages, KEV, NVD, GitHub and feeds; models run only when something changed.
+// Story-watch tick. Since 2026-11-12 it runs as one daily block after the brief has been read (ten
+// Vercel crons, 14:30-23:30 UTC, vercel.json; it was hourly before). The first tick or two read every
+// watch once (pages, feeds, and a model only where something changed); the later ticks collect the
+// batched model answers, finish the free checks (KEV, NVD, GitHub) and refresh card coverage.
+// Order inside a tick: batched answers, the inbox, the watches, the card loop, then card coverage
+// with what is left of the tick.
 //   GET /api/watch?h=NN   Authorization: Bearer $CRON_SECRET
 
 import { supabaseStore } from '../lib/db.js';
@@ -12,6 +16,12 @@ import { applyUpdate } from '../lib/update.js';
 import { collectJobs } from '../lib/jobs.js';
 
 export const config = { maxDuration: 300 };
+
+const num = (k, d) => { const v = process.env[k]; return v === undefined || v === '' || !Number.isFinite(Number(v)) ? d : Number(v); };
+// A watch is read once per daily block: 18 h is longer than the block and shorter than the gap between
+// two blocks' ends, so a watch read at any point today is due again at some tick tomorrow.
+const WATCH_EVERY_MS = () => num('WATCH_MIN_INTERVAL_H', 18) * 3_600_000;
+const SLOW_GAP_MS = () => num('WATCH_SLOW_GAP_MS', 7000);
 
 export default async function handler(req, res) {
   if (!authorized(req)) { res.statusCode = 401; return res.json({ ok: false }); }
@@ -29,10 +39,12 @@ export default async function handler(req, res) {
     }
     const started = Date.now();
     // Batched model answers first (lib/jobs.js): the hunt proposals and card drafts submitted earlier at
-    // half price land here — a proposal onto its story, a card published with its coverage check and mail
+    // half price land here — a proposal onto its story, a card published with its coverage check and mail.
+    // The deadline leaves room for one live rerun of a failed card draft (150 s, LIVE_RESERVE_MS): at
+    // 150 s it could never start, and the failed job held its story's card back for good.
     let jobs = {};
-    try { jobs = await collectJobs(store, { deadline: started + 150_000 }); } catch (e) { jobs = { error: String(e?.message || e).slice(0, 160) }; }
-    // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the hourly
+    try { jobs = await collectJobs(store, { deadline: started + 170_000 }); } catch (e) { jobs = { error: String(e?.message || e).slice(0, 160) }; }
+    // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the watch
     // tick polls the inbox too and reads them first (a brief found here waits for the cron, as before)
     let updates = {};
     try {
@@ -40,16 +52,11 @@ export default async function handler(req, res) {
       for (const u of rec.updates || []) await applyUpdate(store, u);
       updates = { mails: rec.seen, applied: (rec.updates || []).length };
     } catch (e) { updates = { error: String(e?.message || e).slice(0, 160) }; await postDiscord(`Cutsign ✖ inbox poll on the watch tick failed: ${updates.error}`); }
-    // First, any card whose coverage went stale (daily, or the moment a Shodan key appears) is
-    // re-checked, in a bounded slice: new cards start for 90 s, a check runs about a minute, so the
-    // watches below keep at least two minutes. The watch loop runs to its own deadline whenever
-    // there are watches, so the sweep cannot come after it; a quiet hour costs it one DB read.
-    const coverage = await coverageOnlySweep(store, { deadline: started + 90_000 });
     // every CVE story of the last 30 days has a watch: what an older rule skipped (quick reads) is opened
     // here without anyone finding it; nothing is extended, so watches still expire on their own
     const opened = { watches_created: 0 };
     try { for (const run of await store.listRecentSentRuns(30)) opened.watches_created += (await ensureWatches(store, run, { extend: false })).watches_created; } catch (e) { opened.error = String(e?.message || e).slice(0, 160); }
-    const counts = await runWatchTick(store, { deadline: started + 270_000 });
+    const counts = await runWatchTick(store, { deadline: started + 270_000, minIntervalMs: WATCH_EVERY_MS(), slowGapMs: SLOW_GAP_MS() });
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
     // something developed: re-score the latest brief's stories, since a KEV listing or a material
     // change during the day can push one over the card bar (lib/hype.js); never fails the tick
@@ -76,9 +83,15 @@ export default async function handler(req, res) {
         hype.runs = runs.length;
       } catch (e) { hype = { hype_error: String(e?.message || e).slice(0, 200) }; }
     }
+    // Card coverage last (it ran first while the tick was hourly and every watch was always due): the
+    // watches and their re-reads get the full tick, and a tick with no watch due — most of the block —
+    // leaves coverage a couple of minutes. Cards whose check is stale are taken stalest first; none
+    // starts after 200 s (a check runs about a minute, the function ends at 300 s). On a tick that ran
+    // long the sweep only lists what is stale (a few DB reads) and defers it all.
+    const coverage = await coverageOnlySweep(store, { deadline: started + 200_000 });
     return res.json({ ok: true, ...counts, jobs, updates, opened, coverage, hype });
   } catch (e) {
-    // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting hourly
+    // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting on every tick
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
       return res.json({ ok: true, skipped: 'watches tables missing — apply supabase/migrations/0002_watches.sql' });
     }

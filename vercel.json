@@ -51,62 +51,6 @@
       "schedule": "0 17 * * *"
     },
     {
-      "path": "/api/watch?h=00",
-      "schedule": "30 0 * * *"
-    },
-    {
-      "path": "/api/watch?h=01",
-      "schedule": "30 1 * * *"
-    },
-    {
-      "path": "/api/watch?h=02",
-      "schedule": "30 2 * * *"
-    },
-    {
-      "path": "/api/watch?h=03",
-      "schedule": "30 3 * * *"
-    },
-    {
-      "path": "/api/watch?h=04",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/watch?h=05",
-      "schedule": "30 5 * * *"
-    },
-    {
-      "path": "/api/watch?h=06",
-      "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/watch?h=07",
-      "schedule": "30 7 * * *"
-    },
-    {
-      "path": "/api/watch?h=08",
-      "schedule": "30 8 * * *"
-    },
-    {
-      "path": "/api/watch?h=09",
-      "schedule": "30 9 * * *"
-    },
-    {
-      "path": "/api/watch?h=10",
-      "schedule": "30 10 * * *"
-    },
-    {
-      "path": "/api/watch?h=11",
-      "schedule": "30 11 * * *"
-    },
-    {
-      "path": "/api/watch?h=12",
-      "schedule": "30 12 * * *"
-    },
-    {
-      "path": "/api/watch?h=13",
-      "schedule": "30 13 * * *"
-    },
-    {
       "path": "/api/watch?h=14",
       "schedule": "30 14 * * *"
     },
