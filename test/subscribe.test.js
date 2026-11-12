@@ -93,17 +93,20 @@ test('announceHandCards: a manifest card mailed once when fresh, marked without 
   const store = memoryStore();
   await store.insertSubscriber({ email: 'reader@example.test', token: 'a'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
   for (const c of CARDS) for (const id of c.story_ids) store._tables.stories.push({ id, run_id: 'r', ordinal: 1, title: c.title, raw_iocs: { exposure: null } });
-  const newest = [...CARDS].sort((a, b) => b.date.localeCompare(a.date))[0];
+  // a card with no brief story (a retrospective carded on request) has no story row to carry the mark: it is never announced
+  const storied = CARDS.filter((c) => c.story_ids.length); const storyless = CARDS.filter((c) => !c.story_ids.length);
+  const newest = [...storied].sort((a, b) => b.date.localeCompare(a.date))[0];
   const at = Date.parse(newest.date) + 86400_000; // the day after the newest card's as-of date
   const net = pdfNet();
   const n = await announceHandCards(store, { now: at, site: SITE, fetchImpl: net });
-  const fresh = CARDS.filter((c) => at - Date.parse(c.date) < 3 * 86400_000);
+  const fresh = storied.filter((c) => at - Date.parse(c.date) < 3 * 86400_000);
   assert.equal(n, fresh.length, 'one mail per fresh card'); assert.equal(emails.length, fresh.length);
   assert.ok(emails.some((m) => m.subject.includes(newest.title) && m.html.includes(`${SITE}${newest.url}`)));
   // a hand card's page ends .html; its PDF does not
   assert.ok(net.calls.includes(`${SITE}/cards/${newest.slug}.pdf`), JSON.stringify(net.calls));
   assert.ok(emails.every((m) => m.attachments?.[0]?.filename.startsWith('cutsign-')));
-  for (const c of CARDS) {
+  assert.ok(!emails.some((m) => storyless.some((c) => m.subject.includes(c.title))), 'a card without a story is not mailed');
+  for (const c of storied) {
     const rows = await store.getStories(c.story_ids);
     assert.ok(rows.some((r) => r.raw_iocs?.hype?.card_announced), `${c.slug} marked`);
   }

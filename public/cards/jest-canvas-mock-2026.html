@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>jest-canvas-mock npm Compromise — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 100px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  /* long searches: wrap unbroken tokens instead of clipping them at the page edge, and let the query blocks flow across pages */
+  pre{overflow:visible;overflow-wrap:anywhere}
+  .qs pre{break-inside:auto}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt + rotate</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Retrospective — incident May 19, 2026</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Install = code execution</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE — GHSA-55pq-j8p6-fr2h · OSV MAL-2026-4136</span>
+    <span class="asof">as of 2026-11-12</span>
+  </div>
+  <div class="inner">
+    <h1>jest-canvas-mock npm compromise (Mini Shai-Hulud, AntV wave)</h1>
+    <p class="sub">On May 19, 2026 the npm maintainer account <code>atool</code> was hijacked and used to publish roughly 640 backdoored versions across about 320 packages in under half an hour — the AntV wave of the self-spreading "Mini Shai-Hulud" worm. <code>jest-canvas-mock</code>, a Jest test helper with about 3.2 million weekly downloads that sits in the devDependencies of front-end projects, received three of them: <span class="v">2.5.3</span>, <span class="v">2.6.3</span> and <span class="v">2.7.3</span>. Installing any of the three ran a credential stealer on the developer laptop or CI runner doing the install.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <span>no brief story — May 2026 incident, carded on request</span>
+      <a href="/?q=jest-canvas-mock">news &amp; updates (live)</a>
+      <a href="/?q=shai-hulud">Shai-Hulud coverage (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: this is a six-month-old incident, not a new one — the job is a look-back, not a patch.</b> The registry is clean today (<span class="v">2.5.8</span> is <code>latest</code> and fresh installs resolve to it). The open question is historical: did any laptop, CI runner or build image resolve 2.5.3, 2.6.3 or 2.7.3 on or after May 19 — and if so, <b>treat every secret that machine could read as stolen, remove the persistence first, then rotate</b>. The payload plants hooks (a <code>kitty-monitor</code> daemon, Claude Code and VS Code auto-run entries, a secrets-dumping GitHub workflow) that outlive a lockfile rollback, so "we already downgraded" does not close it.</p>
+
+    <h2>30-second read</h2>
+    <p>Two delivery routes are reported. <b>2.5.3</b> carries an <code>optionalDependencies</code> entry, <code>@antv/setup</code>, pointing at an orphan commit in the <code>antvis/G2</code> fork network whose <code>prepare</code> script runs <code>bun run index.js &amp;&amp; exit 1</code> — it fails quietly because the dependency is optional. The wider wave used a <code>preinstall</code> hook running a ~500 KB obfuscated <code>index.js</code> under Bun. Either way the payload harvests environment variables and 130+ credential paths (AWS, GCP, Azure, SSH keys, npm and GitHub tokens, kubeconfig, Vault, Docker auth, Slack, crypto wallets, <code>~/.claude.json</code>), reads masked secrets out of GitHub Actions runner memory, and ships them to <span class="v">t.m-kosche[.]com:443</span> dressed as OpenTelemetry traces, with a fallback that commits them to <b>public</b> GitHub repos created with the victim's own token. It then republishes the victim's npm packages with the worm inside.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Any lockfile, CI log, build cache or image layer shows <span class="v">jest-canvas-mock</span> at <span class="v">2.5.3</span>, <span class="v">2.6.3</span> or <span class="v">2.7.3</span></li>
+          <li class="bad">A range (<code>^2.x</code>, <code>~2.5.x</code>) was installed <b>without a committed lockfile</b>, or a lockfile was regenerated or bot-bumped, from <b>01:39 UTC May 19</b> onward</li>
+          <li class="bad">An internal registry proxy or cache (Artifactory, Nexus, Verdaccio) fetched one of the three — cached tarballs outlive the registry takedown</li>
+          <li class="bad">Any other <code>atool</code>-published version from that window resolved: <span class="v">echarts-for-react</span>, <span class="v">timeago.js</span>, <span class="v">size-sensor</span>, <span class="v">jest-date-mock</span>, <span class="v">@antv/*</span> — same payload</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Lockfiles stayed pinned at <span class="v">≤ 2.5.2</span> (or at <span class="v">2.5.8</span>) and installs use <code>npm ci</code> / <code>--frozen-lockfile</code></li>
+          <li class="ok">Fresh installs today: ranges resolve to 2.5.8; 2.6.3 and 2.7.3 are gone from the registry</li>
+          <li class="ok">Production runtime: this is a test dependency — exposure is laptops and CI, not prod servers (unless prod images are built with devDependencies)</li>
+          <li><code>--ignore-scripts</code> blunts the <code>preinstall</code> route; <b>do not count on it</b> for the 2.5.3 git-dependency route (not verified here)</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Versions — npm registry, re-checked Nov 12</h2>
+    <table>
+      <tr><th>Version</th><th>Published (UTC)</th><th>Registry state</th><th>Read</th></tr>
+      <tr><td><span class="v">2.5.2</span></td><td class="num">2023-06-28</td><td>Present</td><td><span class="ok">Clean</span> — last release before the incident</td></tr>
+      <tr><td><span class="v">2.5.3</span></td><td class="num">2026-05-19 01:39:31</td><td><b>Still present</b>, deprecated: "This version was published in error, please use the latest version instead."</td><td><span class="bad">Malicious</span> — <code>@antv/setup</code> → <span class="v">github:antvis/G2#1916faa3…</span>. That commit no longer resolves on GitHub (checked Nov 12); when it stopped is not established</td></tr>
+      <tr><td><span class="v">2.6.3</span></td><td class="num">2026-05-19 01:56:42</td><td>Removed</td><td><span class="bad">Malicious</span></td></tr>
+      <tr><td><span class="v">2.7.3</span></td><td class="num">2026-05-19 02:05:59</td><td>Removed</td><td><span class="bad">Malicious</span></td></tr>
+      <tr><td><span class="v">2.5.8</span></td><td class="num">2026-07-09 13:34:24</td><td><code>latest</code>; published by GitHub Actions with provenance</td><td><span class="ok">Clean — pin here.</span> Numbered above 2.5.3 so <code>~2.5.x</code> and <code>^2.5.x</code> both land on it</td></tr>
+    </table>
+
+    <h2>Advisory IDs — there is no CVE</h2>
+    <table>
+      <tr><th>ID</th><th>Database</th><th>Versions listed</th><th>Note</th></tr>
+      <tr><td><span class="v">GHSA-55pq-j8p6-fr2h</span></td><td><a href="https://github.com/advisories/GHSA-55pq-j8p6-fr2h">GitHub Advisory DB</a> (malware)</td><td>2.5.3, 2.6.3, 2.7.3</td><td>Feeds <code>npm audit</code> and Dependabot. API shows it published <b>Jul 27</b> — ten weeks after the incident</td></tr>
+      <tr><td><span class="v">MAL-2026-4136</span></td><td><a href="https://osv.dev/vulnerability/MAL-2026-4136">OSV</a></td><td>2.5.3, 2.6.3, 2.7.3</td><td>Published May 19; <code>osv-scanner</code> flags lockfiles</td></tr>
+      <tr><td><span class="v">SNYK-JS-JESTCANVASMOCK-16754992</span></td><td><a href="https://security.snyk.io/vuln/SNYK-JS-JESTCANVASMOCK-16754992">Snyk</a></td><td>2.6.3, 2.7.3</td><td rowspan="3"><span class="bad">2.5.3 is the under-covered version</span> — three of five sources omit it. A scanner on these feeds can pass a lockfile that pins 2.5.3</td></tr>
+      <tr><td><span class="v">GMS-2026-537</span></td><td><a href="https://advisories.gitlab.com/npm/jest-canvas-mock/GMS-2026-537/">GitLab Advisory DB</a></td><td>2.6.3, 2.7.3</td></tr>
+      <tr><td><span class="v">wiz-adv-2026-079</span></td><td><a href="https://www.wiz.io/blog/mini-shai-hulud-teampcp-hits-antv-supply-chain">Wiz Threat Center</a></td><td>2.6.3, 2.7.3</td></tr>
+    </table>
+
+    <h2>Indicators — each labelled with who reported it</h2>
+    <table>
+      <tr><th>Type</th><th>Indicator</th><th>Reported by</th></tr>
+      <tr><td>Exfil domain</td><td><span class="v">t.m-kosche[.]com</span> :443, path <code>/api/public/otel/v1/traces</code> (IP <span class="v">185.95.159[.]32</span> per Wiz)</td><td>StepSecurity, Socket, SafeDep, Microsoft, Snyk, Wiz</td></tr>
+      <tr><td>Exfil (alt)</td><td><span class="v">filev2.getsession[.]org</span> /file/ — Session messenger's file service, so expect benign hits where Session is used</td><td>Endor Labs only</td></tr>
+      <tr><td>C2 polling</td><td><code>api.github.com/search/commits?q=firedalazer</code> — signed commands in commit messages</td><td>SafeDep, Wiz, Snyk</td></tr>
+      <tr><td>Payload SHA-256</td><td><span class="v" style="white-space:normal;word-break:break-all">a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c</span> (<code>index.js</code>)</td><td>SafeDep, Endor, Microsoft, Snyk</td></tr>
+      <tr><td>Backdoor SHA-256</td><td><span class="v" style="white-space:normal;word-break:break-all">fb5c97557230a27460fdab01fafcfabeaa49590bafd5b6ef30501aa9e0a51142</span> (<code>cat.py</code>)</td><td>Microsoft, Wiz</td></tr>
+      <tr><td>Host persistence</td><td><code>~/.local/share/kitty/cat.py</code> · <code>~/.local/bin/gh-token-monitor.sh</code> · <code>~/.config/systemd/user/kitty-monitor.service</code> · <code>~/Library/LaunchAgents/com.user.kitty-monitor.plist</code> · <code>/var/tmp/.gh_update_state</code> · <code>~/.claude/package/index.js</code> · <code>~/.codex/package/index.js</code></td><td>SafeDep, Snyk, Wiz</td></tr>
+      <tr><td>Repo persistence</td><td><code>.claude/settings.json</code> (SessionStart hook) · <code>.claude/setup.mjs</code> · <code>.vscode/tasks.json</code> (<code>folderOpen</code> task) · <code>.vscode/setup.mjs</code></td><td>StepSecurity, SafeDep, Endor</td></tr>
+      <tr><td>GitHub tampering</td><td>Workflow named <span class="v">Run Copilot</span> in <code>.github/workflows/codeql.yml</code> (Endor: <code>format-check.yml</code>) · branch <span class="v">chore/add-codeql-static-analysis</span> · artifact <span class="v">format-results</span></td><td>SafeDep, Snyk, StepSecurity</td></tr>
+      <tr><td>Exfil repos</td><td>Public repos named <code>&lt;dune-word&gt;-&lt;dune-word&gt;-&lt;0–999&gt;</code> (e.g. <span class="v">harkonnen-melange-742</span>), description <span class="v">niagA oG eW ereH :duluH-iahS</span>, files <code>results/results-*.json</code></td><td>Socket, SafeDep, StepSecurity</td></tr>
+      <tr><td>Package tells</td><td><code>node_modules/@antv/setup</code> · commit <span class="v">1916faa365f2788b6e193514872d51a242876569</span> (also <span class="v">7cb42f57…</span>) in a lockfile · a root <code>index.js</code> over 400 KB · Bun fetched mid-install</td><td>Endor, SafeDep, StepSecurity</td></tr>
+    </table>
+
+    <h2>Detection coverage — as of Nov 12</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Vendor</td><td><a href="https://github.com/hustcc/jest-canvas-mock/issues/126">hustcc / jest-canvas-mock</a></td><td><span class="bad">Thin</span> — the maintainer answered the public report (issue #126, opened 02:17 UTC May 19) with one word, "fixed.", and closed it the same day. No advisory in the repo, no statement of which version is safe. The registry tells the rest: two versions removed, 2.5.3 deprecated, 2.5.8 shipped Jul 9 through a new automated publish workflow</td></tr>
+      <tr><td>Registry</td><td><a href="https://github.com/advisories/GHSA-55pq-j8p6-fr2h">GitHub / npm</a></td><td><span class="ok">Acted</span> — per Microsoft, GitHub removed 640 malicious versions and invalidated 61,274 write-capable npm tokens; advisory GHSA-55pq-j8p6-fr2h drives <code>npm audit</code> and Dependabot alerts (published Jul 27 per the API)</td></tr>
+      <tr><td>Package scanners</td><td><a href="https://osv.dev/vulnerability/MAL-2026-4136">OSV</a> / <a href="https://socket.dev/blog/antv-packages-compromised">Socket</a> / <a href="https://security.snyk.io/vuln/SNYK-JS-JESTCANVASMOCK-16754992">Snyk</a> / <a href="https://advisories.gitlab.com/npm/jest-canvas-mock/GMS-2026-537/">GitLab</a></td><td><span class="ok">Flagged fast</span> — Socket says its detections ran 02:02–03:09 UTC, a median 6.7 minutes after each publish (its write-up does not name this package). <b>SCA is the primary detection here</b>; use OSV or the GHSA feed, which list all three versions</td></tr>
+      <tr><td>EDR</td><td><a href="https://www.microsoft.com/en-us/security/blog/2026/05/20/mini-shai-hulud-compromised-antv-npm-packages-enable-ci-cd-credential-theft/">Microsoft Defender</a></td><td><span class="ok">Published</span> — AV names <span class="v">Trojan:JS/ShaiWorm</span>, <span class="v">Backdoor:Python/ShaiWorm</span>, <span class="v">Trojan:JS/ObfusNpmJs</span>, <span class="v">Trojan:AIGen/NPMStealer</span>; Endpoint alerts incl. "Suspicious Bun execution from Node.js process"; eight hunting queries. <b>Caveat:</b> the package-name queries key on <code>@antv</code> and <code>echarts-for-react</code> and will miss this package — the behaviour ones (<code>bun run index.js</code>, the C2 domain, <code>cat.py</code>) still apply</td></tr>
+      <tr><td>EDR</td><td>CrowdStrike</td><td><span class="bad">Nothing found</span> for this wave — searches return only the Sept 2025 incident in which CrowdStrike's own npm packages were hit</td></tr>
+      <tr><td>EDR</td><td>SentinelOne</td><td><span class="bad">Nothing found</span> for this wave — its Nov 2025 "Sha1-Hulud" flash report cites platform rules for known-malicious npm packages; not confirmed to cover these versions</td></tr>
+      <tr><td>VM scanners</td><td>Qualys</td><td><span class="bad">No QID found</span> for this wave. QIDs 5005322 and 5005466 (software composition analysis, must be enabled) cover the <a href="https://threatprotect.qualys.com/2025/09/17/multiple-npm-packages-affected-by-the-ongoing-supply-chain-attack-shai-hulud-malware/">Sept 2025 Shai-Hulud</a> package list; a Sept 28 Qualys blog discusses this wave and names no QID</td></tr>
+      <tr><td>VM scanners</td><td><a href="https://www.tenable.com/plugins/nessus/318388">Tenable</a></td><td><span class="bad">No plugin found</span> naming this package. Plugin 265897 covers the original Shai-Hulud lists and 318388 the June "Miasma" wave (Red Hat scope); both match installed Node modules against a fixed list. Tenable's FAQ names <code>@antv</code> only in a scan checklist</td></tr>
+      <tr><td>VM scanners</td><td>Rapid7</td><td><span class="bad">Nothing found</span></td></tr>
+      <tr><td>WAF / edge</td><td>Akamai and all WAFs</td><td>Not applicable — inbound-only controls; this runs at install time and calls out. The network lane is <b>egress</b>: DNS/proxy block and look-back on the C2 domain</td></tr>
+      <tr><td>Cloud / CNAPP</td><td><a href="https://www.wiz.io/blog/mini-shai-hulud-teampcp-hits-antv-supply-chain">Wiz</a></td><td><span class="ok">Published</span> — Threat Center advisory wiz-adv-2026-079 with pre-built queries; lists this package (2.6.3, 2.7.3 only)</td></tr>
+      <tr><td>Image scanners</td><td>Trivy / Grype</td><td>Not checked — do not assume a vulnerability scanner carries malware-type advisories; run <code>osv-scanner</code> or <code>npm audit</code> against the lockfile instead</td></tr>
+      <tr><td>MSSP / IR</td><td><a href="https://arcticwolf.com/resources/blog/mini-shai-hulud-supply-chain-malware-attack/">Arctic Wolf</a> / <a href="https://unit42.paloaltonetworks.com/monitoring-npm-supply-chain-attacks/">Unit 42</a></td><td>Campaign-level posts (seen in search results, not read in full); Unit 42's npm tracker covers the <code>atool</code> wave. Huntress, Sophos, Kroll: nothing found for this wave</td></tr>
+      <tr><td>Research</td><td><a href="https://www.stepsecurity.io/blog/shai-hulud-here-we-go-again-mass-npm-supply-chain-attack-hits-the-antv-ecosystem">StepSecurity</a> / <a href="https://safedep.io/mini-shai-hulud-strikes-again-314-npm-packages-compromised/">SafeDep</a> / <a href="https://www.endorlabs.com/learn/mini-shai-hulud-returns-42-malicious-npm-packages-fake-sigstore-badges-in-antv-ecosystem-attack">Endor Labs</a></td><td><span class="ok">Published</span> — payload analysis, persistence paths, runner-memory scraping, forged provenance. Attribution: Wiz assesses TeamPCP with <b>moderate confidence</b>, Snyk and Tenable repeat it; Microsoft, Socket, SafeDep and StepSecurity name no actor. The worm's source was published May 12, so copycats are possible</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li><b>Scope:</b> search every lockfile <b>and its git history since May 18</b> for the three versions, <code>@antv/setup</code> and commit <span class="v">1916faa3…</span>; then CI logs and registry-proxy caches. Purge cached tarballs</li>
+          <li><b>Sweep</b> developer laptops and self-hosted runners for the persistence files — they survive a rollback, and log retention may not reach back to May</li>
+          <li><b>On a hit, order matters:</b> isolate, remove the daemon and hooks <b>first</b>, then revoke. Snyk warns the token monitor may react to revocation, and the payload carries the string "IfYouInvalidateThisTokenItWillNukeTheComputerOfTheOwner"</li>
+          <li><b>Rotate</b> everything the machine could read: npm and GitHub tokens, cloud keys, SSH keys, kubeconfig, Vault, database strings, Slack</li>
+          <li><b>Audit GitHub and npm:</b> Dune-named public repos, the injected branch and workflow, unexpected publishes from your accounts after May 19</li>
+          <li><b>Block</b> <span class="v">t.m-kosche[.]com</span> at DNS and proxy; pin <span class="v">2.5.8</span>; use <code>npm ci</code> in CI</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Any persistence artifact or C2 egress hit → incident lane, full rotation</li>
+          <li><code>kitty-monitor</code> found running → the attacker had remote command execution for as long as it ran; scope as hands-on-keyboard</li>
+          <li>A Dune-named repo or <code>results/results-*.json</code> under your org or a staff account → those secrets were <b>public</b>; treat as disclosed</li>
+          <li>Package versions you did not publish, from your npm accounts or CI → you were a propagation node; notify npm and downstream users</li>
+          <li>Cloud audit logs showing the affected keys used from unfamiliar addresses since May 19</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src"><b>Inferred, not vendor-published:</b> these translate the indicators above into sweeps. Any published guidance the pipeline stores appears above this section and supersedes it. Searches start at May 19 — if retention does not reach that far, the disk and git sweeps are the evidence that remains.</p>
+    <pre>
+
+# lockfiles, at each repo root — current tree, then history
+grep -rnE 'jest-canvas-mock[-@]2\.[567]\.3|@antv/setup|1916faa365f2788b6e193514872d51a242876569' \
+  --include=package-lock.json --include=yarn.lock --include=pnpm-lock.yaml .
+git log -p --since=2026-05-18 -- package-lock.json yarn.lock pnpm-lock.yaml \
+  | grep -nE 'jest-canvas-mock[-@]2\.[567]\.3|@antv/setup'
+
+# host persistence (laptops, self-hosted runners) — any line printed is a hit
+ls -la ~/.local/share/kitty/cat.py ~/.local/bin/gh-token-monitor.sh \
+  ~/.config/systemd/user/kitty-monitor.service ~/Library/LaunchAgents/com.user.kitty-monitor.plist \
+  /var/tmp/.gh_update_state ~/.claude/package/index.js ~/.codex/package/index.js 2&gt;/dev/null
+find &lt;code roots&gt; -maxdepth 5 \( -path '*/.claude/setup.mjs' -o -path '*/.vscode/setup.mjs' \
+  -o -path '*/node_modules/@antv/setup' \) 2&gt;/dev/null
+
+# feed check that includes 2.5.3
+osv-scanner --lockfile=&lt;path to lockfile&gt;
+
+</pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Endpoint / Network Resolution / Web field names for Splunk, ECS for Elastic; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# install evidence (CI / build logs, registry-proxy access logs)
+index=* earliest="05/19/2026:00:00:00" ("jest-canvas-mock-2.5.3" OR "jest-canvas-mock@2.5.3" OR "jest-canvas-mock-2.6.3" OR "jest-canvas-mock@2.6.3" OR "jest-canvas-mock-2.7.3" OR "jest-canvas-mock@2.7.3" OR "@antv/setup" OR "1916faa365f2788b6e193514872d51a242876569")
+| stats count min(_time) as first max(_time) as last by host source
+
+# payload execution: Bun running index.js, or Bun spawned by node/npm
+index=* earliest="05/19/2026:00:00:00" (process="*bun* run index.js*" OR (process_name IN ("bun","bun.exe") parent_process_name IN ("node","node.exe","npm","npm.cmd")))
+| stats count min(_time) as first values(process) as cmd values(parent_process_name) as parent by host user
+
+# egress: exfil domain, its reported address, and the Session file service (expect benign Session use)
+index=* earliest="05/19/2026:00:00:00" (query IN ("t.m-kosche.com","filev2.getsession.org") OR dest IN ("t.m-kosche.com","filev2.getsession.org","185.95.159.32") OR url IN ("*t.m-kosche.com*","*filev2.getsession.org*"))
+| stats count min(_time) as first max(_time) as last by src host
+
+# persistence files (EDR / Sysmon file events, FIM)
+index=* earliest="05/19/2026:00:00:00" (file_name IN ("kitty-monitor.service","com.user.kitty-monitor.plist","gh-token-monitor.sh",".gh_update_state") OR file_path IN ("*/.local/share/kitty/cat.py","*/.claude/setup.mjs","*/.vscode/setup.mjs","*/.claude/package/index.js","*/.codex/package/index.js"))
+| stats count values(file_path) as paths min(_time) as first by host user
+
+# GitHub audit log: exfil repos, injected branch and workflow (Dune word list is partial)
+index=* earliest="05/19/2026:00:00:00" (action="repo.create" OR "chore/add-codeql-static-analysis" OR "Run Copilot" OR "niagA oG eW ereH")
+| eval repo_name=lower(coalesce(repo, repository, ""))
+| where coalesce(action,"")!="repo.create" OR match(repo_name, "/(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[a-z]+-\d{1,3}$") OR match(repo_name, "/[a-z]+-(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-\d{1,3}$")
+| stats count min(_time) as first values(action) as actions by actor repo_name
+
+</pre>
+    <pre data-q="esql">
+
+// install evidence (CI / build logs, registry-proxy access logs)
+FROM logs-*
+| WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
+| WHERE message LIKE "*jest-canvas-mock-2.5.3*" OR message LIKE "*jest-canvas-mock@2.5.3*" OR message LIKE "*jest-canvas-mock-2.6.3*" OR message LIKE "*jest-canvas-mock@2.6.3*" OR message LIKE "*jest-canvas-mock-2.7.3*" OR message LIKE "*jest-canvas-mock@2.7.3*" OR message LIKE "*@antv/setup*" OR message LIKE "*1916faa365f2788b6e193514872d51a242876569*"
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, log.file.path
+
+// payload execution: Bun running index.js, or Bun spawned by node/npm
+FROM logs-*
+| WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
+| WHERE process.command_line RLIKE ".*bun.* run index\\.js.*" OR (process.name IN ("bun", "bun.exe") AND process.parent.name IN ("node", "node.exe", "npm", "npm.cmd"))
+| STATS count = COUNT(*), first = MIN(@timestamp), cmd = VALUES(process.command_line), parent = VALUES(process.parent.name) BY host.name, user.name
+
+// egress: exfil domain, its reported address, and the Session file service (expect benign Session use)
+FROM logs-*
+| WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
+| WHERE dns.question.name IN ("t.m-kosche.com", "filev2.getsession.org") OR destination.domain IN ("t.m-kosche.com", "filev2.getsession.org") OR destination.ip == TO_IP("185.95.159.32") OR url.full LIKE "*t.m-kosche.com*" OR url.full LIKE "*filev2.getsession.org*"
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY source.ip, host.name
+
+// persistence files (EDR / Sysmon file events, FIM)
+FROM logs-*
+| WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
+| WHERE file.name IN ("kitty-monitor.service", "com.user.kitty-monitor.plist", "gh-token-monitor.sh", ".gh_update_state") OR file.path LIKE "*/.local/share/kitty/cat.py" OR file.path LIKE "*/.claude/setup.mjs" OR file.path LIKE "*/.vscode/setup.mjs" OR file.path LIKE "*/.claude/package/index.js" OR file.path LIKE "*/.codex/package/index.js"
+| STATS count = COUNT(*), paths = VALUES(file.path), first = MIN(@timestamp) BY host.name, user.name
+
+// GitHub audit log: exfil repos, injected branch and workflow (Dune word list is partial; github.* fields per the GitHub integration)
+FROM logs-*
+| WHERE @timestamp &gt;= TO_DATETIME("2026-05-19T00:00:00.000Z")
+| EVAL repo_name = TO_LOWER(COALESCE(github.repo, ""))
+| WHERE message LIKE "*chore/add-codeql-static-analysis*" OR message LIKE "*Run Copilot*" OR message LIKE "*niagA oG eW ereH*" OR (event.action == "repo.create" AND (repo_name RLIKE ".*/(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[a-z]+-[0-9]{1,3}" OR repo_name RLIKE ".*/[a-z]+-(atreides|fremen|harkonnen|sardaukar|sayyadina|kanly|fedaykin|ghola|sandworm|melange|stillsuit|ornithopter|phibian|lasgun|laza|navigator|thumper)-[0-9]{1,3}"))
+| STATS count = COUNT(*), first = MIN(@timestamp), actions = VALUES(event.action) BY user.name, repo_name
+
+</pre>
+    </div>
+
+    <h2>Not verified — read before relying on this card</h2>
+    <ul>
+      <li>The malicious tarballs were <b>not</b> downloaded or run; this card rests on registry metadata and published research</li>
+      <li>When 2.6.3 and 2.7.3 were removed is not established (same day is implied, not timed), nor when 2.5.3's GitHub commit stopped resolving — so treat a 2.5.3 install on <b>any</b> date as exposed until shown otherwise</li>
+      <li>Sources disagree on details: exfil endpoint (<code>t.m-kosche[.]com</code> vs Session), workflow filename (<code>codeql.yml</code> vs <code>format-check.yml</code>), and counts (631–640 versions, 314–323 packages). The hunts cover both variants</li>
+      <li>"Nothing found" rows mean public searches on Nov 12 found no statement — not that the product lacks coverage. Ask the vendor</li>
+    </ul>
+
+    <h2>Timeline (UTC)</h2>
+    <ul class="tl">
+      <li><span class="d">May 19 01:25</span><span>Orphan commit <code>1916faa3…</code> created in the <code>antvis/G2</code> fork network (SafeDep)</span></li>
+      <li><span class="d">01:39</span><span><b>jest-canvas-mock 2.5.3</b> published from the hijacked <code>atool</code> account — the first malicious publish of the wave</span></li>
+      <li><span class="d">01:56</span><span>2.6.3 published; first wave, about 317 versions across the account's packages</span></li>
+      <li><span class="d">02:05</span><span>2.7.3 published; second wave, about 314 versions</span></li>
+      <li><span class="d">02:02–03:09</span><span>Socket's scanner flags the wave, median 6.7 minutes after each publish</span></li>
+      <li><span class="d">02:17</span><span>Public report opened on the package repo (issue #126); maintainer replies "fixed." and closes it the same day</span></li>
+      <li><span class="d">03:43</span><span>StepSecurity runner telemetry: Bun contacts <code>t.m-kosche[.]com</code>, then commits through <code>api.github.com</code></span></li>
+      <li><span class="d">May 20</span><span>Microsoft analysis; GitHub reported to have removed 640 versions and invalidated 61,274 npm tokens</span></li>
+      <li><span class="d">Jul 9</span><span>2.5.8 published through a new GitHub Actions publish workflow; becomes <code>latest</code></span></li>
+      <li><span class="d">Jul 27</span><span>GHSA-55pq-j8p6-fr2h published in the GitHub Advisory Database</span></li>
+      <li><span class="d">Nov 12</span><span>This card: registry re-checked — 2.5.3 still listed (deprecated), its payload commit no longer resolves</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://github.com/hustcc/jest-canvas-mock/issues/126">jest-canvas-mock issue #126 (maintainer)</a> ·
+      <a href="https://registry.npmjs.org/jest-canvas-mock">npm registry record</a> ·
+      <a href="https://github.com/advisories/GHSA-55pq-j8p6-fr2h">GHSA-55pq-j8p6-fr2h</a> ·
+      <a href="https://osv.dev/vulnerability/MAL-2026-4136">OSV MAL-2026-4136</a> ·
+      <a href="https://www.microsoft.com/en-us/security/blog/2026/05/20/mini-shai-hulud-compromised-antv-npm-packages-enable-ci-cd-credential-theft/">Microsoft</a> ·
+      <a href="https://www.stepsecurity.io/blog/shai-hulud-here-we-go-again-mass-npm-supply-chain-attack-hits-the-antv-ecosystem">StepSecurity</a> ·
+      <a href="https://safedep.io/mini-shai-hulud-strikes-again-314-npm-packages-compromised/">SafeDep</a> ·
+      <a href="https://www.endorlabs.com/learn/mini-shai-hulud-returns-42-malicious-npm-packages-fake-sigstore-badges-in-antv-ecosystem-attack">Endor Labs</a> ·
+      <a href="https://socket.dev/blog/antv-packages-compromised">Socket</a> ·
+      <a href="https://snyk.io/blog/mini-shai-hulud-antv-npm-supply-chain-attack/">Snyk</a> ·
+      <a href="https://www.wiz.io/blog/mini-shai-hulud-teampcp-hits-antv-supply-chain">Wiz</a> ·
+      <a href="https://www.tenable.com/blog/mini-shai-hulud-frequently-asked-questions">Tenable FAQ</a> ·
+      <a href="https://advisories.gitlab.com/npm/jest-canvas-mock/GMS-2026-537/">GitLab GMS-2026-537</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: none — May 2026 incident, carded on request</span>
+  </div>
+</div>
+
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-11-12', QUERY = 'jest-canvas-mock';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> — verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> — ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance — live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching “' + esc(QUERY) + '”. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' · ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' · <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+<script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
+</body>
+</html>
