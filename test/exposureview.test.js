@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exposureReport, exposureTsv, exposureBody, selfCheckScript, TSV_COLUMNS, SCOPE } from '../lib/exposureview.js';
+import { exposureReport, exposureTsv, exposureBody, selfCheckScript, TSV_COLUMNS, SCOPE, EXPOSURE_STYLE } from '../lib/exposureview.js';
 
 const shodan = (q) => `https://www.shodan.io/search?query=${encodeURIComponent(q)}`;
 const AT = '2026-11-12T15:00:00.000Z';
@@ -163,6 +163,9 @@ test('exposureBody: the script block, the ranking by count, a block per card wit
   assert.ok(html.indexOf('id="gizmo-2026"') < html.indexOf('id="widget-rce-2026"'));
   assert.match(html, /<span class="num">9,000<\/span>/);
   assert.match(html, /9,500 on 2026-11-01/); // the trend's first point
+  // phone width: the CVE column is hidden and the same CVEs sit under the card's name
+  assert.match(EXPOSURE_STYLE, /@media \(max-width:560px\)\{\.xp-rank th:nth-child\(4\),\.xp-rank td:nth-child\(4\)\{display:none\}\.xp-rank \.xp-cv\{display:block\}/);
+  assert.match(html, /<div class="s xp-cv"><span class="xp-kev">CVE-2026-1000 \(KEV\)<\/span>, <span class="">CVE-2026-1001<\/span><\/div>/);
   assert.match(html, /2 more queries Shodan matched nothing for, or could not count/); // the plan row and the empty CPE row
   assert.match(html, /paste into Censys search/);
   assert.match(html, /affected: &lt; 24\.3\.1/);
