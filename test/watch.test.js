@@ -459,7 +459,7 @@ test('modelFailure: the raw API error becomes a few plain words, and says what b
   assert.deepEqual(modelFailure(api(529, '{"type":"error","error":{"type":"overloaded_error"}}')), tick('the API was busy'));
   assert.deepEqual(modelFailure(api(408, 'request timeout')), tick('the API was busy'));
   assert.deepEqual(modelFailure(new Error('Connection error.')), tick('the API could not be reached'));
-  assert.deepEqual(modelFailure(api(400, '{"type":"error","error":{"type":"invalid_request_error","message":"something this code has never seen"}}')), tick('the model call failed for a reason not recognised'), 'an unknown failure is asked again, not thrown away');
+  assert.deepEqual(modelFailure(api(400, '{"type":"error","error":{"type":"invalid_request_error","message":"something this code has never seen"}}')), tick('it failed for a reason not recognised'), 'an unknown failure is asked again, not thrown away');
   const drop = (reason) => ({ reason, hold: 'drop', account: false, model: false });
   assert.deepEqual(modelFailure(new Error('model refused (cyber)')), drop('the model declined to read it'));
   assert.deepEqual(modelFailure(new Error('model output hit max_tokens (truncated JSON)')), drop('the model\'s answer was cut off'));
@@ -762,10 +762,20 @@ test('an alert mail that fails to send is tried again on the next tick, for a da
     w.feed.push({ title: 'CVE-2026-88779 write-up 1', link: 'https://news.fixture.test/1', summary: 'Write-up 1 on the NetScaler flaw CVE-2026-88779.' });
     await tick();
     assert.equal(events.length, 1); assert.equal(events[0].notified_at, null, 'not sent is not said');
-    assert.ok(out.discord.some((l) => l.startsWith('Cutsign ✖ watch alert email failed (tried again on the next run): resend: down')));
+    const bolts = () => out.discord.filter((l) => l.startsWith('Cutsign ⚡')).length;
+    const failed = () => out.discord.filter((l) => l.startsWith('Cutsign ✖ watch alert email failed'));
+    assert.equal(failed().at(-1), 'Cutsign ✖ watch alert email failed (tried again on the next runs, for a day): resend: down');
+    assert.equal(events[0].assessment.mail_pending, true);
+    // the block has ten ticks a day: the retries are quiet, the Discord line and the failure are said once
+    await tick(); await tick(); await tick();
+    assert.equal(events[0].notified_at, null);
+    assert.equal(bolts(), 1, 'the development is not announced again on every retry');
+    assert.equal(failed().length, 1, 'nor the failure');
     _setEmailSink(working);
     await tick();
     assert.equal(alerts().length, 1, 'the next tick sends it'); assert.ok(events[0].notified_at);
+    assert.equal(events[0].assessment.mail_pending, undefined, 'sent: the flag is gone');
+    assert.equal(bolts(), 1);
     await tick();
     assert.equal(alerts().length, 1, 'once');
     // a mail that keeps failing is given up after a day; a HIGH event that needed no mail is marked at once
@@ -777,7 +787,109 @@ test('an alert mail that fails to send is tried again on the next tick, for a da
     events[1].created_at = new Date(Date.now() - 27 * 3600_000).toISOString();
     await tick();
     assert.ok(events[1].notified_at, 'given up after a day: the morning email has it by then');
+    assert.equal(failed().length, 3, 'the first failure and the giving up are each said');
+    assert.equal(failed().at(-1), 'Cutsign ✖ watch alert email failed: resend: down');
+    // the mail that never went out said nothing: the next fix is not silenced for a week by it
+    _setEmailSink(working);
+    w.feed.push({ title: 'CVE-2026-88779 write-up 3', link: 'https://news.fixture.test/3', summary: 'Write-up 3 on the NetScaler flaw CVE-2026-88779.' });
+    await tick();
+    assert.equal(alerts().length, 2, 'the fix is mailed when it is next reported');
+    assert.match(alerts().at(-1).html, /Development: fix_available/);
   } finally { _setEmailSink(working); }
+});
+
+test('a failure after the model answered (a title write) is a counted try like any other: three in all, then dropped by name', async () => {
+  const revised = 'NetScaler CVE-2026-88779 exploited in the wild — confirmed compromises reported';
+  const llm = { next: () => assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'A government entity was compromised via the flaw.', title_outdated: true, revised_title: revised }) };
+  const { store, out } = await setup(llm);
+  const w = world();
+  const row = store._tables.watches[0];
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  const write = store.updateWatch;
+  store.updateWatch = async (id, patch) => { if (patch.title) throw new Error('db: write failed'); return write(id, patch); };
+  edit(w);
+  const key = `page_changed|${ADVISORY}`;
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(row.state.held[key].n, 1);
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(row.state.held[key].n, 2, 'the count goes on from the try before');
+  const c = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(c.unassessed, 1, JSON.stringify(c)); assert.equal(row.state.held, undefined);
+  assert.ok(warnings(out).at(-1).endsWith(`${ADVISORY} (it failed for a reason not recognised; given up after 3 tries).`), warnings(out).at(-1));
+  assert.equal(store._tables.watch_events.length, 0);
+});
+
+test('a duplicate watch that is merged away hands its held changes to the watch that stays, with the page state each was measured against', async () => {
+  const llm = { next: () => assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'A new wave is reported.' }) };
+  const { store } = await setup(llm);
+  const t = store._tables;
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch }); // baseline
+  const base = t.watches[0];
+  const since = new Date().toISOString();
+  const link = 'https://news.fixture.test/held';
+  const page = 'https://other.example.test/page';
+  // the pieces, on the function itself: a held page change comes over with the page and its last assessed state
+  const a = { ...structuredClone(base), id: 'a', story_id: 's', created_at: '2026-01-01T00:00:00Z' };
+  const b = { ...structuredClone(base), id: 'b', story_id: 's', created_at: '2026-01-02T00:00:00Z', urls: [...base.urls, page],
+    state: { ...structuredClone(base.state), pages: { ...structuredClone(base.state.pages), [page]: { h: 'before', l: ['x'] } }, held: { [`page_changed|${page}`]: { n: 1, since, why: 'the API was busy' } } } };
+  const rows = [a, b];
+  const fake = { updateWatch: async (id, patch) => { Object.assign(rows.find((x) => x.id === id), structuredClone(patch)); } };
+  const m = await mergeDuplicateWatches(fake, rows);
+  assert.equal(m.merged, 1); assert.equal(b.status, 'expired');
+  assert.ok(a.urls.includes(page));
+  assert.deepEqual(a.state.pages[page], { h: 'before', l: ['x'] }, 'not a fresh baseline: the change is still a change');
+  assert.deepEqual(a.state.held[`page_changed|${page}`], { n: 1, since, why: 'the API was busy' });
+  // and through a tick: a held article is read by the watch that stays
+  t.watches.push({ ...structuredClone(base), id: 'dup-held', created_at: '2099-01-01T00:00:00Z',
+    state: { ...structuredClone(base.state), held: { [`new_source|${link}`]: { n: 0, since, why: 'the API spend limit is reached', item: { link, id: link, title: 'CVE-2026-88779 exploited again', summary: 'New wave against NetScaler CVE-2026-88779.', feed: 'BleepingComputer' } } } } });
+  const c = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(c.merged, 1, JSON.stringify(c));
+  assert.equal(t.watch_events.length, 1);
+  assert.equal(t.watch_events[0].url, link); assert.equal(t.watch_events[0].watch_id, base.id);
+  assert.equal(base.state.held, undefined, 'read, so nothing is waiting');
+});
+
+test('a held article is read whatever its feed entry says by then; one that became a page of the watch is named, not silently forgotten', async () => {
+  const llm = { down: true, next: () => { if (llm.down) throw REFUSAL(); return assessment({ kinds: ['exploitation'], new_iocs: [], summary: 'A new wave is reported.' }); } };
+  const { store, out } = await setup(llm);
+  const w = world();
+  const row = store._tables.watches[0];
+  const tick = () => runWatchTick(store, { fetchImpl: w.fetch, minIntervalMs: DAY_GATE });
+  await tick();
+  const a = 'https://news.fixture.test/reworded'; const b = 'https://news.fixture.test/adopted';
+  w.feed.push({ title: 'CVE-2026-88779 exploited again', link: a, summary: 'New wave against NetScaler CVE-2026-88779.' },
+    { title: 'CVE-2026-88779 analysis', link: b, summary: 'Analysis of the NetScaler flaw CVE-2026-88779.' });
+  due(row);
+  const c1 = await tick();
+  assert.equal(c1.deferred, 2, JSON.stringify(c1));
+  // the next day: the first entry no longer names the story, the second is one of the watch's pages
+  llm.down = false;
+  w.feed[0] = { title: 'Weekly roundup', link: a, summary: 'Assorted stories.' };
+  row.urls.push(b);
+  due(row);
+  const c2 = await tick();
+  assert.deepEqual(store._tables.watch_events.map((e) => e.url), [a], 'the reworded entry is still read');
+  assert.equal(c2.unassessed, 1, JSON.stringify(c2));
+  assert.ok(warnings(out).at(-1).endsWith(`${b} (the API spend limit is reached; it is one of the watch's own pages now, read from here on).`), warnings(out).at(-1));
+  assert.equal(row.state.held, undefined);
+});
+
+test('every dropped change is named, in as many Discord messages as that takes', async () => {
+  const llm = { next: () => ({ nonsense: true }) };
+  const { store, out } = await setup(llm);
+  const w = world();
+  await runWatchTick(store, { fetchImpl: w.fetch });
+  const links = Array.from({ length: 24 }, (_, i) => `https://news.fixture.test/dropped-${i + 1}`);
+  for (const [i, link] of links.entries()) w.feed.push({ title: `CVE-2026-88779 write-up ${i + 1}`, link, summary: `Write-up ${i + 1} on the NetScaler flaw CVE-2026-88779.` });
+  const before = out.discord.length;
+  const c = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(c.unassessed, 24, JSON.stringify(c));
+  const said = out.discord.slice(before).filter((l) => l.startsWith('Cutsign ⚠ watch'));
+  assert.ok(said.length > 1, 'too long for one message');
+  assert.ok(said.every((l) => l.length <= 2000), 'each fits a Discord message');
+  assert.ok(said.slice(1).every((l) => l.startsWith('Cutsign ⚠ watch (continued): ')));
+  for (const link of links) assert.equal(said.filter((l) => l.includes(`${link} (`)).length, 1, `${link} is named once`);
 });
 
 test('morning email: a LOW development the model judged material and a prompt-injection notice are items, not part of the low-signal count', async () => {

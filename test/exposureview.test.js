@@ -86,6 +86,30 @@ test('exposureReport: a count only where Shodan gave one; the week-ago point; th
   assert.equal(report().cards.find((c) => c.card === 'gizmo-2026').headline, null);
 });
 
+test('exposureReport: the week-ago point is a week old, not whatever older point exists after a gap in counting', () => {
+  const cov = { checked_at: AT, exposure: { items: [item('cve', 'CVE-2026-2000', 'vuln:CVE-2026-2000', 'counted', 300)],
+    trend: [{ at: '2026-10-01', totals: { 'vuln:CVE-2026-2000': 10 } }, { at: '2026-11-12', totals: { 'vuln:CVE-2026-2000': 300 } }] } };
+  const r = exposureReport([CARDS[1]], { coverageOf: () => cov, kevOf: () => ({}), base: 'https://cutsign.example.test', now: Date.parse('2026-11-13T12:00:00Z') });
+  const q = r.cards[0].queries[0];
+  assert.equal(q.week_ago, null, 'six weeks ago is not a week ago'); assert.equal(q.change_7d, null);
+  assert.deepEqual(q.first, { at: '2026-10-01', count: 10 }, 'the trend still starts where it starts');
+  assert.equal(exposureTsv(r).trimEnd().split('\n')[1].split('\t')[10], '-');
+  // fourteen days is the limit, and counts
+  cov.exposure.trend[0].at = '2026-10-29';
+  const r2 = exposureReport([CARDS[1]], { coverageOf: () => cov, kevOf: () => ({}), base: 'https://cutsign.example.test', now: Date.parse('2026-11-13T12:00:00Z') });
+  assert.deepEqual(r2.cards[0].queries[0].week_ago, { at: '2026-10-29', count: 10 });
+});
+
+test('exposureTsv: no control character reaches the table, whatever a counted host put in its page title', () => {
+  const q = 'http.title:"Admin\u001b[2J\u001b]0;x\u0007 Console\u009b31m"';
+  const cov = { checked_at: AT, exposure: { items: [item('alias', 'acme:widget_server', q, 'counted', 5, { note: 'Title\u0000 match.\u2028Affected per NVD: < 1.2\u001b[0m.' })], trend: [] } };
+  const tsv = exposureTsv(exposureReport([CARDS[1]], { coverageOf: () => cov, kevOf: () => ({}), base: 'https://cutsign.example.test', now: Date.parse('2026-11-13T12:00:00Z') }));
+  assert.ok(!/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]/.test(tsv), JSON.stringify(tsv));
+  const f = tsv.trimEnd().split('\n')[1].split('\t');
+  assert.equal(f.length, TSV_COLUMNS.length);
+  assert.equal(f[12], 'http.title:"Admin [2J ]0;x  Console 31m"'); // the bytes that made them sequences are spaces
+});
+
 test('exposureTsv: a header, one line per query, the same number of fields on every line and never an empty one', () => {
   const tsv = exposureTsv(report());
   assert.ok(tsv.endsWith('\n'));
