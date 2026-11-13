@@ -75,8 +75,18 @@ spends what is left of each tick on card coverage. The one model call such a tic
 the small title check, when a free check has just found something material. What changes overnight
 is found at the next day's block. A
 development that falsifies a title's outcome claim ("no confirmed compromises") retitles the story and
-its watch in place. HIGH events alert immediately; everything appears in the next morning's email under
-"Developments on tracked stories".
+its watch in place. HIGH events post to Discord at once; only the major ones — a KEV listing, reported
+exploitation, a fix, a public PoC with traction — also send a short mail, once per story and kind until
+a week passes without that kind (`WATCH_ALERT_MAIL`: `major`, `all` or `off`). The model reads new text
+against everything the watch already knows (summary, behaviors, IoCs, the developments already
+reported), so a second outlet restating the same technique is not a development. Everything appears in
+the next morning's email under "Developments on tracked stories"; there the low-signal updates (repo
+mentions, status pings) are a count, and the page lists them. A change the model could not be asked
+about writes no event and is held with the watch instead: under an API spend limit or the monthly cap
+it waits for the next daily read (the article is kept, so it is still read after it leaves its feed);
+after an outage it is asked again on the next tick, three times in all. One Discord line a run says
+how many were put off and why, and names — watch, link, reason — each one given up: a text the model
+declined or could not answer, a third failed try, a watch that ended first.
 
 **Verdict cards** come two ways. Hand-written ones live in `public/cards/` (manifest in
 `lib/cards.js`): one per campaign, re-issued in place (the as-of date and the manifest date move

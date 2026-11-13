@@ -105,3 +105,21 @@ test('hypeSweep: an old run swept for a development does not publish day-one car
   assert.equal(c.drafted, 0, JSON.stringify(c)); assert.equal(c.published, 0);
   assert.ok(!out.discord.some((l) => /P1 without anything actionable/.test(l)), 'no day-one nagging for a two-week-old P1 either');
 });
+
+test('applyUpdate: a link the model could not be asked about is skipped in plain words, writes no event and stays unread for the next mail', async () => {
+  const { out, store } = await world();
+  let down = true;
+  installFakeLLM((u, n, req) => {
+    if (req.schemaName !== 'watch_assessment') return req.schemaName === 'card_draft' ? { title: 'incomplete' } : defaultResponder(u, n, req);
+    if (down) throw Object.assign(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits."}}'), { status: 400 });
+    return { relates: true, material: true, kinds: ['exploitation'], summary: 'CISA listed the CVE; exploitation continues.', new_iocs: [], title_outdated: false, revised_title: null };
+  });
+  const r = await applyUpdate(store, { cves: [CVE], urls: [U1], from: 'reader@example.test', fetchImpl: net, now: Date.parse('2026-10-31T13:00:00Z') });
+  assert.equal(r.ok, true); assert.deepEqual(r.read, []); assert.equal(r.events, 0);
+  assert.deepEqual(r.skipped, [`${U1} (not assessed: the API spend limit is reached)`]);
+  assert.equal(store._tables.watch_events.length, 0);
+  assert.ok(!out.discord.some((l) => /invalid_request_error|\{"type"/.test(l)), 'the raw API error is never repeated');
+  down = false;
+  const again = await applyUpdate(store, { cves: [CVE], urls: [U1], from: 'reader@example.test', fetchImpl: net, now: Date.parse('2026-10-31T14:00:00Z') });
+  assert.deepEqual(again.read, [U1], 'the same mail sent again reads it'); assert.equal(store._tables.watch_events.length, 1);
+});

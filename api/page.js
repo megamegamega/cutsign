@@ -780,7 +780,7 @@ export default async function handler(req, res) {
       return html.slice(0, start) + region + html.slice(end);
     };
     const analystBody = () => {
-      const full = renderHtml(d, 0, { proposals: true });
+      const full = renderHtml(d, 0, { proposals: true, noiseList: true });
       return collapseWatch(full.slice(full.indexOf('<div class="w">') + '<div class="w">'.length, full.lastIndexOf('</div></body></html>')))
         .replace('<h3>Developments on tracked stories', '<h3 id="watch">Developments on tracked stories') // tile deep-link target
         .replace(/<p class="ban">[\s\S]*?<\/p>/, '')                                   // email banner
