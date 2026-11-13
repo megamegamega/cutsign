@@ -15,11 +15,21 @@ import { fetchKevEntries } from '../lib/hype.js';
 import { subscribeForm } from '../lib/subscribe.js';
 import { actorReport, CATEGORIES } from '../lib/actors.js';
 import { actorsBody, ACTORS_STYLE } from '../lib/actorsview.js';
+import { exposureReport, exposureTsv, exposureBody, EXPOSURE_STYLE } from '../lib/exposureview.js';
 
 // Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
 // so an interleaved request overwriting it changes nothing.
 let IDX = cardIndex([]);
+
+// (card) → its stored coverage check. An AI card carries its own; a hand-written card's rides on its
+// manifest story rows (lib/hype.js writes raw_iocs.hype.card_coverage), the newest one wins.
+async function coverageLookup(store) {
+  let handRows = [];
+  try { handRows = await store.getStories(CARDS.flatMap((c) => c.story_ids)); } catch { handRows = []; }
+  return (c) => c.source === 'ai' ? c.coverage || null
+    : handRows.filter((r) => c.story_ids.includes(r.id) && r.raw_iocs?.hype?.card_coverage).map((r) => r.raw_iocs.hype.card_coverage).sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)))[0] || null;
+}
 
 // CISA KEV, fetched at most hourly per instance; an empty result never replaces a good one
 let kevCache = { at: 0, map: new Map() };
@@ -320,6 +330,8 @@ GET /?view=iocs&amp;format=json           cumulative IoC corpus — every brief 
 GET /?q=TERM&amp;format=json               search every stored brief (stories + IoCs)
 GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, lane, cves, story_ids, url)
 GET /?view=actors&amp;format=json         adversaries by attributed country (w=14|30|90|all, cat=state|crime|hacktivist|spyware)
+GET /exposure.json                       every card's internet-scanner queries with Shodan's internet-wide count and trend
+GET /exposure.tsv                        the same, one query per line, tab-separated (shell-friendly; columns on the Exposure tab)
 GET /cards/&lt;slug&gt;.html                 a hand-written verdict card; /cards/&lt;slug&gt; one the pipeline published; stories here carry verdict_card when one exists
 
 Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
@@ -536,7 +548,7 @@ export default async function handler(req, res) {
       let row = null;
       try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
-      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       if (row.status === 'promoted' && row.promoted_slug) { res.setHeader('Location', `/cards/${row.promoted_slug}`); return res.status(302).send(''); }
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
         `<div class="w">${printBar}${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
@@ -548,7 +560,7 @@ export default async function handler(req, res) {
       const slug = String(req.query.slug || '').toLowerCase();
       const row = aiRows.find((r) => r.promoted_slug === slug) || null;
       if (!row) return res.status(404).send(doc('Cutsign — card', '', '<div class="w"><p class="s">No such card. <a href="/?view=cards">All cards</a></p></div>', 'Cutsign'));
-      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
         `<div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
@@ -559,13 +571,8 @@ export default async function handler(req, res) {
       // AI drafts awaiting a human, surfaced ones first (table may not exist before migration 0004)
       let drafts = [];
       try { drafts = (await store.listCardDrafts({ status: 'draft', limit: 30 })).sort((a, b) => (b.surfaced_at ? 1 : 0) - (a.surfaced_at ? 1 : 0)); } catch { drafts = []; }
-      // a hand-written card's automated coverage check rides on its manifest story rows
-      // (lib/hype.js writes raw_iocs.hype.card_coverage); its AI re-issue draft is a draft row that names it
-      const handIds = CARDS.flatMap((c) => c.story_ids);
-      let handRows = [];
-      try { handRows = await store.getStories(handIds); } catch { handRows = []; }
-      const coverageOf = (c) => c.source === 'ai' ? c.coverage || null
-        : handRows.filter((r) => c.story_ids.includes(r.id) && r.raw_iocs?.hype?.card_coverage).map((r) => r.raw_iocs.hype.card_coverage).sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)))[0] || null;
+      // each card's automated coverage check; a hand-written card's AI re-issue draft is a draft row that names it
+      const coverageOf = await coverageLookup(store);
       // the re-issue draft is folded into the hand-written card page by lifecycle.js: the new lane and
       // verdict, what changed since the card's as-of date, the timeline after it; the draft page has the rest
       const reissueOf = (c) => {
@@ -588,7 +595,7 @@ export default async function handler(req, res) {
           candidates: candidates.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
-      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><span>Cards</span></nav>';
+      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><span>Cards</span></nav>';
       const candHtml = candidates.length ? `<h3 style="border:none">AI drafts below the publish bar (${candidates.length})</h3>`
         + candidates.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
           + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready to publish</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
@@ -623,6 +630,30 @@ export default async function handler(req, res) {
         `${hero}<div class="w">${subscribeForm()}${partsHtml}</div>`, 'Cutsign · verdict cards · public OSINT only'));
     }
 
+    // Exposure (lib/exposureview.js): every active card's internet-scanner queries with Shodan's
+    // internet-wide count and trend, in one place, as a page, JSON or one query per line (format=tsv).
+    // Read-only over what the daily coverage check stored on each card: nothing is counted here.
+    if (req.query.view === 'exposure') {
+      const coverageOf = await coverageLookup(store);
+      let kev = new Map();
+      try { kev = await kevEntries(); } catch { kev = new Map(); }
+      const kevOf = (c) => Object.fromEntries((c.cves || []).filter((v) => kev.has(v)).map((v) => [v, { date_added: kev.get(v).dateAdded }]));
+      const base = String(process.env.PUBLIC_BASE_URL || 'https://cutsign.vercel.app').replace(/\/+$/, '');
+      const report = exposureReport(IDX.cards, { coverageOf, kevOf, base });
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify(report, null, 1));
+      }
+      if (req.query.format === 'tsv') {
+        res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
+        return res.status(200).send(exposureTsv(report));
+      }
+      const tabsExposure = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Exposure</span><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      return res.status(200).send(doc('Cutsign — exposure', tabsExposure + searchForm(''),
+        `<style>${EXPOSURE_STYLE}</style>${exposureBody(report, { base })}`,
+        'Cutsign · public OSINT only · internet-wide counts of the software in the news; your scope stays with you'));
+    }
+
     // Adversaries by attributed country (lib/actors.js reads, lib/actorsview.js draws): every stored
     // story, day-independent like the IoC corpus; 100 days covers the 90-day window and the 12-week trend
     if (req.query.view === 'actors') {
@@ -637,7 +668,7 @@ export default async function handler(req, res) {
           note: 'Public OSINT only. Attribution is what the public sources state, read from each story\'s actor field, title and summary; not Cutsign\'s assessment. A story is one update chain.',
           ...report }, null, 1));
       }
-      const tabsActors = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Actors</span><a href="/?view=cards">Cards</a></nav>';
+      const tabsActors = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><span>Actors</span><a href="/?view=cards">Cards</a></nav>';
       return res.status(200).send(doc('Cutsign — adversaries by country', tabsActors + searchForm(''),
         `<style>${ACTORS_STYLE}</style><div class="w">${actorsBody(report, { w, cat, m })}</div>`,
         'Cutsign · public OSINT digest · adversaries by the country the sources attribute them to'));
@@ -746,7 +777,7 @@ export default async function handler(req, res) {
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
-      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
+      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
         'Cutsign · public OSINT digest · cumulative IoC corpus'));
@@ -793,7 +824,7 @@ export default async function handler(req, res) {
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
       : `<a href="/?d=${encodeURIComponent(pick.date)}&view=${v}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
+    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;

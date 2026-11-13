@@ -4,6 +4,9 @@
     { "source": "/", "destination": "/api/page" },
     { "source": "/cards", "destination": "/api/page?view=cards" },
     { "source": "/actors", "destination": "/api/page?view=actors" },
+    { "source": "/exposure", "destination": "/api/page?view=exposure" },
+    { "source": "/exposure.json", "destination": "/api/page?view=exposure&format=json" },
+    { "source": "/exposure.tsv", "destination": "/api/page?view=exposure&format=tsv" },
     { "source": "/cards/:slug([a-z0-9-]+).pdf", "destination": "/api/pdf?slug=:slug" },
     { "source": "/cards/:slug([a-z0-9-]+)", "destination": "/api/page?view=card&slug=:slug" }
   ],

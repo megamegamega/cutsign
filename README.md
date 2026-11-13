@@ -340,8 +340,25 @@ keeps apart never merge, whatever a single story writes. A story is one update c
 is the sources', never Cutsign's. The map is Natural Earth 1:110m projected once into
 `lib/worldmap.json` (`npm run update-worldmap`), so the page draws with no script and no network.
 
+**Exposure tab.** `/exposure` (`/?view=exposure`) puts every active card's internet-scanner queries
+in one place: the Shodan and Censys queries each card already carries (built from its CVE ids and
+NVD's CPE configurations, `lib/exposure.js`), Shodan's internet-wide count for each and its change
+over seven days (`lib/shodan.js`), a ranking of the cards by how widespread their software is, and
+the affected range to compare a banner against. It is a read of what the daily coverage check stored
+on the cards: the tab counts nothing itself, calls no model and spends no Shodan call. Two
+machine forms, `lib/exposureview.js`: `/exposure.json` (grouped by card, with notes and up to thirty
+days of counts per query) and `/exposure.tsv`, one query per line with a header, columns `card date
+lane cves kev engine kind product check count count_7d_ago counted_at query url affected`; columns
+are only ever added at the end, and a field is never empty (a dash stands in), so
+`while IFS=$'\t' read -r …` and `awk -F'\t'` both keep their columns. The page prints a short bash
+script that reads the table and asks Shodan's count endpoint for the same queries with the reader's
+own scope appended; `test/exposureview.test.js` runs that script as printed against stubs. As on the
+cards, the scope half (ranges, org name, domains) is never generated, stored or rendered: the
+script takes it from the reader's shell and sends it only to Shodan with the reader's key. A count
+is how widespread the software is, not how many of those services are vulnerable.
+
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
-`/?view=cards&format=json`, `/?view=actors&format=json`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
+`/?view=cards&format=json`, `/?view=actors&format=json`, `/exposure.json` and `/exposure.tsv`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
 vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
 
 ## Cost and safety rails
