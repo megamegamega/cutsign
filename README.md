@@ -95,7 +95,11 @@ ends with inferred, tool-neutral detections and a runnable hunt block in two dia
 `index=*` and Elastic ES|QL over `FROM logs-*` (ECS field names) — behind a Splunk | Elastic switch
 (`public/cards/qswitch.js`; the choice is remembered for the whole site, PDFs print both); every bare
 identifier printed is labeled. The pipeline's own cards are published automatically from the draft
-loop below at `/cards/<slug>` and carry an "AI-generated, published automatically" banner. Both
+loop below at `/cards/<slug>` and carry an "AI-generated, published automatically" banner. A
+generated card has no archive step yet: every one stays active, and the site and the coverage sweep
+load the newest `PUBLISHED_MAX` (200, `lib/cards.js`) of them. The Monday self-check counts them and
+says so on Discord from three quarters of that, because past it the oldest cards would drop off the
+pages, their own URLs and the daily check without a word. Both
 kinds carry an **automated detection-coverage check** (next section) and both are kept current
 without a hand: a hand-written card's page links the AI re-issue draft the pipeline writes when
 something develops after its as-of date, and corrects its KEV row from the live catalog.
@@ -357,8 +361,8 @@ cards, the scope half (ranges, org name, domains) is never generated, stored or 
 script takes it from the reader's shell and sends it only to Shodan with the reader's key. A count
 is how widespread the software is, not how many of those services are vulnerable.
 
-**Response actions.** `/actions` (`/?view=actions`) gives every active card's Contain list as data,
-so the chain card → exposure check → hunt → recommendation can be scripted (`lib/actions.js`). Each
+**Response actions.** The Response tab, `/actions` (`/?view=actions`), is where every active card's
+Contain list comes together as data, so the chain card → exposure check → hunt → recommendation can be scripted (`lib/actions.js`). Each
 step becomes one or more actions with a kind from a closed list (`block_indicator`, `waf_rule`,
 `isolate_host`, `revoke_session`, `rotate_secret`, `patch`, … sixteen in all), the condition the step
 states (`always`, `if_exposed`, `on_hit`), the kind of asset, whether it can be undone, and the
@@ -387,7 +391,10 @@ no record; the daily sweep also re-checks a card whose Contain list or indicator
 revision that leaves the Contain list alone carries the record over). One call per card per 20 hours
 at most, 24 per sweep; three answers that cannot be used (one that does not check out, a refusal, a
 cut-off answer: all billed) or five calls that never come back end it until the card changes, and a
-failed re-check leaves the card the record it had. Nothing is called once the month is over
+failed re-check leaves the card the record it had. A call the sweep stops waiting for (60 s) is
+counted (`actions_abandoned`), logged and said on Discord; the API may still finish and bill it, so
+its cost is added to the card's row if it lands before the function ends (`actions_late_cost`), and
+its answer is not used. Nothing is called once the month is over
 `MAX_MONTHLY_USD` or when the spend cannot be read. The cost (about 2–4¢ a card) is added to the
 card's row; the monthly sum counts rows created in the month, so a call for an older card is on its
 row but outside that sum. `CARD_ACTIONS=0` turns the calls off; stored records keep being served, as
@@ -396,15 +403,26 @@ vocabulary, the totals by kind and class, and `pending[]`, the cards not classif
 `/actions.tsv`, one line per action and target with a header, columns `card date action step kind
 autonomy gates when asset reversible stated target_type target role direction pattern url text`;
 columns are only ever added at the end and a field is never empty (a dash stands in). Both take
-`?card=SLUG`. `/?view=cards&format=json` carries a per-card count by class and the URL. The page
-prints a short bash script that lists the automatic block candidates with their gates;
-`test/actions.test.js` runs it as printed against a stub. A role is a reading of public reporting,
+`?card=SLUG`. `/?view=cards&format=json` carries a per-card count by class and the URL.
+
+Across cards, `/actions.tsv?by=indicator` and `/actions.json?by=indicator` list every indicator a
+block or a request filter could act on **once**, whichever cards name it: columns `type value
+autonomy gates direction roles cards card_count first_date last_date via stated`, the automatic ones
+first, then the most recently named. The class is the most cautious any card gives it, the gates are
+every card's, and a card that reads the indicator as benign holds it at `recommend` (with `benign`
+among its roles) even when another card would block it. `?autonomy=` and `?type=` filter that list;
+a value outside the vocabulary, or a filter given without `by=indicator`, is answered with HTTP 400
+and the reason in plain text rather than with an unfiltered list. The page shows the same list
+(values defanged; the feeds carry them as published), then every kind of response with the cards
+that call for it, then each card, and prints a short bash script that lists the automatic block
+candidates named in the last `MAX_AGE_DAYS` (30) days with their gates; `test/actions.test.js` runs
+it as printed against a stub. A role is a reading of public reporting,
 not a verdict on the reader's network, which is why every block waits on the reader's own usage
 check, and why the feed describes and never acts.
 
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
 `/?view=cards&format=json`, `/?view=actors&format=json`, `/exposure.json`, `/exposure.tsv`,
-`/actions.json` and `/actions.tsv`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
+`/actions.json`, `/actions.tsv` and both with `?by=indicator`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
 vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
 
 ## Cost and safety rails

@@ -8,7 +8,7 @@
 
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
-import { CARDS, archiveCandidates } from '../lib/cards.js';
+import { CARDS, archiveCandidates, PUBLISHED_MAX } from '../lib/cards.js';
 import { supabaseStore } from '../lib/db.js';
 
 const BASE = process.env.SELFCHECK_BASE || 'https://cutsign.vercel.app';
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
   if (failures.length) await postDiscord(`Cutsign selfcheck ✖ ${failures.length} failure${failures.length === 1 ? '' : 's'}:\n` + failures.map((f) => '• ' + f).join('\n'));
 
   // Mondays: nominate quiet cards for archiving (a human decides; nothing changes here)
-  let candidates = [];
+  let candidates = []; let published = null;
   if (new Date().getUTCDay() === 1) {
     try {
       const active = CARDS.filter((c) => c.status === 'active');
@@ -96,6 +96,12 @@ export default async function handler(req, res) {
       candidates = archiveCandidates(active, rows);
       if (candidates.length) await postDiscord(`Cutsign ▣ ${candidates.length} card${candidates.length === 1 ? '' : 's'} eligible to archive (set status in lib/cards.js):\n` + candidates.map((c) => `• ${c.slug} — ${c.reason}`).join('\n'));
     } catch (e) { failures.push('archive check crashed: ' + String(e?.message || e).slice(0, 200)); }
+    // and say when the published AI cards near what the site loads (lib/cards.js PUBLISHED_MAX): nothing
+    // retires one yet, and past the limit the oldest would drop off the site without a word
+    try {
+      published = (await supabaseStore().listCardDrafts({ status: 'promoted', limit: 1000, columns: 'id' })).length;
+      if (published >= PUBLISHED_MAX * 0.75) await postDiscord(`Cutsign ▣ ${published} published AI cards; the site carries the newest ${PUBLISHED_MAX}. Past that the oldest drop off the Cards, Exposure and Response tabs: time to archive quiet ones (or raise PUBLISHED_MAX in lib/cards.js).`);
+    } catch { /* table missing: nothing published */ }
   }
-  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates });
+  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates, published_ai_cards: published });
 }

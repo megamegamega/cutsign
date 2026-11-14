@@ -7,7 +7,7 @@
 
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang, dedupeEvents } from '../lib/render.js';
-import { CARDS, cardIndex } from '../lib/cards.js';
+import { CARDS, cardIndex, PUBLISHED_MAX } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
@@ -16,7 +16,7 @@ import { subscribeForm } from '../lib/subscribe.js';
 import { actorReport, CATEGORIES } from '../lib/actors.js';
 import { actorsBody, ACTORS_STYLE } from '../lib/actorsview.js';
 import { exposureReport, exposureTsv, exposureBody, EXPOSURE_STYLE } from '../lib/exposureview.js';
-import { actionsLookup, actionsReport, actionsTsv, actionsBody, actionsSummary, ACTIONS_STYLE } from '../lib/actions.js';
+import { actionsLookup, actionsReport, actionsTsv, actionsBody, actionsSummary, indicatorsQuery, indicatorsReport, indicatorsTsv, ACTIONS_STYLE } from '../lib/actions.js';
 
 // Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
@@ -334,7 +334,8 @@ GET /?view=actors&amp;format=json         adversaries by attributed country (w=1
 GET /exposure.json                       every card's internet-scanner queries with Shodan's internet-wide count and trend
 GET /exposure.tsv                        the same, one query per line, tab-separated (shell-friendly; columns on the Exposure tab)
 GET /actions.json                        every card's Contain steps as data: kind, automation class, the checks that come first, block targets (?card=SLUG for one card)
-GET /actions.tsv                         the same, one action and target per line, tab-separated (columns and rules at /actions)
+GET /actions.tsv                         the same, one action and target per line, tab-separated (columns and rules on the Response tab)
+GET /actions.tsv?by=indicator            every card's block candidates as one list, one indicator per line (also .json; ?autonomy=auto, ?type=domain)
 GET /cards/&lt;slug&gt;.html                 a hand-written verdict card; /cards/&lt;slug&gt; one the pipeline published; stories here carry verdict_card when one exists
 
 Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
@@ -515,7 +516,7 @@ export default async function handler(req, res) {
     const json = req.query.format === 'json';
     // published AI cards (table may not exist before migration 0004)
     let aiRows = [];
-    try { aiRows = await store.listCardDrafts({ status: 'promoted', limit: 50 }); } catch { aiRows = []; }
+    try { aiRows = await store.listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX }); } catch { aiRows = []; }
     IDX = cardIndex(aiRows);
 
     const qraw = String(req.query.q || '').trim().slice(0, 80);
@@ -551,7 +552,7 @@ export default async function handler(req, res) {
       let row = null;
       try { row = /^[0-9a-f-]{36}$/i.test(id) ? await store.getCardDraft(id) : null; } catch { row = null; }
       if (!row) return res.status(404).send(doc('Cutsign — draft', '', '<div class="w"><p class="s">No such draft.</p></div>', 'Cutsign'));
-      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsDraft = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       if (row.status === 'promoted' && row.promoted_slug) { res.setHeader('Location', `/cards/${row.promoted_slug}`); return res.status(302).send(''); }
       return res.status(200).send(doc(`Cutsign — draft: ${row.title}`, tabsDraft + searchForm(''),
         `<div class="w">${printBar}${draftBody(row)}</div>`, 'Cutsign · AI-generated draft, unreviewed · public OSINT only'));
@@ -563,7 +564,7 @@ export default async function handler(req, res) {
       const slug = String(req.query.slug || '').toLowerCase();
       const row = aiRows.find((r) => r.promoted_slug === slug) || null;
       if (!row) return res.status(404).send(doc('Cutsign — card', '', '<div class="w"><p class="s">No such card. <a href="/?view=cards">All cards</a></p></div>', 'Cutsign'));
-      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
         `<style>${ACTIONS_STYLE}</style><div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
@@ -600,7 +601,7 @@ export default async function handler(req, res) {
           candidates: candidates.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
-      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><span>Cards</span></nav>';
+      const tabsCards = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><span>Cards</span></nav>';
       const candHtml = candidates.length ? `<h3 style="border:none">AI drafts below the publish bar (${candidates.length})</h3>`
         + candidates.map((x) => `<div class="card"><div class="chead"><h3><a href="/?view=draft&id=${esc(x.id)}">${esc(x.title)}</a></h3></div>`
           + `<div>${x.surfaced_at ? '<span class="c" style="color:var(--bad)">ready to publish</span>' : ''}<span class="c">AI draft v${esc(String(x.version || 1))}</span><span class="c">score ${esc(String(x.score))}</span><span class="c">${esc(String(x.created_at).slice(0, 10))}</span>${(x.reasons || []).map((r) => `<span class="c">${esc(r)}</span>`).join('')}</div>`
@@ -608,7 +609,7 @@ export default async function handler(req, res) {
       const active = IDX.cards.filter((c) => c.status === 'active');
       const retired = IDX.cards.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
       const aiN = active.filter((c) => c.source === 'ai').length;
-      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${aiN ? ` (${aiN} AI-published)` : ''}${retired.length ? ` · ${retired.length} archived` : ''} · one-page verdicts with lane, exposure, detection coverage (checked automatically from public sources) and escalation triggers · print to PDF from the card · <a href="/actions">Contain steps as data</a></p></div>`;
+      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${aiN ? ` (${aiN} AI-published)` : ''}${retired.length ? ` · ${retired.length} archived` : ''} · one-page verdicts with lane, exposure, detection coverage (checked automatically from public sources) and escalation triggers · print to PDF from the card · <a href="/actions">every card's response in one place</a></p></div>`;
       // newest day first; within a day, urgency order (hunt/IR, patch-now, patch, prepare)
       const laneRank = (l) => /hunt|ir/i.test(l) && !/patch/i.test(l) ? 0 : /now/i.test(l) ? 1 : /patch/i.test(l) ? 2 : 3;
       const sorted = [...active].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
@@ -653,31 +654,42 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
         return res.status(200).send(exposureTsv(report));
       }
-      const tabsExposure = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Exposure</span><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      const tabsExposure = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><span>Exposure</span><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       return res.status(200).send(doc('Cutsign — exposure', tabsExposure + searchForm(''),
         `<style>${EXPOSURE_STYLE}</style>${exposureBody(report, { base })}`,
         'Cutsign · public OSINT only · internet-wide counts of the software in the news; your scope stays with you'));
     }
 
-    // Response actions (lib/actions.js): every active card's Contain list as data, with the automation
+    // The Response tab (lib/actions.js): every active card's Contain list as data, with the automation
     // class and gates the fixed rules give each step, as a page, JSON or one action per line
-    // (format=tsv); ?card=<slug> narrows the JSON and the TSV to one card. Read-only over what the
-    // sweeps stored on each draft row and what lib/handactions.js holds: no model is called here.
+    // (format=tsv); ?card=<slug> narrows the JSON and the TSV to one card. by=indicator turns either
+    // into the block candidates across cards, one indicator each (?autonomy= and ?type= narrow it).
+    // Read-only over what the sweeps stored on each draft row and what lib/handactions.js holds: no
+    // model is called here.
     if (req.query.view === 'actions') {
       const base = String(process.env.PUBLIC_BASE_URL || 'https://cutsign.vercel.app').replace(/\/+$/, '');
       const only = String(req.query.card || '').toLowerCase().slice(0, 120);
+      const machine = json || req.query.format === 'tsv';
+      // a misspelt filter is refused, not ignored: a script asking for "auto" must never get everything
+      const pick = machine ? indicatorsQuery(req.query) : { by: null };
+      if (pick.error) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(400).send(`${pick.error}\n`);
+      }
       const report = actionsReport(IDX.cards, { actionsOf: actionsLookup(aiRows), base, card: only || null });
+      const list = pick.by ? indicatorsReport(report, { autonomy: pick.autonomy, type: pick.type }) : null;
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       if (json) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        return res.status(200).send(JSON.stringify(report, null, 1));
+        return res.status(200).send(JSON.stringify(list || report, null, 1));
       }
       if (req.query.format === 'tsv') {
         res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
-        return res.status(200).send(actionsTsv(report));
+        return res.status(200).send(list ? indicatorsTsv(list) : actionsTsv(report));
       }
-      const tabsActions = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
-      return res.status(200).send(doc('Cutsign — response actions', tabsActions + searchForm(''),
+      const tabsActions = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><span>Response</span><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      return res.status(200).send(doc('Cutsign — response', tabsActions + searchForm(''),
         `<style>${ACTIONS_STYLE}</style>${actionsBody(report, { base })}`,
         'Cutsign · public OSINT only · what each card\'s Contain step is, as data; the checks and the decision stay with you'));
     }
@@ -696,7 +708,7 @@ export default async function handler(req, res) {
           note: 'Public OSINT only. Attribution is what the public sources state, read from each story\'s actor field, title and summary; not Cutsign\'s assessment. A story is one update chain.',
           ...report }, null, 1));
       }
-      const tabsActors = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><span>Actors</span><a href="/?view=cards">Cards</a></nav>';
+      const tabsActors = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><span>Actors</span><a href="/?view=cards">Cards</a></nav>';
       return res.status(200).send(doc('Cutsign — adversaries by country', tabsActors + searchForm(''),
         `<style>${ACTORS_STYLE}</style><div class="w">${actorsBody(report, { w, cat, m })}</div>`,
         'Cutsign · public OSINT digest · adversaries by the country the sources attribute them to'));
@@ -805,7 +817,7 @@ export default async function handler(req, res) {
       }
       const total = corpus.length + watchIocs.reduce((n, e) => n + e.new_iocs.length, 0);
       const heroIocs = `<div class="hero"><h1>IoC corpus</h1><p class="sub">${total} indicators · ${sorted.length} stories · cumulative across all briefs and watch events</p></div>`;
-      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
+      const tabsIocs = `<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><span>IoCs</span><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
       return res.status(200).send(doc('Cutsign — IoC corpus', tabsIocs + searchForm(''),
         `${heroIocs}<div class="w">${parts.join('\n')}</div>`,
         'Cutsign · public OSINT digest · cumulative IoC corpus'));
@@ -852,7 +864,7 @@ export default async function handler(req, res) {
     const tabLink = (v, label) => view === v
       ? `<span>${label}</span>`
       : `<a href="/?d=${encodeURIComponent(pick.date)}&view=${v}">${label}</a>`;
-    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
+    const tabs = `<nav class="tabs">${tabLink('analyst', 'Analyst')}${tabLink('ciso', 'CISO')}${tabLink('agent', 'Agent')}<a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>`;
     const nav = days.slice(0, 14).map((x) => x.date === pick.date
       ? `<span>${esc(x.date.slice(5))}</span>` : `<a href="${q(x.date)}">${esc(x.date.slice(5))}</a>`).join('');
     const deep = d.analyzed.filter((s) => s.selected).length;

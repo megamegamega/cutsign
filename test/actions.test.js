@@ -12,9 +12,10 @@ import { join } from 'node:path';
 import { memoryStore } from '../lib/store-memory.js';
 import { KINDS, WHENS, ASSETS, ROLES, AUTONOMY, GATES, VOCAB, TSV_COLUMNS, UNSTATED_TEXT, policyFor, targetPolicy, sharedPlatform, expandActions, actionsLookup,
   offeredIndicators, actionsKey, actionsDue, actionsStale, storedActions, finishActions, deriveActions, failedActions, actionsReport, actionsTsv, actionsSummary, actionsScript,
-  actionsTable, actionsBody, ActionsSchema, ACTIONS_SYSTEM } from '../lib/actions.js';
+  actionsTable, actionsBody, ActionsSchema, ACTIONS_SYSTEM, INDICATOR_COLUMNS, indicatorsReport, indicatorsTsv, indicatorsQuery } from '../lib/actions.js';
 import { HAND_ACTIONS } from '../lib/handactions.js';
-import { CARDS } from '../lib/cards.js';
+import { CARDS, PUBLISHED_MAX } from '../lib/cards.js';
+import { _setLLM } from '../lib/llm.js';
 import { draftBody } from '../lib/carddraft.js';
 import { actionsPhase, coverageOnlySweep } from '../lib/hype.js';
 import { installFakeLLM, captureOutputs } from './helpers.js';
@@ -346,17 +347,97 @@ test('tsv: one line per action and target, every line the same width, no empty f
 });
 
 const has = (cmd, args) => { try { execFileSync(cmd, args, { stdio: 'ignore' }); return true; } catch { return false; } };
-test('the printed script, run as printed against a stub, lists the automatic block candidates with their gates', { skip: !has('bash', ['--version']) }, () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cutsign-actions-'));
-  const tsv = join(dir, 'actions.tsv'); const script = join(dir, 'candidates.sh'); const stub = join(dir, 'stub.sh');
-  writeFileSync(tsv, actionsTsv(feed()));
-  writeFileSync(script, `${actionsScript('https://cutsign.example.test')}\n`);
-  writeFileSync(stub, ['curl() {', '  case "$*" in', '    *cutsign.example.test/actions.tsv*) cat "$TSV" ;;', '    *) echo "unexpected: $*" >&2; return 1 ;;', '  esac', '}', 'export -f curl', 'bash "$1"'].join('\n'));
-  const out = execFileSync('bash', [stub, script], { env: { PATH: process.env.PATH, TSV: tsv }, encoding: 'utf8' }).trimEnd().split('\n').map((l) => l.split('\t'));
-  assert.deepEqual(out, [
-    ['widget-2026', 'ipv4', '203.0.113.7', 'outbound', 'usage_check,expiry'],
-    ['widget-2026', 'sha256', 'd'.repeat(64), '-', 'usage_check'],
+// ---- the block candidates across cards ------------------------------------------------------------
+
+// two cards that name the same address and read it differently, a domain one of them calls harmless,
+// a request filter that names a URL, and a hash no step names
+const CROSS_CARDS = [
+  { slug: 'alpha-2026', title: 'Alpha <b>exploited</b>', date: '2026-11-10', lane: 'Patch now', source: 'ai', status: 'active', url: '/cards/alpha-2026', cves: [] },
+  { slug: 'beta-2026', title: 'Beta campaign', date: '2026-11-12', lane: 'Hunt', source: 'ai', status: 'active', url: '/cards/beta-2026', cves: [] },
+];
+const CROSS = {
+  'alpha-2026': { v: 1, items: [
+    act('block_indicator', { step: 1, text: 'Block the C2', asset: 'network', targets: [{ type: 'ipv4', value: '203.0.113.7', role: 'c2' }, { type: 'domain', value: 'evil.example.test', role: 'c2' }, { type: 'ipv4', value: '198.51.100.9', role: 'attack_source' }] }),
+    act('isolate_host', { step: 2, text: 'Isolate hit laptops', when: 'on_hit', asset: 'workstation' }),
+  ], indicators: [{ type: 'sha256', value: 'e'.repeat(64), role: 'malware_file' }] },
+  'beta-2026': { v: 1, items: [
+    act('block_indicator', { step: 1, text: 'Block the relay', asset: 'network', targets: [{ type: 'ipv4', value: '203.0.113.7', role: 'compromised_legit' }] }),
+    act('waf_rule', { step: 2, text: 'Filter the callback URL', when: 'if_exposed', asset: 'network', targets: [{ type: 'url', value: 'http://bad.example.test/cb', role: 'payload_host' }] }),
+    act('hunt', { step: 3, text: 'Search for the loader', targets: [{ type: 'sha256', value: 'f'.repeat(64), role: 'malware_file' }] }),
+  ], indicators: [{ type: 'domain', value: 'EVIL.example.test', role: 'benign' }] },
+};
+const cross = (o = {}) => actionsReport(CROSS_CARDS, { actionsOf: (c) => expandActions(c.slug, CROSS[c.slug]), base: 'https://cutsign.example.test', now: Date.parse('2026-11-14T12:00:00Z'), ...o });
+
+test('indicators: each one once across cards, with the most cautious class any card gives it and every gate', () => {
+  const list = indicatorsReport(cross());
+  assert.deepEqual([list.kind, list.version, list.generated, list.columns], ['cutsign.actions.indicators', 1, '2026-11-14T12:00:00.000Z', INDICATOR_COLUMNS]);
+  const by = Object.fromEntries(list.indicators.map((r) => [r.value, r]));
+  // the automatic ones first, then newest card, then type
+  assert.deepEqual(list.indicators.map((r) => [r.value, r.autonomy]), [
+    ['http://bad.example.test/cb', 'auto'], ['198.51.100.9', 'auto'], ['e'.repeat(64), 'auto'],
+    ['203.0.113.7', 'recommend'], ['evil.example.test', 'recommend'],
   ]);
+  // one card calls the address the actor's, the other a compromised host: a person decides, and both cards are named
+  assert.deepEqual(by['203.0.113.7'], { type: 'ipv4', value: '203.0.113.7', autonomy: 'recommend', gates: ['usage_check', 'expiry'], direction: 'both', roles: ['c2', 'compromised_legit'],
+    cards: ['beta-2026', 'alpha-2026'], card_count: 2, first_date: '2026-11-10', last_date: '2026-11-12', via: ['block_indicator'], stated: true });
+  // a card that read it as harmless holds back the card that would block it (whatever the letter case)
+  assert.deepEqual([by['evil.example.test'].autonomy, by['evil.example.test'].roles, by['evil.example.test'].cards], ['recommend', ['c2', 'benign'], ['alpha-2026']]);
+  // a request filter that names an indicator carries the filter's own checks as well as the indicator's
+  assert.deepEqual([by['http://bad.example.test/cb'].via, by['http://bad.example.test/cb'].autonomy, by['http://bad.example.test/cb'].gates], [['waf_rule'], 'auto', ['exposure_check', 'usage_check', 'log_mode_first']]);
+  assert.deepEqual([by['198.51.100.9'].direction, by['198.51.100.9'].stated, by['e'.repeat(64)].direction, by['e'.repeat(64)].stated], ['inbound', true, null, false]);
+  // what a hunt looks for is not something a block acts on
+  assert.equal(by['f'.repeat(64)], undefined);
+  assert.deepEqual(list.totals, { indicators: 5, cards: 2, by_autonomy: { auto: 3, recommend: 2, manual: 0, never: 0 },
+    by_type: { ipv4: { auto: 1, recommend: 1, manual: 0, never: 0 }, domain: { auto: 0, recommend: 1, manual: 0, never: 0 }, url: { auto: 1, recommend: 0, manual: 0, never: 0 }, sha256: { auto: 1, recommend: 0, manual: 0, never: 0 } } });
+  // the benign reading rides beside a card's actions, never in them
+  const acts = expandActions('beta-2026', CROSS['beta-2026']);
+  assert.deepEqual([acts.benign, Object.keys(acts).includes('benign'), JSON.stringify(acts).includes('benign')], [[{ type: 'domain', value: 'EVIL.example.test' }], false, false]);
+  // filters, and one card
+  assert.deepEqual(indicatorsReport(cross(), { autonomy: 'auto' }).indicators.map((r) => r.value), ['http://bad.example.test/cb', '198.51.100.9', 'e'.repeat(64)]);
+  assert.deepEqual(indicatorsReport(cross(), { autonomy: 'auto', type: 'ipv4' }).totals.indicators, 1);
+  assert.deepEqual(indicatorsReport(cross(), { type: 'md5' }).indicators, []);
+  // one card on its own: nothing from the other card holds its indicators back
+  assert.deepEqual(indicatorsReport(cross({ card: 'alpha-2026' })).indicators.map((r) => [r.value, r.autonomy]), [['198.51.100.9', 'auto'], ['203.0.113.7', 'auto'], ['evil.example.test', 'auto'], ['e'.repeat(64), 'auto']]);
+  // a card with no record yet is named, so a reader knows the list is not complete
+  assert.deepEqual(indicatorsReport(feed()).pending, ['new-2026']);
+});
+
+test('indicators tsv: a header, one line per indicator, every line the same width and no empty field', () => {
+  const lines = indicatorsTsv(indicatorsReport(cross())).split('\n');
+  assert.equal(lines.pop(), '');
+  assert.equal(lines[0], INDICATOR_COLUMNS.join('\t'));
+  assert.deepEqual(INDICATOR_COLUMNS.slice(0, 4), ['type', 'value', 'autonomy', 'gates']);
+  const rows = lines.slice(1).map((l) => l.split('\t'));
+  for (const [i, row] of rows.entries()) { assert.equal(row.length, INDICATOR_COLUMNS.length, lines[i + 1]); for (const f of row) assert.ok(f.length > 0, lines[i + 1]); }
+  assert.deepEqual(rows[3], ['ipv4', '203.0.113.7', 'recommend', 'usage_check,expiry', 'both', 'c2,compromised_legit', 'beta-2026,alpha-2026', '2', '2026-11-10', '2026-11-12', 'block_indicator', 'yes']);
+  assert.deepEqual(rows[2], ['sha256', 'e'.repeat(64), 'auto', 'usage_check', '-', 'malware_file', 'alpha-2026', '1', '2026-11-10', '2026-11-10', 'block_indicator', 'no']);
+  assert.equal(indicatorsTsv(indicatorsReport(cross(), { type: 'md5' })), `${INDICATOR_COLUMNS.join('\t')}\n`);
+});
+
+test('indicators: a filter that is misspelt, or given without by=indicator, is refused rather than ignored', () => {
+  assert.deepEqual(indicatorsQuery({}), { by: null, autonomy: null, type: null });
+  assert.deepEqual(indicatorsQuery({ by: 'indicator', autonomy: 'AUTO', type: 'Domain' }), { by: 'indicator', autonomy: 'auto', type: 'domain' });
+  assert.match(indicatorsQuery({ by: 'indicator', autonomy: 'atuo' }).error, /autonomy must be one of: auto, recommend/);
+  assert.match(indicatorsQuery({ by: 'indicator', type: 'ip' }).error, /type must be one of: ipv4, ipv6, domain/);
+  assert.match(indicatorsQuery({ by: 'card' }).error, /by must be/);
+  assert.match(indicatorsQuery({ autonomy: 'auto' }).error, /add by=indicator/);
+  assert.match(indicatorsQuery({ type: 'domain' }).error, /add by=indicator/);
+});
+
+test('the printed script, run as printed against a stub, lists the automatic block candidates across cards with their gates', { skip: !has('bash', ['--version']) }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cutsign-actions-'));
+  const tsv = join(dir, 'indicators.tsv'); const script = join(dir, 'candidates.sh'); const stub = join(dir, 'stub.sh');
+  writeFileSync(tsv, indicatorsTsv(indicatorsReport(feed(), { autonomy: 'auto' })));
+  writeFileSync(script, `${actionsScript('https://cutsign.example.test')}\n`);
+  // only the one URL the script names is answered: the list of indicators, automatic ones only
+  writeFileSync(stub, ['curl() {', '  case "$*" in', '    *"cutsign.example.test/actions.tsv?by=indicator&autonomy=auto"*) cat "$TSV" ;;', '    *) echo "unexpected: $*" >&2; return 1 ;;', '  esac', '}', 'export -f curl', 'bash "$1"'].join('\n'));
+  const run = (days) => execFileSync('bash', [stub, script], { env: { PATH: process.env.PATH, TSV: tsv, MAX_AGE_DAYS: String(days) }, encoding: 'utf8' }).trimEnd();
+  assert.deepEqual(run(36500).split('\n').map((l) => l.split('\t')), [
+    ['ipv4', '203.0.113.7', 'outbound', 'usage_check,expiry', 'widget-2026'],
+    ['sha256', 'd'.repeat(64), '-', 'usage_check', 'widget-2026'],
+  ]);
+  // what no card has named lately is left out (the card is dated 2026-11-10)
+  assert.equal(run(1), '');
 });
 
 test('page: the rules, the counts and the script are on it, and card text is escaped', () => {
@@ -366,6 +447,16 @@ test('page: the rules, the counts and the script are on it, and card text is esc
   for (const k of KINDS) assert.ok(html.includes(`<code>${k}</code>`), k);
   for (const g of GATES) assert.ok(html.includes(`<code>${g}</code>`), g);
   assert.ok(html.includes('https://cutsign.example.test/actions.tsv') && html.includes('Nothing here is an instruction'));
+  // the tab aggregates: the block candidates across cards (defanged on the page, raw only in the feeds), then each kind of response with its cards
+  const agg = actionsBody(cross(), { base: 'https://cutsign.example.test' });
+  assert.ok(agg.includes('<h1>Response</h1>') && agg.includes('5 indicators a block could act on, 3 of them without a person'));
+  assert.ok(agg.includes('<code>203[.]0[.]113[.]7</code>') && agg.includes('hxxp://bad[.]example[.]test/cb') && !agg.includes('203.0.113.7') && !agg.includes('http://bad.example.test'));
+  assert.ok(agg.includes('c2, compromised_legit') && agg.includes('actions.tsv?by=indicator'));
+  assert.ok(agg.includes('<code>isolate_host</code> <span class="s">1 step on 1 card</span><span class="c a-ok">auto 1</span>') && agg.includes('Isolate hit laptops'));
+  assert.ok(agg.includes('Alpha &lt;b&gt;exploited&lt;/b&gt;') && !agg.includes('Alpha <b>'));
+  assert.ok(agg.indexOf('Block candidates, across all cards') < agg.indexOf('Every kind of response') && agg.indexOf('Every kind of response') < agg.indexOf('The rules behind the classes'));
+  // a card with nothing to block still renders
+  assert.ok(html.includes('No card names an indicator to block yet.'));
   // the table a card page shows under Contain
   const table = actionsTable(r.cards[0].actions);
   assert.ok(table.startsWith('<details class="acts">') && table.includes('&lt;img src=x&gt;') && !table.includes('<img'));
@@ -441,7 +532,19 @@ test('wiring: the three routes exist, the page handler serves them, and the card
   assert.ok(rewrites.findIndex((r) => r.source === '/actions') < rewrites.findIndex((r) => r.source.startsWith('/cards/:slug')));
   const page = readFileSync(new URL('../api/page.js', import.meta.url), 'utf8');
   assert.ok(page.includes("req.query.view === 'actions'") && page.includes('actionsTsv(report)') && page.includes('actionsSummary(c.slug, actionsOf(c))'));
-  assert.ok(page.includes('GET /actions.json') && page.includes('GET /actions.tsv'));
+  assert.ok(page.includes('GET /actions.json') && page.includes('GET /actions.tsv') && page.includes('GET /actions.tsv?by=indicator'));
+  // the list across cards, and a refused filter
+  assert.ok(page.includes('indicatorsQuery(req.query)') && page.includes('list ? indicatorsTsv(list) : actionsTsv(report)') && page.includes('res.status(400)'));
+  // the Response tab is on every tab bar, and is the current one on its own page
+  const navs = page.split('\n').filter((l) => l.includes('<nav class="tabs">') && /view=analyst|tabLink\('analyst'/.test(l));
+  assert.ok(navs.length >= 8, `tab bars found: ${navs.length}`);
+  for (const l of navs) assert.ok(/<a href="\/actions">Response<\/a>|<span>Response<\/span>/.test(l), `a tab bar without Response: ${l.trim().slice(0, 80)}`);
+  assert.equal(navs.filter((l) => l.includes('<span>Response</span>')).length, 1);
+  // the page and the sweep load the same published cards: one limit, not two that drift apart
+  assert.ok(PUBLISHED_MAX >= 200);
+  assert.ok(page.includes("listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX })") && !/status: 'promoted', limit: \d/.test(page));
+  const hype = readFileSync(new URL('../lib/hype.js', import.meta.url), 'utf8');
+  assert.ok(hype.includes("listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX })") && !/status: 'promoted', limit: \d/.test(hype));
   // the sweeps that run with no deadline of their own leave the calls to the ones that have one
   assert.ok(readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8').includes('hypeSweep(store, { run: r, actions: false })'));
   assert.ok(readFileSync(new URL('../lib/update.js', import.meta.url), 'utf8').includes('actions: false'));
@@ -538,6 +641,27 @@ test('sweep: a call that never comes back costs nothing and is not one of the th
   assert.equal(calls.length, 1, 'still a day between tries');
   for (let d = 1; d <= 9; d++) await phase('missing', NOW + d * 21 * HOUR);
   assert.deepEqual([calls.length, (await get()).draft.actions.lost], [5, 5], 'it does not ask for ever');
+});
+
+test('sweep: a call given up on is counted and said, and what it cost goes on the card when it lands; its answer is not used', async () => {
+  const { phase, get, out } = await world();
+  let asked = 0;
+  // an answer that arrives after the sweep stopped waiting for it
+  _setLLM(async () => { asked++; await new Promise((r) => setTimeout(r, 60)); return { text: JSON.stringify(GOOD), usage: { input_tokens: 1000, output_tokens: 500 }, model: 'claude-sonnet-5-5' }; });
+  const c = await phase('missing', NOW, { waitMs: 10 });
+  assert.deepEqual([asked, c.actions_failed, c.actions_abandoned, c.actions_derived, c.cost, c.actions_late_cost], [1, 1, 1, undefined, 0, undefined]);
+  let row = await get();
+  assert.deepEqual([row.draft.actions.failed, row.draft.actions.lost, row.draft.actions.items, row.cost_usd], [0, 1, undefined, 0.5]);
+  assert.equal(out.discord.filter((l) => l.includes('1 of them had no answer in 0 s: a call that still completes is billed')).length, 1);
+  await new Promise((r) => setTimeout(r, 120));
+  row = await get();
+  assert.ok(row.cost_usd > 0.5, 'the late answer was paid for, and the row says so');
+  assert.ok(c.actions_late_cost > 0 && c.cost === c.actions_late_cost);
+  assert.deepEqual([row.draft.actions.lost, row.draft.actions.items], [1, undefined], 'the card is asked again a day later, like any other miss');
+  // a call that fails outright was never billed: nothing is waited for and nothing is charged
+  const w2 = await world({ answer: () => { throw new Error('fetch failed'); } });
+  const c2 = await w2.phase('missing');
+  assert.deepEqual([c2.actions_failed, c2.actions_abandoned, c2.cost], [1, undefined, 0]);
 });
 
 test('sweep: a refused or cut-off answer was billed: it is charged to the card and is one of the three tries', async () => {
