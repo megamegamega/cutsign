@@ -211,6 +211,10 @@ test('results: every target says what the lookups found, as a state and a senten
   // never asked, or failed with tries left: pending. Asked, and no network announces it: nothing found
   assert.deepEqual([p('ipv4', '192.0.2.99', 'c2').lookup, p('ipv4', '198.51.100.12', 'c2').lookup, p('ipv4', '198.51.100.11', 'c2').lookup], ['pending', 'pending', 'not_found']);
   assert.equal(p('ipv4', '192.0.2.99', 'c2').found, 'Owner not looked up yet.');
+  // a URL on a bare address gets the address's answer, never a registration sentence
+  r = p('url', 'http://198.51.100.9/a.sh', 'payload_host');
+  assert.equal(r.lookup, 'consistent'); assert.match(r.found, /^Owner AS64500 Rented Servers GmbH/);
+  assert.equal(p('url', 'http://192.0.2.99/a.sh', 'payload_host').found, 'Owner not looked up yet.');
   // domains: the date, how long before the lookup, and the top-sites answer, which is always known
   r = p('domain', 'c2.evilcdn.test', 'c2');
   assert.equal(r.lookup, 'consistent'); assert.match(r.found, /^evilcdn\.test was registered 2026-09-01, \d+ (days|months) before the lookup\. Not among the [\d,]+ most visited domains\. Nothing here argues against/);
