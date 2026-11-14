@@ -243,7 +243,7 @@ test('results: every target says what the lookups found, as a state and a senten
   assert.match(html, /<span class="c a-warn">lookup: conflicts<\/span> Owner AS16509 Amazon\.com/);
   assert.match(html, /<span class="c a-ok">lookup: consistent<\/span> Owner AS64500 Rented Servers GmbH/);
   assert.match(html, /<span class="c">lookup: pending<\/span> Owner not looked up yet\./);
-  assert.match(html, /1 consistent with the reporting, 1 in conflict with it/); assert.match(html, /<th>Still yours to check<\/th>/);
+  assert.match(html, /1 consistent with the reporting, 1 in conflict with it/); assert.match(html, /Where the lookups disagree with the reporting \(1\):/); assert.match(html, /<th>Still yours to check<\/th>/);
 });
 
 const draftOf = (targets) => ({ title: 'Card', contain: ['Block the C2'], cves: [], actions: { v: 1, items: [{ ...block, text: 'Block the C2', targets }], indicators: [{ type: 'sha256', value: 'e'.repeat(64), role: 'malware_file' }] } });
