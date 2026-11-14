@@ -385,7 +385,26 @@ customer's own name under a tenant platform (a Pages site, a tunnel, a dynamic-D
 actor's, by exact host. A WAF step that names indicators follows the same per-indicator rule.
 Nothing that cannot be undone is ever `auto`. Every action, target and indicator carries `why`: one sentence naming the rule
 that set its class (written beside the rules in `lib/actions.js`, never by a model), shown on the card's table and the Response tab
-and served as the last column of both tables. Indicators no step names are listed once per card as an unstated block candidate
+and served as a column of both tables.
+
+**Facts the reporting does not carry** (`lib/enrich.js`): a role is what a report says an indicator did, not what a
+block of it would cost. So three free lookups, none of them a model, are read by the rules before a block is called
+automatic: who owns an address (Team Cymru's IP-to-ASN mapping over DNS-over-HTTPS, and PeeringDB's self-declared
+network type), when a domain was registered (RDAP), and whether a domain is among the 10,000 most visited (a committed
+snapshot of the Tranco list, `lib/topsites.json`). An address in a shared edge or relay network (Cloudflare including
+WARP egress, Akamai, Fastly, Zscaler), a big cloud (AWS, Microsoft, Google, Oracle, Alibaba, Tencent, IBM), a network
+that lists itself as an access provider (home and office connections) or as an organization's own (PeeringDB's types are
+self-declared, and a small hosting company sometimes picks one of these: the error is on the cautious side) is never `auto`; neither is a domain
+registered more than two years before it was checked, or a host under a top-ranked domain (which also gets
+`exact_match_only`). The `why` then says what the reporting read it as and what the lookup found, since the two
+disagree and a person settles it. A rented server (most actor infrastructure) keeps the reporting's class, with its
+owner shown. A registration date that was found answers `age_check`, which then drops from the gates. Facts are served
+as `owner`, `registered` and `rank` on every target and indicator. They flag collateral, they do not validate the
+reporting: an address in a cloud can still be the actor's own server, and ownership data goes stale (a lookup is
+repeated after 90 days). AI cards get theirs from the last step of the watch tick (`enrichOnlySweep`: at most 40
+addresses, 6 domains and 8 network types a tick, a failed lookup retried a day later, three times; stored as
+`draft.enrich`; `CARD_ENRICH=0` turns it off), hand cards from `lib/handenrich.json`; `npm run update-enrich`
+refreshes that file and the top-sites snapshot. Indicators no step names are listed once per card as an unstated block candidate
 (`<card>:x.1`, `stated: no`). The class is computed when the feed is read, so a rule change applies
 to every card at once. Where a record comes from: hand-written cards have a hand-written one
 (`lib/handactions.js`; a test holds each step to the text the card prints); for a generated card one
@@ -412,13 +431,13 @@ row but outside that sum. `CARD_ACTIONS=0` turns the calls off; stored records k
 long as they still restate the Contain list the card prints. Machine forms: `/actions.json` (grouped by card, with the
 vocabulary, the totals by kind and class, and `pending[]`, the cards not classified yet) and
 `/actions.tsv`, one line per action and target with a header, columns `card date action step kind
-autonomy gates when asset reversible stated target_type target role direction pattern url text why`;
+autonomy gates when asset reversible stated target_type target role direction pattern url text why owner registered rank`;
 columns are only ever added at the end and a field is never empty (a dash stands in). Both take
 `?card=SLUG`. `/?view=cards&format=json` carries a per-card count by class and the URL.
 
 Across cards, `/actions.tsv?by=indicator` and `/actions.json?by=indicator` list every indicator a
 block or a request filter could act on **once**, whichever cards name it: columns `type value
-autonomy gates direction roles cards card_count first_date last_date via stated why`, the automatic ones
+autonomy gates direction roles cards card_count first_date last_date via stated why owner registered rank`, the automatic ones
 first, then the most recently named. The class is the most cautious any card gives it, the gates are
 every card's, and a card that reads the indicator as benign holds it at `recommend` (with `benign`
 among its roles) even when another card would block it. `?autonomy=` and `?type=` filter that list;

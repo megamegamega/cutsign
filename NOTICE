@@ -20,3 +20,13 @@ naturalearthdata.com) as redistributed in world-atlas 2.0.2:
   OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
   THIS SOFTWARE.
+
+lib/topsites.json is the top 10,000 domains of the Tranco list (https://tranco-list.eu):
+
+  Victor Le Pochat, Tom Van Goethem, Samaneh Tajalizadehkhoob, Maciej Korczynski and
+  Wouter Joosen. "Tranco: A Research-Oriented Top Sites Ranking Hardened Against
+  Manipulation." NDSS 2019.
+
+Address ownership shown by the response-action feeds comes from Team Cymru's IP-to-ASN
+mapping (https://www.team-cymru.com/ip-asn-mapping) and PeeringDB (https://www.peeringdb.com);
+domain registration dates come from the registries' RDAP services via rdap.org.

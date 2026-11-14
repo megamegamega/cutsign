@@ -1,0 +1,409 @@
+{
+ "generated": "2026-11-14",
+ "facts": {
+  "dom|godofthunder.st": {
+   "at": "2026-11-14T19:45:18.144Z",
+   "registered": null
+  },
+  "dom|litellm.dev": {
+   "at": "2026-11-14T19:45:19.462Z",
+   "registered": "2026-10-13"
+  },
+  "dom|m-kosche.com": {
+   "at": "2026-11-14T19:45:20.932Z",
+   "registered": "2026-05-15"
+  },
+  "ip|103.122.245.194": {
+   "at": "2026-11-14T19:41:18.250Z",
+   "asn": 152918,
+   "owner": "Liberally Network LLC, HK",
+   "cc": "AU",
+   "kind": "Cable/DSL/ISP"
+  },
+  "ip|103.147.220.17": {
+   "at": "2026-11-14T19:41:18.720Z",
+   "asn": 139969,
+   "owner": "PT JUNINDO, ID",
+   "cc": "ID",
+   "kind": ""
+  },
+  "ip|104.168.112.237": {
+   "at": "2026-11-14T19:41:19.006Z",
+   "asn": 36352,
+   "owner": "HostPapa, US",
+   "cc": "US",
+   "kind": "NSP"
+  },
+  "ip|107.189.14.87": {
+   "at": "2026-11-14T19:41:19.284Z",
+   "asn": 53667,
+   "owner": "FranTech Solutions, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|124.198.132.33": {
+   "at": "2026-11-14T19:41:19.547Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|134.199.154.64": {
+   "at": "2026-11-14T19:41:19.826Z",
+   "asn": 14061,
+   "owner": "DigitalOcean, LLC, US",
+   "cc": "US",
+   "kind": "Content"
+  },
+  "ip|144.172.64.128": {
+   "at": "2026-11-14T19:41:20.088Z",
+   "asn": 14956,
+   "owner": "RouterHosting LLC, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|144.172.64.60": {
+   "at": "2026-11-14T19:41:20.354Z",
+   "asn": 14956,
+   "owner": "RouterHosting LLC, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|144.172.64.99": {
+   "at": "2026-11-14T19:41:20.404Z",
+   "asn": 14956,
+   "owner": "RouterHosting LLC, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|144.172.94.243": {
+   "at": "2026-11-14T19:41:20.453Z",
+   "asn": 14956,
+   "owner": "RouterHosting LLC, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|152.233.51.69": {
+   "at": "2026-11-14T19:41:20.507Z",
+   "asn": 212238,
+   "owner": "Datacamp Limited, GB",
+   "cc": "GB",
+   "kind": ""
+  },
+  "ip|157.22.126.128": {
+   "at": "2026-11-14T19:41:20.861Z",
+   "asn": 213954,
+   "owner": "Global Transit Systems LLC, US",
+   "cc": "SC",
+   "kind": ""
+  },
+  "ip|165.227.201.8": {
+   "at": "2026-11-14T19:41:21.145Z",
+   "asn": 14061,
+   "owner": "DigitalOcean, LLC, US",
+   "cc": "US",
+   "kind": "Content"
+  },
+  "ip|167.148.41.96": {
+   "at": "2026-11-14T19:41:21.196Z",
+   "asn": 19318,
+   "owner": "Interserver, Inc, US",
+   "cc": "US",
+   "kind": "Content"
+  },
+  "ip|168.100.8.57": {
+   "at": "2026-11-14T19:41:21.483Z",
+   "asn": 399629,
+   "owner": "BL Networks, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|178.15.54.129": {
+   "at": "2026-11-14T19:41:21.781Z",
+   "asn": 3209,
+   "owner": "Vodafone GmbH, DE",
+   "cc": "DE",
+   "kind": "Cable/DSL/ISP"
+  },
+  "ip|178.16.54.129": {
+   "at": "2026-11-14T19:41:22.087Z",
+   "asn": 6461,
+   "owner": "Zayo Bandwidth, US",
+   "cc": "TR",
+   "kind": "NSP"
+  },
+  "ip|181.215.186.252": {
+   "at": "2026-11-14T19:41:22.334Z",
+   "asn": 209630,
+   "owner": "LLC VASH KREDIT BANK, UA",
+   "cc": "AE",
+   "kind": ""
+  },
+  "ip|185.161.210.29": {
+   "at": "2026-11-14T19:41:22.643Z",
+   "asn": 42159,
+   "owner": "Zemlyaniy Dmitro Leonidovich, UA",
+   "cc": "UA",
+   "kind": ""
+  },
+  "ip|185.196.220.132": {
+   "at": "2026-11-14T19:41:22.956Z",
+   "asn": 213438,
+   "owner": "ColocaTel Inc., SC",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|185.238.2.195": {
+   "at": "2026-11-14T19:41:23.216Z",
+   "asn": 57043,
+   "owner": "HOSTKEY B.V., NL",
+   "cc": "VG",
+   "kind": "Content"
+  },
+  "ip|185.95.159.32": {
+   "at": "2026-11-14T19:41:23.604Z",
+   "asn": 209101,
+   "owner": "IP Vendetta Inc., SC",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|187.15.88.186": {
+   "at": "2026-11-14T19:41:23.876Z",
+   "asn": 212238,
+   "owner": "Datacamp Limited, GB",
+   "cc": "PA",
+   "kind": ""
+  },
+  "ip|187.15.89.186": {
+   "at": "2026-11-14T19:41:23.928Z",
+   "asn": 212238,
+   "owner": "Datacamp Limited, GB",
+   "cc": "PA",
+   "kind": ""
+  },
+  "ip|187.15.90.217": {
+   "at": "2026-11-14T19:41:23.977Z",
+   "asn": 212238,
+   "owner": "Datacamp Limited, GB",
+   "cc": "PA",
+   "kind": ""
+  },
+  "ip|192.159.99.172": {
+   "at": "2026-11-14T19:41:24.035Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|192.236.172.197": {
+   "at": "2026-11-14T19:41:24.092Z",
+   "asn": 36352,
+   "owner": "HostPapa, US",
+   "cc": "US",
+   "kind": "NSP"
+  },
+  "ip|193.26.115.16": {
+   "at": "2026-11-14T19:41:24.145Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.26.115.199": {
+   "at": "2026-11-14T19:41:24.205Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.26.115.21": {
+   "at": "2026-11-14T19:41:24.261Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.26.115.210": {
+   "at": "2026-11-14T19:41:24.311Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.26.115.221": {
+   "at": "2026-11-14T19:41:24.363Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.26.115.72": {
+   "at": "2026-11-14T19:41:24.418Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|193.47.62.24": {
+   "at": "2026-11-14T19:41:24.474Z",
+   "asn": 216014,
+   "owner": "BestDC Limited, GB",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|198.44.123.66": {
+   "at": "2026-11-14T19:41:24.759Z",
+   "asn": 36352,
+   "owner": "HostPapa, US",
+   "cc": "US",
+   "kind": "NSP"
+  },
+  "ip|199.19.77.18": {
+   "at": "2026-11-14T19:41:24.809Z",
+   "asn": 203662,
+   "owner": "3K33 sp. z o.o., PL",
+   "cc": "NL",
+   "kind": "Enterprise"
+  },
+  "ip|199.19.77.84": {
+   "at": "2026-11-14T19:41:25.064Z",
+   "asn": 203662,
+   "owner": "3K33 sp. z o.o., PL",
+   "cc": "NL",
+   "kind": "Enterprise"
+  },
+  "ip|199.19.95.66": {
+   "at": "2026-11-14T19:45:22.345Z",
+   "asn": 7040,
+   "owner": "Netminders Server Hosting, CA",
+   "cc": "CA",
+   "kind": ""
+  },
+  "ip|199.19.95.67": {
+   "at": "2026-11-14T19:45:26.823Z",
+   "asn": 7040,
+   "owner": "Netminders Server Hosting, CA",
+   "cc": "CA",
+   "kind": ""
+  },
+  "ip|199.19.95.68": {
+   "at": "2026-11-14T19:45:26.943Z",
+   "asn": 7040,
+   "owner": "Netminders Server Hosting, CA",
+   "cc": "CA",
+   "kind": ""
+  },
+  "ip|204.44.66.81": {
+   "at": "2026-11-14T19:41:25.596Z",
+   "asn": 36352,
+   "owner": "HostPapa, US",
+   "cc": "US",
+   "kind": "NSP"
+  },
+  "ip|206.188.197.105": {
+   "at": "2026-11-14T19:41:25.656Z",
+   "asn": 399629,
+   "owner": "BL Networks, US",
+   "cc": "US",
+   "kind": ""
+  },
+  "ip|217.60.242.76": {
+   "at": "2026-11-14T19:45:27.000Z",
+   "asn": 218970,
+   "owner": "Amin NezhadKahnoji, IR",
+   "cc": "AE",
+   "kind": "Cable/DSL/ISP"
+  },
+  "ip|2400:8d60:2::1:841d:5dd": {
+   "at": "2026-11-14T19:45:31.345Z",
+   "asn": 149440,
+   "owner": "Evoxt Sdn. Bhd., MY",
+   "cc": "MY",
+   "kind": "Cable/DSL/ISP"
+  },
+  "ip|2409:40d2:204e:4be:2a1f:f9c9:a055:e00b": {
+   "at": "2026-11-14T19:45:35.761Z",
+   "asn": 55836,
+   "owner": "Reliance Jio Infocomm Limited, IN",
+   "cc": "IN",
+   "kind": "Cable/DSL/ISP"
+  },
+  "ip|31.77.229.35": {
+   "at": "2026-11-14T19:45:40.175Z",
+   "asn": 218877,
+   "owner": "Samuel Dierich, DE",
+   "cc": "US",
+   "kind": "Content"
+  },
+  "ip|45.134.225.16": {
+   "at": "2026-11-14T19:41:26.381Z",
+   "asn": 213438,
+   "owner": "ColocaTel Inc., SC",
+   "cc": "DE",
+   "kind": "Content"
+  },
+  "ip|45.198.224.169": {
+   "at": "2026-11-14T19:45:44.563Z",
+   "asn": 215925,
+   "owner": "VPSVAULT.HOST LTD, GB",
+   "cc": "SC",
+   "kind": "Content"
+  },
+  "ip|45.83.31.44": {
+   "at": "2026-11-14T19:41:26.592Z",
+   "asn": 210558,
+   "owner": "1337 Services GmbH, DE",
+   "cc": "NL",
+   "kind": "Content"
+  },
+  "ip|65.87.223.26": {
+   "at": "2026-11-14T19:41:26.644Z",
+   "asn": 203662,
+   "owner": "3K33 sp. z o.o., PL",
+   "cc": "NL",
+   "kind": "Enterprise"
+  },
+  "ip|85.11.167.243": {
+   "at": "2026-11-14T19:45:48.944Z",
+   "asn": 197170,
+   "owner": "TechTies Inc., SC",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|85.11.167.52": {
+   "at": "2026-11-14T19:45:53.355Z",
+   "asn": 197170,
+   "owner": "TechTies Inc., SC",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|85.11.168.45": {
+   "at": "2026-11-14T19:45:53.469Z",
+   "asn": 207144,
+   "owner": "SOFCOMPANY Ltd, BG",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|87.121.84.174": {
+   "at": "2026-11-14T19:45:57.862Z",
+   "asn": 197170,
+   "owner": "TechTies Inc., SC",
+   "cc": "BG",
+   "kind": ""
+  },
+  "ip|91.92.240.238": {
+   "at": "2026-11-14T19:41:27.254Z",
+   "asn": 6461,
+   "owner": "Zayo Bandwidth, US",
+   "cc": "TR",
+   "kind": "NSP"
+  },
+  "ip|92.118.112.100": {
+   "at": "2026-11-14T19:45:57.988Z",
+   "asn": 215540,
+   "owner": "GLOBAL CONNECTIVITY SOLUTIONS LLP, GB",
+   "cc": "RU",
+   "kind": "Content"
+  }
+ }
+}

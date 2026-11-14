@@ -3,7 +3,7 @@
 // watch once (pages, feeds, and a model only where something changed); the later ticks collect the
 // batched model answers, finish the free checks (KEV, NVD, GitHub) and refresh card coverage.
 // Order inside a tick: batched answers, response actions for cards that have none yet, the inbox, the
-// watches, the card loop, then card coverage with what is left of the tick. Every step has a deadline
+// watches, the card loop, card coverage with what is left of the tick, then indicator facts (free lookups). Every step has a deadline
 // inside the function's 300 s (2026-11-14: the card loop had none, and a tick that ran long was cut
 // off before it answered, with the steps behind the loop never reached).
 //   GET /api/watch?h=NN   Authorization: Bearer $CRON_SECRET
@@ -12,7 +12,7 @@ import { supabaseStore } from '../lib/db.js';
 import { runWatchTick, ensureWatches } from '../lib/watch.js';
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
-import { hypeSweep, coverageOnlySweep, actionsOnlySweep } from '../lib/hype.js';
+import { hypeSweep, coverageOnlySweep, actionsOnlySweep, enrichOnlySweep } from '../lib/hype.js';
 import { intake } from '../lib/intake.js';
 import { applyUpdate } from '../lib/update.js';
 import { collectJobs } from '../lib/jobs.js';
@@ -109,8 +109,13 @@ export default async function handler(req, res) {
     mark('cards');
     const coverage = await coverageOnlySweep(store, { deadline: started + 200_000 });
     mark('coverage');
-    console.log(`[watch] tick ended at ${secs.coverage} s of 300: ${JSON.stringify(secs)}`);
-    return res.json({ ok: true, ...counts, jobs, actions, updates, opened, coverage, hype, seconds: secs });
+    // Indicator facts with whatever is left (owner of an address, age of a domain: lib/enrich.js). Free
+    // lookups of a few seconds each, none started after 265 s or 20 s into the step, so a tick that ran
+    // long skips it and nothing above ever waits for it.
+    const enrich = await enrichOnlySweep(store, { deadline: Math.min(started + 265_000, Date.now() + 20_000) });
+    mark('enrich');
+    console.log(`[watch] tick ended at ${secs.enrich} s of 300: ${JSON.stringify(secs)}`);
+    return res.json({ ok: true, ...counts, jobs, actions, updates, opened, coverage, hype, enrich, seconds: secs });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting on every tick
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {

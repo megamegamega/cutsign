@@ -12,7 +12,8 @@
     "run-local": "node scripts/run-local.js",
     "gmail-auth": "node scripts/gmail-auth.js",
     "update-attack": "node scripts/update-attack.js",
-    "update-worldmap": "node scripts/update-worldmap.js"
+    "update-worldmap": "node scripts/update-worldmap.js",
+    "update-enrich": "node scripts/update-enrich.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

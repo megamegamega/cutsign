@@ -23,7 +23,7 @@ import { installFakeLLM, captureOutputs } from './helpers.js';
 const act = (kind, o = {}) => ({ step: 1, text: 'A step', kind, when: 'always', asset: 'any', reversible: true, pattern: null, targets: [], ...o });
 const HOUR = 3_600_000;
 // the rules below are pinned without their sentence; the sentence (`why`) has its own test
-const noWhy = ({ why, ...rest }) => rest;
+const noWhy = ({ why, owner, registered, rank, ...rest }) => rest;
 const policyFor = (...a) => noWhy(policyWhy(...a));
 const targetPolicy = (...a) => noWhy(targetWhy(...a));
 
@@ -81,7 +81,7 @@ test('why: every class comes with the sentence of the rule that set it, for a st
   // every record of the feed has one, as its own field and as the last column of both tables
   const report = cross();
   for (const c of report.cards) for (const a of c.actions) { assert.ok(a.why, a.id); for (const t of a.targets) assert.ok(t.why, `${a.id} ${t.value}`); }
-  assert.equal(TSV_COLUMNS.at(-1), 'why'); assert.equal(INDICATOR_COLUMNS.at(-1), 'why');
+  assert.deepEqual(TSV_COLUMNS.slice(-4), ['why', 'owner', 'registered', 'rank']); assert.deepEqual(INDICATOR_COLUMNS.slice(-4), ['why', 'owner', 'registered', 'rank']);
   const by = Object.fromEntries(indicatorsReport(report).indicators.map((r) => [r.value, r.why]));
   assert.match(by['203.0.113.7'], /compromised or abused/);
   assert.match(by['evil.example.test'], /another as not the actor's/);
@@ -90,7 +90,7 @@ test('why: every class comes with the sentence of the rule that set it, for a st
   assert.ok(actionsTable(report.cards[0].actions).includes('<th>Why</th>'));
   const html = actionsBody(report);
   assert.ok(html.includes('Class and why') && html.includes(by['203.0.113.7']) && html.includes(policyWhy(act('rotate_secret')).why));
-  assert.match(actionsScript(), /via stated why; do/);
+  assert.match(actionsScript(), /via stated why owner registered rank; do/);
 });
 
 test('policy: a condition adds its check, an irreversible step is never automatic, and evidence comes first', () => {
@@ -430,7 +430,7 @@ test('indicators: each one once across cards, with the most cautious class any c
   // one card calls the address the actor's, the other a compromised host: a person decides, and both cards are named
   assert.deepEqual(by['203.0.113.7'], { type: 'ipv4', value: '203.0.113.7', autonomy: 'recommend', gates: ['usage_check', 'expiry'], direction: 'both', roles: ['c2', 'compromised_legit'],
     cards: ['beta-2026', 'alpha-2026'], card_count: 2, first_date: '2026-11-10', last_date: '2026-11-12', via: ['block_indicator'], stated: true,
-    why: 'It is a legitimate third-party host the actor compromised or abused: others still depend on it.' });
+    why: 'It is a legitimate third-party host the actor compromised or abused: others still depend on it.', owner: null, registered: null, rank: null });
   // a card that read it as harmless holds back the card that would block it (whatever the letter case)
   assert.deepEqual([by['evil.example.test'].autonomy, by['evil.example.test'].roles, by['evil.example.test'].cards], ['recommend', ['c2', 'benign'], ['alpha-2026']]);
   // a request filter that names an indicator carries the filter's own checks as well as the indicator's
@@ -460,8 +460,8 @@ test('indicators tsv: a header, one line per indicator, every line the same widt
   assert.deepEqual(INDICATOR_COLUMNS.slice(0, 4), ['type', 'value', 'autonomy', 'gates']);
   const rows = lines.slice(1).map((l) => l.split('\t'));
   for (const [i, row] of rows.entries()) { assert.equal(row.length, INDICATOR_COLUMNS.length, lines[i + 1]); for (const f of row) assert.ok(f.length > 0, lines[i + 1]); }
-  assert.deepEqual(rows[3], ['ipv4', '203.0.113.7', 'recommend', 'usage_check,expiry', 'both', 'c2,compromised_legit', 'beta-2026,alpha-2026', '2', '2026-11-10', '2026-11-12', 'block_indicator', 'yes', 'It is a legitimate third-party host the actor compromised or abused: others still depend on it.']);
-  assert.deepEqual(rows[2], ['sha256', 'e'.repeat(64), 'auto', 'usage_check', '-', 'malware_file', 'alpha-2026', '1', '2026-11-10', '2026-11-10', 'block_indicator', 'no', 'Public reporting identifies it as the actor\'s own (a malicious file), so a block should cost nothing legitimate.']);
+  assert.deepEqual(rows[3], ['ipv4', '203.0.113.7', 'recommend', 'usage_check,expiry', 'both', 'c2,compromised_legit', 'beta-2026,alpha-2026', '2', '2026-11-10', '2026-11-12', 'block_indicator', 'yes', 'It is a legitimate third-party host the actor compromised or abused: others still depend on it.', '-', '-', '-']);
+  assert.deepEqual(rows[2], ['sha256', 'e'.repeat(64), 'auto', 'usage_check', '-', 'malware_file', 'alpha-2026', '1', '2026-11-10', '2026-11-10', 'block_indicator', 'no', 'Public reporting identifies it as the actor\'s own (a malicious file), so a block should cost nothing legitimate.', '-', '-', '-']);
   assert.equal(indicatorsTsv(indicatorsReport(cross(), { type: 'md5' })), `${INDICATOR_COLUMNS.join('\t')}\n`);
 });
 
