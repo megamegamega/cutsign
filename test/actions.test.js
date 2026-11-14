@@ -558,6 +558,11 @@ test('wiring: the three routes exist, the page handler serves them, and the card
   assert.ok(loop, 'the card loop has a deadline and leaves the calls to the step that has one');
   const deadlines = [...tick.matchAll(/started \+ ([\d_]+)/g)].map((m) => Number(m[1].replace(/_/g, '')));
   assert.ok(deadlines.length >= 5 && deadlines.every((d) => d < 300_000), `deadlines: ${deadlines}`);
+  // room to finish: a watch's model read starts with 20 s left on the watches' clock and a story with
+  // 10 s left on the card loop's, so neither clock may run to the last half minute of the function
+  assert.ok(Number(tick.match(/runWatchTick\(store, \{ deadline: started \+ ([\d_]+)/)[1].replace(/_/g, '')) <= 240_000);
+  assert.ok(Number(loop[1].replace(/_/g, '')) <= 270_000 && Number(loop[2].replace(/_/g, '')) >= 10_000);
+  for (const k of ['jobs', 'actions', 'watches', 'cards', 'coverage']) assert.ok(tick.includes(`mark('${k}')`), `the tick times its ${k} step`);
   assert.equal(Number(tick.match(/maxDuration: (\d+)/)[1]), 300);
   assert.ok(readFileSync(new URL('../lib/update.js', import.meta.url), 'utf8').includes('actions: false'));
 });
