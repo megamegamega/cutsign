@@ -399,7 +399,10 @@ registered more than two years before it was checked, or a host under a top-rank
 `exact_match_only`). The `why` then says what the reporting read it as and what the lookup found, since the two
 disagree and a person settles it. A rented server (most actor infrastructure) keeps the reporting's class, with its
 owner shown. A registration date that was found answers `age_check`, which then drops from the gates. Facts are served
-as `owner`, `registered` and `rank` on every target and indicator. They flag collateral, they do not validate the
+as `owner`, `registered` and `rank` on every target and indicator. Beside them, `lookup` says what the
+lookups came to (`conflicts` with an actor's-own reading, `consistent` with the reporting, `pending`, `not_found`, `none`)
+and `found` (JSON only) says it in a sentence; the Response tab prints both under the reason, so the last column
+is only what is left for the reader to check. They flag collateral, they do not validate the
 reporting: an address in a cloud can still be the actor's own server, and ownership data goes stale (a lookup is
 repeated after 90 days). AI cards get theirs from the last step of the watch tick (`enrichOnlySweep`: at most 40
 addresses, 6 domains and 8 network types a tick, a failed lookup retried a day later, three times; stored as

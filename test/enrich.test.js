@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { memoryStore } from '../lib/store-memory.js';
 import { registrable, enrichKey, topRank, netClass, factsFor, enrichDue, lookup, wantedKeys, TOP_N, HAND_FACTS } from '../lib/enrich.js';
-import { targetPolicy, policyFor, expandActions, actionsReport, indicatorsReport, indicatorsTsv, actionsTsv, sharedPlatform, INDICATOR_COLUMNS, TSV_COLUMNS } from '../lib/actions.js';
+import { targetPolicy, policyFor, expandActions, actionsReport, indicatorsReport, indicatorsTsv, actionsTsv, actionsBody, sharedPlatform, INDICATOR_COLUMNS, TSV_COLUMNS, LOOKUPS, VOCAB } from '../lib/actions.js';
 import { HAND_ACTIONS } from '../lib/handactions.js';
 import { enrichOnlySweep } from '../lib/hype.js';
 
@@ -185,10 +185,61 @@ test('feeds: the facts reach every target, the list across cards and both tables
   assert.deepEqual([by['c2.evilcdn.test'].autonomy, by['c2.evilcdn.test'].registered], ['auto', '2026-09-01']);
   const rows = indicatorsTsv(list).trim().split('\n').map((l) => l.split('\t'));
   assert.ok(rows.every((r) => r.length === INDICATOR_COLUMNS.length && r.every(Boolean)));
-  assert.deepEqual(rows.find((r) => r[1] === '203.0.113.7').slice(-3), ['AS16509 Amazon.com, Inc., US', '-', '-']);
+  assert.deepEqual(rows.find((r) => r[1] === '203.0.113.7').slice(-4), ['AS16509 Amazon.com, Inc., US', '-', '-', 'conflicts']);
   const arows = actionsTsv(report).trim().split('\n').map((l) => l.split('\t'));
   assert.ok(arows.every((r) => r.length === TSV_COLUMNS.length));
-  assert.deepEqual(arows.find((r) => r[12] === 'c2.evilcdn.test').slice(-3), ['-', '2026-09-01', '-']);
+  assert.deepEqual(arows.find((r) => r[12] === 'c2.evilcdn.test').slice(-4), ['-', '2026-09-01', '-', 'consistent']);
+});
+
+test('results: every target says what the lookups found, as a state and a sentence, and the Response tab shows it beside the class', () => {
+  const facts = { ...FACTS, 'ip|198.51.100.10': { at: AT, asn: 64500, owner: 'Rented Servers GmbH, DE', cc: 'DE', kind: null, kt: 0 }, 'ip|198.51.100.11': { at: AT, asn: null },
+    'ip|198.51.100.12': { at: AT, fail: 1 }, 'dom|nodate.test': { at: AT, registered: null } };
+  const p = (type, value, role) => targetPolicy({ type, value, role }, block, policyFor(block), facts);
+  assert.deepEqual(Object.keys(VOCAB.lookup).sort(), [...LOOKUPS].sort());
+  // the facts argue against an actor's-own reading: a conflict, and the sentence says with what
+  let r = p('ipv4', '203.0.113.7', 'c2');
+  assert.equal(r.lookup, 'conflicts'); assert.match(r.found, /^Owner AS16509 Amazon\.com, Inc\., US: a big cloud.*argues against treating it as the actor's own.*command-and-control server/);
+  // the same facts under a reading that was already cautious: nothing to disagree with
+  r = p('ipv4', '203.0.113.7', 'compromised_legit');
+  assert.equal(r.lookup, 'consistent'); assert.match(r.found, /does not call it the actor's own/);
+  // ordinary rented hosting under an actor's-own reading: looked up, and it agrees
+  r = p('ipv4', '198.51.100.9', 'c2');
+  assert.deepEqual([r.autonomy, r.lookup], ['auto', 'consistent']); assert.match(r.found, /^Owner AS64500 Rented Servers GmbH, DE \(listed type: Content\).*Nothing here argues against/);
+  // owner known, network type still to ask: the owner is shown, the verdict waits
+  r = p('ipv4', '198.51.100.10', 'c2');
+  assert.equal(r.lookup, 'pending'); assert.match(r.found, /^Owner AS64500.*network type is not looked up yet/);
+  // never asked, or failed with tries left: pending. Asked, and no network announces it: nothing found
+  assert.deepEqual([p('ipv4', '192.0.2.99', 'c2').lookup, p('ipv4', '198.51.100.12', 'c2').lookup, p('ipv4', '198.51.100.11', 'c2').lookup], ['pending', 'pending', 'not_found']);
+  assert.equal(p('ipv4', '192.0.2.99', 'c2').found, 'Owner not looked up yet.');
+  // domains: the date, how long before the lookup, and the top-sites answer, which is always known
+  r = p('domain', 'c2.evilcdn.test', 'c2');
+  assert.equal(r.lookup, 'consistent'); assert.match(r.found, /^evilcdn\.test was registered 2026-09-01, \d+ (days|months) before the lookup\. Not among the [\d,]+ most visited domains\. Nothing here argues against/);
+  r = p('domain', 'oldsite.test', 'payload_host');
+  assert.deepEqual([r.autonomy, r.lookup], ['recommend', 'conflicts']); assert.match(r.found, /registered 2011-03-04, 15 years before the lookup/);
+  r = p('domain', 'nodate.test', 'c2');
+  assert.equal(r.lookup, 'not_found'); assert.match(r.found, /^No registration date found for nodate\.test: the age check stays with you/); assert.ok(r.gates.includes('age_check'));
+  assert.equal(p('domain', 'fresh.test', 'c2').lookup, 'pending');
+  // a name on a shared platform, a file hash: nothing to look up, and the platform case says why
+  r = p('domain', 'x.github.io', 'c2');
+  assert.equal(r.lookup, 'none'); assert.match(r.found, /^Not looked up: github\.io is a platform/);
+  assert.deepEqual([p('sha256', 'e'.repeat(64), 'malware_file').lookup, p('sha256', 'e'.repeat(64), 'malware_file').found], ['none', '']);
+
+  // across cards the most telling result wins, and the page prints the state and the sentence in the class cell
+  const stored = { v: 1, items: [{ ...block, text: 'Block the C2', targets: [{ type: 'ipv4', value: '203.0.113.7', role: 'c2' }, { type: 'ipv4', value: '198.51.100.9', role: 'c2' }, { type: 'ipv4', value: '192.0.2.99', role: 'c2' }] }], indicators: [] };
+  const cards = [{ slug: 'alpha-2026', title: 'Alpha', date: '2026-11-12', lane: 'Hunt', source: 'ai', status: 'active', url: '/cards/alpha-2026', cves: [] },
+    { slug: 'beta-2026', title: 'Beta', date: '2026-11-13', lane: 'Hunt', source: 'ai', status: 'active', url: '/cards/beta-2026', cves: [] }];
+  // the second card has not been looked up yet: its copy of the address is pending, the first card's result stands
+  const report = actionsReport(cards, { actionsOf: (c) => expandActions(c.slug, stored, c.slug === 'alpha-2026' ? facts : null), base: 'https://cutsign.example.test', now: NOW });
+  const list = indicatorsReport(report);
+  const by = Object.fromEntries(list.indicators.map((x) => [x.value, x]));
+  assert.deepEqual([by['203.0.113.7'].lookup, by['198.51.100.9'].lookup, by['192.0.2.99'].lookup], ['conflicts', 'consistent', 'pending']);
+  assert.match(by['198.51.100.9'].found, /^Owner AS64500/);
+  assert.deepEqual(Object.keys(list.vocab.lookup).sort(), [...LOOKUPS].sort());
+  const html = actionsBody(report, { base: 'https://cutsign.example.test', indicators: list });
+  assert.match(html, /<span class="c a-warn">lookup: conflicts<\/span> Owner AS16509 Amazon\.com/);
+  assert.match(html, /<span class="c a-ok">lookup: consistent<\/span> Owner AS64500 Rented Servers GmbH/);
+  assert.match(html, /<span class="c">lookup: pending<\/span> Owner not looked up yet\./);
+  assert.match(html, /1 consistent with the reporting, 1 in conflict with it/); assert.match(html, /<th>Still yours to check<\/th>/);
 });
 
 const draftOf = (targets) => ({ title: 'Card', contain: ['Block the C2'], cves: [], actions: { v: 1, items: [{ ...block, text: 'Block the C2', targets }], indicators: [{ type: 'sha256', value: 'e'.repeat(64), role: 'malware_file' }] } });
@@ -243,5 +294,5 @@ test('wiring: the tick runs the sweep last with its own deadline, a re-derived r
   const wanted = new Set();
   for (const stored of Object.values(HAND_ACTIONS)) for (const k of wantedKeys(stored, { skipHost: sharedPlatform })) wanted.add(k);
   for (const k of Object.keys(HAND_FACTS)) assert.ok(wanted.has(k), `handenrich.json holds a fact no hand card needs: ${k}`);
-  assert.deepEqual(factsFor({ type: 'sha256', value: 'e'.repeat(64) }, HAND_FACTS), { owner: null, net: null, registered: null, old: false, reg_domain: null, rank: null, top_domain: null });
+  assert.deepEqual(factsFor({ type: 'sha256', value: 'e'.repeat(64) }, HAND_FACTS), { owner: null, net: null, registered: null, old: false, reg_domain: null, rank: null, top_domain: null, state: 'none', kind: null, type_pending: false, age_days: null, checked: null });
 });
