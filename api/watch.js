@@ -77,7 +77,7 @@ export default async function handler(req, res) {
         const runs = [];
         for (const id of [...runIds].slice(0, 4)) { const r = id === latest?.id ? latest : await store.getRun(id); if (r) runs.push(r); }
         for (const r of runs) {
-          const h = await hypeSweep(store, { run: r });
+          const h = await hypeSweep(store, { run: r, actions: false }); // response actions: the coverage sweep below, which has a deadline
           for (const [k, v] of Object.entries(h)) hype[k] = typeof v === 'number' ? (hype[k] || 0) + v : v;
         }
         hype.runs = runs.length;

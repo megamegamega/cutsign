@@ -16,6 +16,9 @@ import { _resetBatchMode } from '../lib/batchmode.js';
 // The draft-loop tests below predate auto-publishing and read the loop with it off; the
 // publishing tests at the end turn it on explicitly.
 process.env.CARD_AUTOPUBLISH = '0';
+// Response actions add one small call per published card (lib/actions.js). The tests here count the
+// loop's own calls with that off; test/actions.test.js reads the sweeps with it on.
+process.env.CARD_ACTIONS = '0';
 
 const uuid = (n) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
 const story = (n, over = {}) => ({
@@ -447,6 +450,29 @@ test('publish: a revision re-issues the published card in place (same slug, old 
   const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 8 * 3600_000 });
   assert.equal(c3.drafted + c3.revised + c3.published, 0); assert.equal(calls.length, 2);
   assert.equal(cardIndex(await store.listCardDrafts()).cards.filter((x) => x.source === 'ai').length, 0);
+});
+
+test('publish: a revision that leaves the Contain list alone keeps the card\'s response actions, and the record is not shown to the model', async (t) => {
+  t.after(off);
+  const { store, run, kevFetch, calls, hot } = await published();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now });
+  const [v1] = await store.listCardDrafts({ status: 'promoted' });
+  const item = (step, text) => ({ step, text, kind: 'other', when: 'always', asset: 'any', reversible: true, pattern: null, targets: [] });
+  const actions = { v: 1, for: 'record-key-0001', at: new Date(now).toISOString(), items: v1.draft.contain.map((text, i) => item(i + 1, text)), indicators: [] };
+  await store.updateCardDraft(v1.id, { draft: { ...v1.draft, actions } });
+  store._tables.evidence.push({ id: 'e1', story_id: hot.id, kind: 'guidance', raw: 'Hunt for X', url: 'https://www.cisa.gov/news-events/alerts/x', publisher_tier: 'A' });
+  assert.equal((await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 })).revised, 1);
+  const [v2] = await store.listCardDrafts({ status: 'promoted' });
+  assert.equal(v2.version, 2); assert.deepEqual(v2.draft.actions, actions);
+  assert.match(calls[1].messages[0].content, /<prior_draft version="1">/);
+  assert.ok(!calls[1].messages[0].content.includes('record-key-0001'), 'the prior draft goes to the model without the record');
+  // a record that no longer restates the list is not carried: the next sweep classifies the new row
+  await store.updateCardDraft(v2.id, { draft: { ...v2.draft, actions: { ...actions, items: [item(1, 'Some other step')] } } });
+  store._tables.evidence.push({ id: 'e2', story_id: hot.id, kind: 'guidance', raw: 'Hunt for Y', url: 'https://v.example.test/g', publisher_tier: 'B' });
+  assert.equal((await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 8 * 3600_000 })).revised, 1);
+  const [v3] = await store.listCardDrafts({ status: 'promoted' });
+  assert.equal(v3.version, 3); assert.ok(!('actions' in v3.draft));
 });
 
 test('publish: with autopublish off the draft waits; turning it on publishes it on the next sweep without a new model call', async (t) => {

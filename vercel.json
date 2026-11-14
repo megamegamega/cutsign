@@ -7,6 +7,9 @@
     { "source": "/exposure", "destination": "/api/page?view=exposure" },
     { "source": "/exposure.json", "destination": "/api/page?view=exposure&format=json" },
     { "source": "/exposure.tsv", "destination": "/api/page?view=exposure&format=tsv" },
+    { "source": "/actions", "destination": "/api/page?view=actions" },
+    { "source": "/actions.json", "destination": "/api/page?view=actions&format=json" },
+    { "source": "/actions.tsv", "destination": "/api/page?view=actions&format=tsv" },
     { "source": "/cards/:slug([a-z0-9-]+).pdf", "destination": "/api/pdf?slug=:slug" },
     { "source": "/cards/:slug([a-z0-9-]+)", "destination": "/api/page?view=card&slug=:slug" }
   ],

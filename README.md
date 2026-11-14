@@ -357,8 +357,54 @@ cards, the scope half (ranges, org name, domains) is never generated, stored or 
 script takes it from the reader's shell and sends it only to Shodan with the reader's key. A count
 is how widespread the software is, not how many of those services are vulnerable.
 
+**Response actions.** `/actions` (`/?view=actions`) gives every active card's Contain list as data,
+so the chain card → exposure check → hunt → recommendation can be scripted (`lib/actions.js`). Each
+step becomes one or more actions with a kind from a closed list (`block_indicator`, `waf_rule`,
+`isolate_host`, `revoke_session`, `rotate_secret`, `patch`, … sixteen in all), the condition the step
+states (`always`, `if_exposed`, `on_hit`), the kind of asset, whether it can be undone, and the
+indicators it names. From those, **fixed rules in code** give each action an autonomy class and the
+checks that gate it: `auto` (safe unattended once its gates pass), `recommend` (prepare it, a person
+approves), `manual` (a person does it), `never` (not automatable: rotations, rebuilds, removals).
+Gates are `evidence_first`, `exposure_check`, `hit_check`, `usage_check`, `age_check`,
+`exact_match_only`, `log_mode_first` and `expiry`. Every block carries `usage_check`; a block is
+`auto` only for an indicator whose public context says it is the actor's (C2, exfiltration, payload
+host, attack source, malware file), and a shared platform, a legitimate tool, a compromised
+legitimate site, an address of unknown role or a range of addresses is `recommend` at most. A
+platform's own hosts (an API, a CDN, a file host) are the platform whatever the model read; only a
+customer's own name under a tenant platform (a Pages site, a tunnel, a dynamic-DNS name) can be an
+actor's, by exact host. A WAF step that names indicators follows the same per-indicator rule.
+Nothing that cannot be undone is ever `auto`. Indicators no step names are listed once per card as an unstated block candidate
+(`<card>:x.1`, `stated: no`). The class is computed when the feed is read, so a rule change applies
+to every card at once. Where a record comes from: hand-written cards have a hand-written one
+(`lib/handactions.js`; a test holds each step to the text the card prints); for a generated card one
+small low-effort model call classifies the steps and the role of each indicator, and code checks the
+answer against the card (a step number, indicator or pattern the card does not have is dropped, a
+word outside a list falls to the cautious value, a victim's asset is never a block target). The
+model only classifies; it never chooses a class. The record is stored on the card's row in place:
+no new version, no re-issue, no mail, and it is left out of the prior draft a revision shows the
+model. The coverage sweep does it (`lib/hype.js`): the watch tick fills in published cards that have
+no record; the daily sweep also re-checks a card whose Contain list or indicators changed (a
+revision that leaves the Contain list alone carries the record over). One call per card per 20 hours
+at most, 24 per sweep; three answers that cannot be used (one that does not check out, a refusal, a
+cut-off answer: all billed) or five calls that never come back end it until the card changes, and a
+failed re-check leaves the card the record it had. Nothing is called once the month is over
+`MAX_MONTHLY_USD` or when the spend cannot be read. The cost (about 2–4¢ a card) is added to the
+card's row; the monthly sum counts rows created in the month, so a call for an older card is on its
+row but outside that sum. `CARD_ACTIONS=0` turns the calls off; stored records keep being served, as
+long as they still restate the Contain list the card prints. Machine forms: `/actions.json` (grouped by card, with the
+vocabulary, the totals by kind and class, and `pending[]`, the cards not classified yet) and
+`/actions.tsv`, one line per action and target with a header, columns `card date action step kind
+autonomy gates when asset reversible stated target_type target role direction pattern url text`;
+columns are only ever added at the end and a field is never empty (a dash stands in). Both take
+`?card=SLUG`. `/?view=cards&format=json` carries a per-card count by class and the URL. The page
+prints a short bash script that lists the automatic block candidates with their gates;
+`test/actions.test.js` runs it as printed against a stub. A role is a reading of public reporting,
+not a verdict on the reader's network, which is why every block waits on the reader's own usage
+check, and why the feed describes and never acts.
+
 **Agent JSON.** `/?view=agent&format=json` (per day), `/?view=iocs&format=json`, `/?q=TERM&format=json`,
-`/?view=cards&format=json`, `/?view=actors&format=json`, `/exposure.json` and `/exposure.tsv`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
+`/?view=cards&format=json`, `/?view=actors&format=json`, `/exposure.json`, `/exposure.tsv`,
+`/actions.json` and `/actions.tsv`. Behaviors, guidance and evidence carry `log_source_keys[]`, a closed
 vocabulary advertised in `vocab`, so a consumer can map telemetry families to its own data.
 
 ## Cost and safety rails

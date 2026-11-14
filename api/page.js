@@ -16,6 +16,7 @@ import { subscribeForm } from '../lib/subscribe.js';
 import { actorReport, CATEGORIES } from '../lib/actors.js';
 import { actorsBody, ACTORS_STYLE } from '../lib/actorsview.js';
 import { exposureReport, exposureTsv, exposureBody, EXPOSURE_STYLE } from '../lib/exposureview.js';
+import { actionsLookup, actionsReport, actionsTsv, actionsBody, actionsSummary, ACTIONS_STYLE } from '../lib/actions.js';
 
 // Cards in play for this request: the manifest's hand-written ones plus the pipeline's published
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
@@ -332,6 +333,8 @@ GET /?view=cards&amp;format=json          verdict-card manifest (slug, title, la
 GET /?view=actors&amp;format=json         adversaries by attributed country (w=14|30|90|all, cat=state|crime|hacktivist|spyware)
 GET /exposure.json                       every card's internet-scanner queries with Shodan's internet-wide count and trend
 GET /exposure.tsv                        the same, one query per line, tab-separated (shell-friendly; columns on the Exposure tab)
+GET /actions.json                        every card's Contain steps as data: kind, automation class, the checks that come first, block targets (?card=SLUG for one card)
+GET /actions.tsv                         the same, one action and target per line, tab-separated (columns and rules at /actions)
 GET /cards/&lt;slug&gt;.html                 a hand-written verdict card; /cards/&lt;slug&gt; one the pipeline published; stories here carry verdict_card when one exists
 
 Shapes: log_source is the extractor's free text; log_source_keys beside it is a closed vocabulary
@@ -563,7 +566,7 @@ export default async function handler(req, res) {
       const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
-        `<div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
+        `<style>${ACTIONS_STYLE}</style><div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
     }
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
@@ -589,9 +592,11 @@ export default async function handler(req, res) {
         // live KEV status per card CVE: the card pages read it and correct a stale "not listed" row
         const kev = await kevEntries();
         const kevOf = (c) => Object.fromEntries((c.cves || []).filter((v) => kev.has(v)).map((v) => [v, { date_added: kev.get(v).dateAdded, due_date: kev.get(v).dueDate || null }]));
+        // each card's response actions in short: the counts by class and where the records are (null until a card has them)
+        const actionsOf = actionsLookup(aiRows);
         return res.status(200).send(JSON.stringify({
           kind: 'cutsign.cards', generated: new Date().toISOString(),
-          cards: IDX.cards.map((c) => ({ ...c, kev: kevOf(c), coverage: coverageOf(c), reissue: c.source === 'hand' ? reissueOf(c) : null })),
+          cards: IDX.cards.map((c) => ({ ...c, kev: kevOf(c), coverage: coverageOf(c), reissue: c.source === 'hand' ? reissueOf(c) : null, actions: c.status === 'active' ? actionsSummary(c.slug, actionsOf(c)) : null })),
           candidates: candidates.map((x) => ({ id: x.id, title: x.title, version: x.version || 1, score: x.score, reasons: x.reasons, created_at: x.created_at, surfaced_at: x.surfaced_at || null, url: `/?view=draft&id=${x.id}` })),
         }, null, 1));
       }
@@ -603,7 +608,7 @@ export default async function handler(req, res) {
       const active = IDX.cards.filter((c) => c.status === 'active');
       const retired = IDX.cards.filter((c) => c.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || '')));
       const aiN = active.filter((c) => c.source === 'ai').length;
-      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${aiN ? ` (${aiN} AI-published)` : ''}${retired.length ? ` · ${retired.length} archived` : ''} · one-page verdicts with lane, exposure, detection coverage (checked automatically from public sources) and escalation triggers · print to PDF from the card</p></div>`;
+      const hero = `<div class="hero"><h1>Verdict cards</h1><p class="sub">${active.length} active card${active.length === 1 ? '' : 's'}${aiN ? ` (${aiN} AI-published)` : ''}${retired.length ? ` · ${retired.length} archived` : ''} · one-page verdicts with lane, exposure, detection coverage (checked automatically from public sources) and escalation triggers · print to PDF from the card · <a href="/actions">Contain steps as data</a></p></div>`;
       // newest day first; within a day, urgency order (hunt/IR, patch-now, patch, prepare)
       const laneRank = (l) => /hunt|ir/i.test(l) && !/patch/i.test(l) ? 0 : /now/i.test(l) ? 1 : /patch/i.test(l) ? 2 : 3;
       const sorted = [...active].sort((a, b) => b.date.localeCompare(a.date) || laneRank(a.lane) - laneRank(b.lane));
@@ -652,6 +657,29 @@ export default async function handler(req, res) {
       return res.status(200).send(doc('Cutsign — exposure', tabsExposure + searchForm(''),
         `<style>${EXPOSURE_STYLE}</style>${exposureBody(report, { base })}`,
         'Cutsign · public OSINT only · internet-wide counts of the software in the news; your scope stays with you'));
+    }
+
+    // Response actions (lib/actions.js): every active card's Contain list as data, with the automation
+    // class and gates the fixed rules give each step, as a page, JSON or one action per line
+    // (format=tsv); ?card=<slug> narrows the JSON and the TSV to one card. Read-only over what the
+    // sweeps stored on each draft row and what lib/handactions.js holds: no model is called here.
+    if (req.query.view === 'actions') {
+      const base = String(process.env.PUBLIC_BASE_URL || 'https://cutsign.vercel.app').replace(/\/+$/, '');
+      const only = String(req.query.card || '').toLowerCase().slice(0, 120);
+      const report = actionsReport(IDX.cards, { actionsOf: actionsLookup(aiRows), base, card: only || null });
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+      if (json) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(200).send(JSON.stringify(report, null, 1));
+      }
+      if (req.query.format === 'tsv') {
+        res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
+        return res.status(200).send(actionsTsv(report));
+      }
+      const tabsActions = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
+      return res.status(200).send(doc('Cutsign — response actions', tabsActions + searchForm(''),
+        `<style>${ACTIONS_STYLE}</style>${actionsBody(report, { base })}`,
+        'Cutsign · public OSINT only · what each card\'s Contain step is, as data; the checks and the decision stay with you'));
     }
 
     // Adversaries by attributed country (lib/actors.js reads, lib/actorsview.js draws): every stored
