@@ -383,7 +383,9 @@ legitimate site, an address of unknown role or a range of addresses is `recommen
 platform's own hosts (an API, a CDN, a file host) are the platform whatever the model read; only a
 customer's own name under a tenant platform (a Pages site, a tunnel, a dynamic-DNS name) can be an
 actor's, by exact host. A WAF step that names indicators follows the same per-indicator rule.
-Nothing that cannot be undone is ever `auto`. Indicators no step names are listed once per card as an unstated block candidate
+Nothing that cannot be undone is ever `auto`. Every action, target and indicator carries `why`: one sentence naming the rule
+that set its class (written beside the rules in `lib/actions.js`, never by a model), shown on the card's table and the Response tab
+and served as the last column of both tables. Indicators no step names are listed once per card as an unstated block candidate
 (`<card>:x.1`, `stated: no`). The class is computed when the feed is read, so a rule change applies
 to every card at once. Where a record comes from: hand-written cards have a hand-written one
 (`lib/handactions.js`; a test holds each step to the text the card prints); for a generated card one
@@ -410,13 +412,13 @@ row but outside that sum. `CARD_ACTIONS=0` turns the calls off; stored records k
 long as they still restate the Contain list the card prints. Machine forms: `/actions.json` (grouped by card, with the
 vocabulary, the totals by kind and class, and `pending[]`, the cards not classified yet) and
 `/actions.tsv`, one line per action and target with a header, columns `card date action step kind
-autonomy gates when asset reversible stated target_type target role direction pattern url text`;
+autonomy gates when asset reversible stated target_type target role direction pattern url text why`;
 columns are only ever added at the end and a field is never empty (a dash stands in). Both take
 `?card=SLUG`. `/?view=cards&format=json` carries a per-card count by class and the URL.
 
 Across cards, `/actions.tsv?by=indicator` and `/actions.json?by=indicator` list every indicator a
 block or a request filter could act on **once**, whichever cards name it: columns `type value
-autonomy gates direction roles cards card_count first_date last_date via stated`, the automatic ones
+autonomy gates direction roles cards card_count first_date last_date via stated why`, the automatic ones
 first, then the most recently named. The class is the most cautious any card gives it, the gates are
 every card's, and a card that reads the indicator as benign holds it at `recommend` (with `benign`
 among its roles) even when another card would block it. `?autonomy=` and `?type=` filter that list;
