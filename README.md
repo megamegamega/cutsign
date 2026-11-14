@@ -404,7 +404,7 @@ lookups came to (`conflicts` with an actor's-own reading, `consistent` with the 
 and `found` (JSON only) says it in a sentence; the Response tab prints both under the reason, so the last column
 is only what is left for the reader to check. They flag collateral, they do not validate the
 reporting: an address in a cloud can still be the actor's own server, and ownership data goes stale (a lookup is
-repeated after 90 days). AI cards get theirs from the last step of the watch tick (`enrichOnlySweep`: at most 40
+repeated after 90 days). AI cards get theirs from an early step of the watch tick, right after the response actions (`enrichOnlySweep`: at most 40
 addresses, 6 domains and 8 network types a tick, a failed lookup retried a day later, three times; stored as
 `draft.enrich`; `CARD_ENRICH=0` turns it off), hand cards from `lib/handenrich.json`; `npm run update-enrich`
 refreshes that file and the top-sites snapshot. Indicators no step names are listed once per card as an unstated block candidate

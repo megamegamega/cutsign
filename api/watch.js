@@ -56,6 +56,12 @@ export default async function handler(req, res) {
     // given a minute, so the watches start by 165 s at the latest; nothing is pending on most ticks.
     const actions = await actionsOnlySweep(store, { deadline: started + 150_000 });
     mark('actions');
+    // Indicator facts (owner of an address, age of a domain: lib/enrich.js), right after the records they
+    // read. Free lookups of a fraction of a second each (46 took 5 s on 2026-11-14), none started more than
+    // 15 s into the step. Here and not at the end: a tick whose watches and cards ran long never reached
+    // the end, and the Response tab kept saying pending.
+    const enrich = await enrichOnlySweep(store, { deadline: Date.now() + 15_000 });
+    mark('enrich');
     // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the watch
     // tick polls the inbox too and reads them first (a brief found here waits for the cron, as before)
     let updates = {};
@@ -109,12 +115,8 @@ export default async function handler(req, res) {
     mark('cards');
     const coverage = await coverageOnlySweep(store, { deadline: started + 200_000 });
     mark('coverage');
-    // Indicator facts with whatever is left (owner of an address, age of a domain: lib/enrich.js). Free
-    // lookups of a few seconds each, none started after 265 s or 20 s into the step, so a tick that ran
-    // long skips it and nothing above ever waits for it.
-    const enrich = await enrichOnlySweep(store, { deadline: Math.min(started + 265_000, Date.now() + 20_000) });
-    mark('enrich');
-    console.log(`[watch] tick ended at ${secs.enrich} s of 300: ${JSON.stringify(secs)}`);
+    mark('end');
+    console.log(`[watch] tick ended at ${secs.end} s of 300: ${JSON.stringify({ ...secs, enrich_counts: enrich })}`);
     return res.json({ ok: true, ...counts, jobs, actions, updates, opened, coverage, hype, enrich, seconds: secs });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting on every tick

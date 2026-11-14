@@ -286,11 +286,12 @@ test('sweep: each fact is asked once, copied to the other cards that need it, ke
   try { assert.equal((await enrichOnlySweep(store, { now: NOW, fetchImpl: w.fetchImpl })).looked_up, 0); } finally { delete process.env.CARD_ENRICH; }
 });
 
-test('wiring: the tick runs the sweep last with its own deadline, a re-derived record keeps the facts, and the hand cards\' file matches their indicators', () => {
+test('wiring: the tick runs the sweep early with its own short deadline, a re-derived record keeps the facts, and the hand cards\' file matches their indicators', () => {
   const tick = readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8');
-  assert.ok(tick.indexOf('enrichOnlySweep(store') > tick.indexOf('coverageOnlySweep(store'), 'after coverage');
-  const m = /enrichOnlySweep\(store, \{ deadline: Math\.min\(started \+ (\d+)_000, Date\.now\(\) \+ (\d+)_000\) \}\)/.exec(tick);
-  assert.ok(m && Number(m[1]) <= 270 && Number(m[2]) <= 25, 'no lookup starts late in the function');
+  // after the records it reads, before the steps that can take the rest of the tick
+  assert.ok(tick.indexOf('enrichOnlySweep(store') > tick.indexOf('actionsOnlySweep(store') && tick.indexOf('enrichOnlySweep(store') < tick.indexOf('runWatchTick('), 'between the actions and the watches');
+  const m = /enrichOnlySweep\(store, \{ deadline: Date\.now\(\) \+ (\d+)_000 \}\)/.exec(tick);
+  assert.ok(m && Number(m[1]) <= 20, 'the step never holds the watches up for long');
   assert.ok(tick.includes("mark('enrich')"));
   // the derive step replaces draft.actions only, so draft.enrich (a sibling) survives it
   const hype = readFileSync(new URL('../lib/hype.js', import.meta.url), 'utf8');
