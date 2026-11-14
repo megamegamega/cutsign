@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { hypeScore, threadOf, hypeSweep, coverageOnlySweep, fetchKev, evidenceFingerprint, describeChanges, actionable, cardDevelopments, cardFacts, describeFacts, P1_REASON, DRAFT_RESERVE_MS } from '../lib/hype.js';
 import { scrub, DraftSchema, draftBody, buildDraftInput, huntsWithoutEsql, backfillEsql, lintPublicEsql } from '../lib/carddraft.js';
-import { CARDS, cardIndex } from '../lib/cards.js';
+import { CARDS, cardIndex, aiCard, publishedRows } from '../lib/cards.js';
 import { RECHECK_MS } from '../lib/coverage.js';
 import { installFakeLLM, installFakeBatch, captureOutputs } from './helpers.js';
 import { collectJobs } from '../lib/jobs.js';
@@ -1081,4 +1081,69 @@ test('batched: a submission the API refuses is drafted live instead, and said on
   assert.equal(c.submitted, 0); assert.equal(c.batch_errors, 1); assert.equal(c.published, 1, JSON.stringify(c)); assert.equal(calls.length, 1, 'drafted live');
   assert.ok(out.discord.some((l) => l.startsWith('Cutsign ⚠ batch submission failed, drafting live')), out.discord.join('\n'));
   assert.equal(store._tables.llm_jobs.length, 0);
+});
+
+// ---- 2026-11-14: the watch tick's card loop has a deadline; quiet AI cards archive themselves ----
+
+test('sweep: on a short reserve (the watch tick) stories are scored with little time left, a live draft waits, and a sweep with room writes it', async () => {
+  const { store, run, kevFetch, calls } = await world();
+  const now = Date.parse('2026-10-16T13:00:00Z');
+  // 100 s left: less than a live draft needs, plenty to score
+  const c1 = await hypeSweep(store, { run, fetchImpl: kevFetch, now, deadline: Date.now() + 100_000, reserveMs: 10_000 });
+  assert.ok(!c1.yielded); assert.ok(c1.scored >= 1); assert.equal(c1.drafted, 0); assert.equal(c1.draft_deferred, 1, JSON.stringify(c1));
+  assert.equal(calls.length, 0, 'no model call started');
+  assert.equal(store._tables.card_drafts?.length || 0, 0);
+  // less than the reserve left: it yields before a story, like any sweep
+  const c0 = await hypeSweep(store, { run, fetchImpl: kevFetch, now, deadline: Date.now() + 5_000, reserveMs: 10_000 });
+  assert.equal(c0.yielded, true); assert.equal(c0.scored, 0);
+  // nothing was recorded as written, so the next sweep with room drafts it
+  const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now, deadline: Date.now() + 10 * 60_000, reserveMs: 10_000 });
+  assert.equal(c2.drafted, 1, JSON.stringify(c2)); assert.equal(c2.draft_deferred, undefined);
+});
+
+test('archive: an AI card quiet for 30 days with no open watch is archived in place, once, and leaves the daily checks; a watched, developing or young one stays', async (t) => {
+  const prev = { a: process.env.CARD_ACTIONS, b: process.env.CARD_ARCHIVE };
+  t.after(() => { for (const [k, v] of [['CARD_ACTIONS', prev.a], ['CARD_ARCHIVE', prev.b]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  process.env.CARD_ACTIONS = '0'; // this test is about the archive step
+  const out = captureOutputs();
+  const store = memoryStore();
+  const now = Date.parse('2026-12-20T15:00:00Z');
+  const stale = { checked_at: '2026-12-18T12:00:00Z', lanes: [], exposure: null };
+  const mk = (n, slug, created_at) => store.insertCardDraft({ created_at, story_id: uuid(n), thread_ids: [uuid(n)], title: `Card ${n}`, score: 10, reasons: [], version: 1, status: 'promoted', promoted_slug: slug, surfaced_at: created_at, draft: { ...DRAFT, cves: [], coverage: stale } });
+  const quiet = await mk(31, 'quiet-2026', '2026-11-01T12:00:00Z');
+  const watched = await mk(32, 'watched-2026', '2026-11-01T12:00:00Z');
+  const moving = await mk(33, 'moving-2026', '2026-11-01T12:00:00Z');
+  const young = await mk(34, 'young-2026', '2026-12-10T12:00:00Z');
+  store._tables.watches.push(
+    { id: 'w1', story_id: uuid(31), status: 'expired', last_change_at: '2026-11-03T00:00:00Z' },
+    { id: 'w2', story_id: uuid(32), status: 'active', last_change_at: null },
+    { id: 'w3', story_id: uuid(33), status: 'expired', last_change_at: '2026-12-05T00:00:00Z' });
+  const net = routed();
+  const get = async (r) => (await store.getCardDraft(r.id));
+  // switched off: nothing is archived
+  process.env.CARD_ARCHIVE = '0';
+  const c0 = await coverageOnlySweep(store, { fetchImpl: net, now, deadline: 0 });
+  assert.equal(c0.archived, undefined); assert.equal((await get(quiet)).draft.archived_on, undefined);
+  delete process.env.CARD_ARCHIVE;
+  const c = await coverageOnlySweep(store, { fetchImpl: net, now });
+  assert.equal(c.archived, 1, JSON.stringify(c));
+  const q = await get(quiet);
+  assert.equal(q.draft.archived_on, '2026-12-20'); assert.equal(q.status, 'promoted'); assert.equal(q.promoted_slug, 'quiet-2026');
+  assert.equal(q.draft.coverage.checked_at, stale.checked_at, 'an archived card is not re-checked');
+  assert.equal(q.draft.verdict, DRAFT.verdict, 'the card itself is untouched');
+  for (const r of [watched, moving, young]) {
+    const row = await get(r);
+    assert.equal(row.draft.archived_on, undefined, row.promoted_slug);
+    assert.notEqual(row.draft.coverage.checked_at, stale.checked_at, `${row.promoted_slug} still gets its daily check`);
+  }
+  const said = out.discord.filter((l) => l.includes('archived'));
+  assert.equal(said.length, 1, out.discord.join('\n'));
+  assert.match(said[0], /1 AI card archived[^\n]*\n• quiet-2026 — card dated 2026-11-01, all watches expired, last development 2026-11-03/);
+  // the next sweep says nothing more, and the site sees it archived at the same URL
+  const again = await coverageOnlySweep(store, { fetchImpl: net, now: now + 3600_000 });
+  assert.equal(again.archived, undefined); assert.equal(out.discord.filter((l) => l.includes('archived')).length, 1);
+  assert.equal(aiCard(q).status, 'archived');
+  const p = await publishedRows(store);
+  assert.deepEqual([p.active.map((r) => r.promoted_slug).sort(), p.archived.map((r) => r.promoted_slug)], [['moving-2026', 'watched-2026', 'young-2026'], ['quiet-2026']]);
+  assert.equal((await store.listCardDrafts({ status: 'promoted', slug: 'quiet-2026', limit: 1 }))[0].id, quiet.id);
 });

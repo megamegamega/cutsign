@@ -8,7 +8,7 @@
 
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
-import { CARDS, archiveCandidates, PUBLISHED_MAX } from '../lib/cards.js';
+import { CARDS, archiveCandidates, PUBLISHED_MAX, ARCHIVE_QUIET_DAYS } from '../lib/cards.js';
 import { supabaseStore } from '../lib/db.js';
 
 const BASE = process.env.SELFCHECK_BASE || 'https://cutsign.vercel.app';
@@ -74,11 +74,15 @@ export default async function handler(req, res) {
     try {
       const cj = JSON.parse((await get('/?view=cards&format=json')).text);
       check(cj.kind === 'cutsign.cards' && Array.isArray(cj.cards), 'cards json: wrong shape');
-      for (const c of (cj.cards || []).filter((x) => x.source === 'ai')) {
+      // every active one, and the three most recently archived: an archived card keeps its URL, not its daily check
+      const ai = (cj.cards || []).filter((x) => x.source === 'ai');
+      const old = ai.filter((x) => x.status !== 'active').sort((a, b) => String(b.archived_on || '').localeCompare(String(a.archived_on || ''))).slice(0, 3);
+      for (const c of [...ai.filter((x) => x.status === 'active'), ...old]) {
         const page = await get(c.url);
         check(page.status === 200, `AI card ${c.slug} -> ${page.status}`);
         check(page.text.includes('published automatically'), `AI card ${c.slug} missing its AI banner`);
-        check(!!c.coverage?.lanes?.length, `AI card ${c.slug} has no coverage check`);
+        if (c.status === 'active') check(!!c.coverage?.lanes?.length, `AI card ${c.slug} has no coverage check`);
+        else check(page.text.includes('Archived ' + c.archived_on), `archived AI card ${c.slug} missing its archive note`);
       }
     } catch { failures.push('cards json: not parseable'); }
   } catch (e) {
@@ -96,11 +100,13 @@ export default async function handler(req, res) {
       candidates = archiveCandidates(active, rows);
       if (candidates.length) await postDiscord(`Cutsign ▣ ${candidates.length} card${candidates.length === 1 ? '' : 's'} eligible to archive (set status in lib/cards.js):\n` + candidates.map((c) => `• ${c.slug} — ${c.reason}`).join('\n'));
     } catch (e) { failures.push('archive check crashed: ' + String(e?.message || e).slice(0, 200)); }
-    // and say when the published AI cards near what the site loads (lib/cards.js PUBLISHED_MAX): nothing
-    // retires one yet, and past the limit the oldest would drop off the site without a word
+    // and say when the active AI cards near what the site loads (lib/cards.js PUBLISHED_MAX). Quiet ones
+    // archive themselves (lib/hype.js archiveQuiet), so this is the cards of about a month; past the
+    // limit the oldest active ones would drop off the site and the daily check without a word
     try {
-      published = (await supabaseStore().listCardDrafts({ status: 'promoted', limit: 1000, columns: 'id' })).length;
-      if (published >= PUBLISHED_MAX * 0.75) await postDiscord(`Cutsign ▣ ${published} published AI cards; the site carries the newest ${PUBLISHED_MAX}. Past that the oldest drop off the Cards, Exposure and Response tabs: time to archive quiet ones (or raise PUBLISHED_MAX in lib/cards.js).`);
+      const st = supabaseStore();
+      published = (await st.listCardDrafts({ status: 'promoted', archived: false, limit: 1000, columns: 'id' }).catch(() => st.listCardDrafts({ status: 'promoted', limit: 1000, columns: 'id' }))).length;
+      if (published >= PUBLISHED_MAX * 0.75) await postDiscord(`Cutsign ▣ ${published} active AI cards; the site carries the newest ${PUBLISHED_MAX}. Quiet cards archive themselves after ${ARCHIVE_QUIET_DAYS} days, so this many at once means more cards a month than the limit was set for: raise PUBLISHED_MAX in lib/cards.js before the oldest active ones drop off the Cards, Exposure and Response tabs.`);
     } catch { /* table missing: nothing published */ }
   }
   return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates, published_ai_cards: published });

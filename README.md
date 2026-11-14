@@ -96,10 +96,16 @@ ends with inferred, tool-neutral detections and a runnable hunt block in two dia
 (`public/cards/qswitch.js`; the choice is remembered for the whole site, PDFs print both); every bare
 identifier printed is labeled. The pipeline's own cards are published automatically from the draft
 loop below at `/cards/<slug>` and carry an "AI-generated, published automatically" banner. A
-generated card has no archive step yet: every one stays active, and the site and the coverage sweep
-load the newest `PUBLISHED_MAX` (200, `lib/cards.js`) of them. The Monday self-check counts them and
-says so on Discord from three quarters of that, because past it the oldest cards would drop off the
-pages, their own URLs and the daily check without a word. Both
+generated card archives itself: the coverage sweep (`archiveQuiet`, `lib/hype.js`) applies the rule
+the self-check nominates hand-written cards by — older than 30 days, no watch on its stories still
+open, no development in that time — and marks the row in place (`draft.archived_on`; a Discord line
+names each card and why; `CARD_ARCHIVE=0` turns it off). An archived card keeps its URL with a note
+at the top, moves to "archived" on the Cards tab, and leaves the Exposure and Response feeds, the
+daily coverage check and the response-action calls. A revision is a new row, so a campaign that
+moves again is active again. The site and the sweep load the newest `PUBLISHED_MAX` (200,
+`lib/cards.js`) active cards in full and up to 500 archived ones in a few columns; a card's own page
+reads only its own row, so its URL does not depend on either number. The Monday self-check says so
+on Discord when the active cards reach three quarters of the limit. Both
 kinds carry an **automated detection-coverage check** (next section) and both are kept current
 without a hand: a hand-written card's page links the AI re-issue draft the pipeline writes when
 something develops after its as-of date, and corrects its KEV row from the live catalog.
@@ -386,8 +392,11 @@ answer against the card (a step number, indicator or pattern the card does not h
 word outside a list falls to the cautious value, a victim's asset is never a block target). The
 model only classifies; it never chooses a class. The record is stored on the card's row in place:
 no new version, no re-issue, no mail, and it is left out of the prior draft a revision shows the
-model. The coverage sweep does it (`lib/hype.js`): the watch tick fills in published cards that have
-no record; the daily sweep also re-checks a card whose Contain list or indicators changed (a
+model. The watch tick fills in published cards that have no record, in a step of its own right after
+the batched answers are collected (`actionsOnlySweep`, `lib/hype.js`; until 2026-11-14 it sat at the
+end of the tick, behind the watches and a card loop with no deadline, and a tick that ran into the
+function's 300 s was cut off before reaching it); the daily sweep also re-checks a card whose
+Contain list or indicators changed (a
 revision that leaves the Contain list alone carries the record over). One call per card per 20 hours
 at most, 24 per sweep; three answers that cannot be used (one that does not check out, a refusal, a
 cut-off answer: all billed) or five calls that never come back end it until the card changes, and a

@@ -17,7 +17,7 @@ import { HAND_ACTIONS } from '../lib/handactions.js';
 import { CARDS, PUBLISHED_MAX } from '../lib/cards.js';
 import { _setLLM } from '../lib/llm.js';
 import { draftBody } from '../lib/carddraft.js';
-import { actionsPhase, coverageOnlySweep } from '../lib/hype.js';
+import { actionsPhase, coverageOnlySweep, actionsOnlySweep } from '../lib/hype.js';
 import { installFakeLLM, captureOutputs } from './helpers.js';
 
 const act = (kind, o = {}) => ({ step: 1, text: 'A step', kind, when: 'always', asset: 'any', reversible: true, pattern: null, targets: [], ...o });
@@ -542,11 +542,23 @@ test('wiring: the three routes exist, the page handler serves them, and the card
   assert.equal(navs.filter((l) => l.includes('<span>Response</span>')).length, 1);
   // the page and the sweep load the same published cards: one limit, not two that drift apart
   assert.ok(PUBLISHED_MAX >= 200);
-  assert.ok(page.includes("listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX })") && !/status: 'promoted', limit: \d/.test(page));
+  // (the active ones: lib/cards.js publishedRows reads them for both, and archived ones in short for the page)
+  assert.ok(readFileSync(new URL('../lib/cards.js', import.meta.url), 'utf8').includes("listCardDrafts({ status: 'promoted', archived: false, limit: PUBLISHED_MAX })"));
+  assert.ok(page.includes('await publishedRows(store)') && !/status: 'promoted', limit: \d/.test(page));
   const hype = readFileSync(new URL('../lib/hype.js', import.meta.url), 'utf8');
-  assert.ok(hype.includes("listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX })") && !/status: 'promoted', limit: \d/.test(hype));
-  // the sweeps that run with no deadline of their own leave the calls to the ones that have one
-  assert.ok(readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8').includes('hypeSweep(store, { run: r, actions: false })'));
+  assert.ok(hype.includes('publishedRows(store, { archived: false })') && !/status: 'promoted', limit: \d/.test(hype));
+  // a single card's page reads its own row, so its URL outlives any limit; an archived one says so
+  assert.ok(page.includes("listCardDrafts({ status: 'promoted', slug: oneCard, limit: 1 })") && page.includes('<b>Archived ${esc(row.draft.archived_on)}.</b>'));
+  // the watch tick: the calls are made at its head, before the watches, and every step ends inside the function's 300 s
+  const tick = readFileSync(new URL('../api/watch.js', import.meta.url), 'utf8');
+  const at = (x) => { const i = tick.indexOf(x); assert.ok(i > 0, `not in the tick: ${x}`); return i; };
+  assert.ok(at('await collectJobs(store, {') < at('await actionsOnlySweep(store, {') && at('await actionsOnlySweep(store, {') < at('await runWatchTick(store, {'));
+  assert.ok(at('await runWatchTick(store, {') < at('await hypeSweep(store, {') && at('await hypeSweep(store, {') < at('await coverageOnlySweep(store, {'));
+  const loop = tick.match(/hypeSweep\(store, \{ run: r, actions: false, deadline: started \+ ([\d_]+), reserveMs: ([\d_]+) \}\)/);
+  assert.ok(loop, 'the card loop has a deadline and leaves the calls to the step that has one');
+  const deadlines = [...tick.matchAll(/started \+ ([\d_]+)/g)].map((m) => Number(m[1].replace(/_/g, '')));
+  assert.ok(deadlines.length >= 5 && deadlines.every((d) => d < 300_000), `deadlines: ${deadlines}`);
+  assert.equal(Number(tick.match(/maxDuration: (\d+)/)[1]), 300);
   assert.ok(readFileSync(new URL('../lib/update.js', import.meta.url), 'utf8').includes('actions: false'));
 });
 
@@ -734,4 +746,23 @@ test('sweep: many cards are classified a few at a time and each is written once'
   assert.ok(rows.every((r) => Array.isArray(r.draft.actions.items)));
   assert.equal(rows.find((r) => r.promoted_slug === 'card-5-2026').draft.actions.items[0].text, 'Step for card 5');
   assert.equal((await phase('missing')).actions_derived, undefined);
+});
+
+test('tick: the step at the head of the watch tick classifies a card that has no record, once; an archived card is left alone', async () => {
+  const w = await world();
+  const c = await actionsOnlySweep(w.store, { now: NOW });
+  assert.equal(c.actions_derived, 1, JSON.stringify(c)); assert.equal(c.errors, 0);
+  assert.ok((await w.get()).draft.actions.items.length > 0);
+  assert.equal(w.calls.length, 1);
+  await actionsOnlySweep(w.store, { now: NOW + 3600_000 });
+  assert.equal(w.calls.length, 1, 'a card with a record costs the tick nothing');
+  // out of time before it starts: nothing is called, the card waits for the next tick
+  const late = await world();
+  const d = await actionsOnlySweep(late.store, { now: NOW, deadline: Date.now() + 1000 });
+  assert.equal(late.calls.length, 0); assert.equal(d.actions_deferred, 1, JSON.stringify(d));
+  // archived (lib/hype.js archiveQuiet): out of the feeds, so nothing is spent on it
+  const old = await world();
+  await old.store.updateCardDraft(old.row.id, { draft: { ...old.row.draft, archived_on: '2026-11-13' } });
+  await actionsOnlySweep(old.store, { now: NOW });
+  assert.equal(old.calls.length, 0);
 });

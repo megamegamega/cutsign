@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor } from "../lib/cards.js";
+import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor, aiCard, publishedRows, PUBLISHED_MAX, ARCHIVED_MAX } from "../lib/cards.js";
 import { ESQL_ALLOW } from '../lib/lint.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
@@ -163,4 +163,30 @@ test('slugFor: title words plus the year, unique against the manifest and the sl
   assert.equal(slugFor('Node.js October security releases', '2026', new Set(['node-js-october-security-releases-2026'])), 'node-js-october-security-releases-2026-2');
   assert.notEqual(slugFor(CARDS[0].title, CARDS[0].date.slice(0, 4)), CARDS[0].slug);
   assert.equal(slugFor('', '2026'), 'card-2026');
+});
+
+test('AI cards: the archive mark on the row makes the card archived; published rows come split, in short for the archived', async (t) => {
+  const row = (id, draft, over = {}) => ({ id, status: 'promoted', promoted_slug: `${id}-2026`, title: id.toUpperCase(), created_at: '2026-10-01T12:00:00Z', thread_ids: [`s-${id}`], version: 2, draft, ...over });
+  const a = row('a', { lane: 'Patch now', verdict: 'Patch today.', cves: ['CVE-2026-1'] });
+  const b = row('b', { lane: 'Patch', verdict: 'Was urgent.', cves: ['CVE-2026-2'], archived_on: '2026-11-05' });
+  assert.equal(aiCard(a).status, 'active'); assert.equal(aiCard(a).archived_on, null);
+  assert.equal(aiCard(b).status, 'archived'); assert.equal(aiCard(b).archived_on, '2026-11-05');
+  // the database does the split: full rows for the active, a few columns (as top-level keys) for the archived
+  const asked = [];
+  const db = { listCardDrafts: async (o) => { asked.push(o); return o.archived ? [{ id: 'b', status: 'promoted', promoted_slug: 'b-2026', title: 'B', created_at: b.created_at, thread_ids: ['s-b'], version: 2, archived_on: '2026-11-05', lane: 'Patch', cves: ['CVE-2026-2'], verdict: 'Was urgent.' }] : [a]; } };
+  const p = await publishedRows(db);
+  assert.deepEqual(asked.map((o) => [o.status, o.archived, o.limit]), [['promoted', false, PUBLISHED_MAX], ['promoted', true, ARCHIVED_MAX]]);
+  assert.ok(!/draft(,|$)/.test(asked[1].columns) && asked[1].columns.includes('draft->archived_on'), 'the archived read carries no card text');
+  const idx = cardIndex([...p.active, ...p.archived]);
+  const old = idx.cards.find((c) => c.slug === 'b-2026');
+  assert.deepEqual([old.status, old.archived_on, old.lane, old.summary, old.cves, old.url], ['archived', '2026-11-05', 'Patch', 'Was urgent.', ['CVE-2026-2'], '/cards/b-2026']);
+  assert.equal(idx.cardByStory.get('s-b'), old, 'an old story still finds its archived card');
+  assert.equal(idx.cardByCve(['CVE-2026-1']).slug, 'a-2026');
+  assert.deepEqual((await publishedRows(db, { archived: false })).archived, []);
+  // a store that cannot filter: read as before, split here, and said in the log
+  const said = []; const warn = console.warn; console.warn = (m) => said.push(String(m)); t.after(() => { console.warn = warn; });
+  const plain = { listCardDrafts: async (o) => { if (o.archived != null) throw new Error('db: no such operator'); return [a, b]; } };
+  const q = await publishedRows(plain);
+  assert.deepEqual([q.active.map((r) => r.id), q.archived.map((r) => r.id)], [['a'], ['b']]);
+  assert.equal(said.length, 1); assert.match(said[0], /archive filter not usable \(db: no such operator\)/);
 });

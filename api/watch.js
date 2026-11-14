@@ -2,15 +2,17 @@
 // Vercel crons, 14:30-23:30 UTC, vercel.json; it was hourly before). The first tick or two read every
 // watch once (pages, feeds, and a model only where something changed); the later ticks collect the
 // batched model answers, finish the free checks (KEV, NVD, GitHub) and refresh card coverage.
-// Order inside a tick: batched answers, the inbox, the watches, the card loop, then card coverage
-// with what is left of the tick.
+// Order inside a tick: batched answers, response actions for cards that have none yet, the inbox, the
+// watches, the card loop, then card coverage with what is left of the tick. Every step has a deadline
+// inside the function's 300 s (2026-11-14: the card loop had none, and a tick that ran long was cut
+// off before it answered, with the steps behind the loop never reached).
 //   GET /api/watch?h=NN   Authorization: Bearer $CRON_SECRET
 
 import { supabaseStore } from '../lib/db.js';
 import { runWatchTick, ensureWatches } from '../lib/watch.js';
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
-import { hypeSweep, coverageOnlySweep } from '../lib/hype.js';
+import { hypeSweep, coverageOnlySweep, actionsOnlySweep } from '../lib/hype.js';
 import { intake } from '../lib/intake.js';
 import { applyUpdate } from '../lib/update.js';
 import { collectJobs } from '../lib/jobs.js';
@@ -44,6 +46,11 @@ export default async function handler(req, res) {
     // 150 s it could never start, and the failed job held its story's card back for good.
     let jobs = {};
     try { jobs = await collectJobs(store, { deadline: started + 170_000 }); } catch (e) { jobs = { error: String(e?.message || e).slice(0, 160) }; }
+    // Response actions for published cards that have none yet (lib/actions.js), which includes a card
+    // landed just above. Here and not at the end: on a tick where the watches take their full time
+    // the end was never reached. No call starts after 105 s (or 45 s after the step began), each is
+    // given a minute, so the watches start by 165 s at the latest; nothing is pending on most ticks.
+    const actions = await actionsOnlySweep(store, { deadline: started + 150_000 });
     // Reader-supplied updates arrive by mail and would otherwise wait for the next daily poll: the watch
     // tick polls the inbox too and reads them first (a brief found here waits for the cron, as before)
     let updates = {};
@@ -77,7 +84,9 @@ export default async function handler(req, res) {
         const runs = [];
         for (const id of [...runIds].slice(0, 4)) { const r = id === latest?.id ? latest : await store.getRun(id); if (r) runs.push(r); }
         for (const r of runs) {
-          const h = await hypeSweep(store, { run: r, actions: false }); // response actions: the coverage sweep below, which has a deadline
+          // response actions: done above. Deadlines: no story starts after 270 s and no coverage check after
+          // 220 s; a live draft (a batch submission refused) waits for a sweep with minutes to spare
+          const h = await hypeSweep(store, { run: r, actions: false, deadline: started + 280_000, reserveMs: 10_000 });
           for (const [k, v] of Object.entries(h)) hype[k] = typeof v === 'number' ? (hype[k] || 0) + v : v;
         }
         hype.runs = runs.length;
@@ -89,7 +98,7 @@ export default async function handler(req, res) {
     // starts after 200 s (a check runs about a minute, the function ends at 300 s). On a tick that ran
     // long the sweep only lists what is stale (a few DB reads) and defers it all.
     const coverage = await coverageOnlySweep(store, { deadline: started + 200_000 });
-    return res.json({ ok: true, ...counts, jobs, updates, opened, coverage, hype });
+    return res.json({ ok: true, ...counts, jobs, actions, updates, opened, coverage, hype });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting on every tick
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {

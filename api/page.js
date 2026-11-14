@@ -7,7 +7,7 @@
 
 import { supabaseStore } from '../lib/db.js';
 import { buildDigestData, renderHtml, exposureBox, defang, dedupeEvents } from '../lib/render.js';
-import { CARDS, cardIndex, PUBLISHED_MAX } from '../lib/cards.js';
+import { CARDS, cardIndex, publishedRows, ARCHIVE_QUIET_DAYS } from '../lib/cards.js';
 import { LOG_SOURCE_KEYS, logSourceKeys } from '../lib/logsources.js';
 import { PROPOSAL_SHAPES } from '../lib/schemas.js';
 import { draftBody } from '../lib/carddraft.js';
@@ -515,9 +515,15 @@ export default async function handler(req, res) {
 
     const json = req.query.format === 'json';
     // published AI cards (table may not exist before migration 0004)
-    let aiRows = [];
-    try { aiRows = await store.listCardDrafts({ status: 'promoted', limit: PUBLISHED_MAX }); } catch { aiRows = []; }
-    IDX = cardIndex(aiRows);
+    // active ones in full; archived ones in short, for the Cards tab and the links from old stories.
+    // A single card's page reads its own row and nothing else.
+    let aiRows = []; let oldRows = [];
+    const oneCard = req.query.view === 'card' && !String(req.query.q || '').trim() ? String(req.query.slug || '').toLowerCase() : null;
+    try {
+      if (oneCard) aiRows = await store.listCardDrafts({ status: 'promoted', slug: oneCard, limit: 1 });
+      else ({ active: aiRows, archived: oldRows } = await publishedRows(store));
+    } catch { aiRows = []; oldRows = []; }
+    IDX = cardIndex([...aiRows, ...oldRows]);
 
     const qraw = String(req.query.q || '').trim().slice(0, 80);
     if (qraw) {
@@ -567,7 +573,7 @@ export default async function handler(req, res) {
       const tabsCard = '<nav class="tabs"><a href="/?view=analyst">Analyst</a><a href="/?view=ciso">CISO</a><a href="/?view=agent">Agent</a><a href="/?view=iocs">IoCs</a><a href="/?view=exposure">Exposure</a><a href="/actions">Response</a><a href="/?view=actors">Actors</a><a href="/?view=cards">Cards</a></nav>';
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).send(doc(`Cutsign — ${row.title}`, tabsCard + searchForm(''),
-        `<style>${ACTIONS_STYLE}</style><div class="w">${printBar}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
+        `<style>${ACTIONS_STYLE}</style><div class="w">${printBar}${row.draft?.archived_on ? `<p class="s" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px"><b>Archived ${esc(row.draft.archived_on)}.</b> Nothing developed for ${ARCHIVE_QUIET_DAYS} days and no watch on the story is open. The card stands as last issued: its exposure and coverage figures are no longer refreshed, and it has left the Exposure and Response feeds. A new development re-issues it.</p>` : ''}${draftBody(row, { published: true })}${subscribeForm()}</div>`, 'Cutsign · AI-generated verdict card, auto-published · public OSINT only'));
     }
 
     // Verdict cards index: hand-written one-page verdicts (public/cards/), newest first
