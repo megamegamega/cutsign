@@ -254,17 +254,21 @@ stored as a watch event (`new_source`, marked supplied), and the card loop then 
 run; a link that is not about the story, or was already read, is skipped and said. Nothing in the
 mail is taken as fact.
 
-**Card mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_card_subscribers.sql`).
+**Subscriber mail** (`lib/subscribe.js`, `api/subscribe.js`, table from `supabase/migrations/0006_card_subscribers.sql`).
 The cards index and every AI card page carry a sign-up form; the hand-written cards get the same
 form from `lifecycle.js`. An address is stored pending, mailed a confirmation link, and only after
-that link is opened does it get mail: one message per new verdict card (an AI card at its first
-publication, a hand-written card when the sweep first sees it in the manifest and its as-of date is
-within three days), each with an unsubscribe link and `List-Unsubscribe` headers, one-click
+that link is opened does it get mail: a copy of the daily read each morning (sent right after the
+operator's, once per run; the operator's own address is skipped), one message per new verdict card
+(an AI card at its first publication, a hand-written card when the sweep first sees it in the
+manifest and its as-of date is within three days), and one when a published AI card is re-issued
+for a major fact (a KEV listing, a fix version, a vendor-stated behavior, a material development),
+never more than one mail per card a UTC day, each with an unsubscribe link and `List-Unsubscribe` headers, one-click
 included. Opening the unsubscribe link shows a page with one button and changes nothing: mail
 gateways and link scanners open every link in a message, and only the button (or a mail client's
 one-click POST) turns the mail off. Addresses are never rendered, logged or sent anywhere but the mail sender; the sign-up
 page never echoes one; a honeypot field and a site-wide cap of thirty requests an hour keep bots
-out. Revisions of a published card are not mailed.
+out. A re-issue for minor facts (a sample, an IoC, a guidance link) is not mailed. Sends are spaced
+(`SEND_GAP_MS`) to stay inside the mail sender's rate limit.
 
 **Card PDFs** (`lib/pdf.js`, `lib/pdfrender.js`, `api/pdf.js`). `/cards/<slug>.pdf` is the card printed by headless
 Chromium (`@sparticuz/chromium` with `puppeteer-core`, both pinned) from its own print stylesheet:

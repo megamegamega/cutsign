@@ -638,9 +638,9 @@ test('coverage: cards and published drafts whose campaign is not in today\'s bri
   assert.equal(c2.coverage_checked, 0, JSON.stringify(c2));
 });
 
-test('subscribers: a card\'s first publication is mailed once to confirmed addresses, its revision is not', async (t) => {
+test('subscribers: a card\'s first publication is mailed once to confirmed addresses; a revision only for a major fact, and never twice a day', async (t) => {
   t.after(off);
-  const { out, store, run, kevFetch } = await published();
+  const { out, store, run, kevFetch, hot } = await published();
   await store.insertSubscriber({ email: 'subscriber@example.test', token: 'b'.repeat(48), status: 'confirmed', requested_at: '2026-10-16T10:00:00Z' });
   await store.insertSubscriber({ email: 'pending@example.test', token: 'c'.repeat(48), status: 'pending', requested_at: '2026-10-16T10:00:00Z' });
   const now = Date.parse('2026-10-16T13:00:00Z');
@@ -656,6 +656,32 @@ test('subscribers: a card\'s first publication is mailed once to confirmed addre
   const c2 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 4 * 3600_000 });
   assert.equal(c2.revised, 1, JSON.stringify(c2));
   assert.equal(out.emails.filter((m) => m.to === 'subscriber@example.test').length, 1);
+  // a major fact (a fix version) on the day of the publication mail: re-issued at once, but one mail per card a day
+  const toSub = () => out.emails.filter((m) => m.to === 'subscriber@example.test');
+  const fix = (v) => { hot.raw_iocs = { ...hot.raw_iocs, exposure: { ...hot.raw_iocs.exposure, fixed_in: v } }; };
+  fix('9.9.1');
+  const c3 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 5 * 3600_000 });
+  assert.equal(c3.revised, 1, JSON.stringify(c3)); assert.equal(toSub().length, 1, 'same day as the publication mail: silent');
+  // the next day, another major fact: one update mail that says what changed
+  const day2 = now + 24 * 3600_000;
+  fix('9.9.1, 9.9.2');
+  const c4 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: day2 });
+  assert.equal(c4.revised, 1, JSON.stringify(c4)); assert.equal(c4.subscribers_notified, 1);
+  assert.equal(toSub().length, 2);
+  const upd = toSub()[1];
+  assert.match(upd.subject, /^Cutsign ▣ verdict card updated: /); assert.match(upd.html, /Updated \(version \d+\): a fix version is now stated: 9\.9\.2\./); assert.match(upd.html, /\/cards\//);
+  assert.equal(upd.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+  // a second major fact that same day: re-issued, not mailed again
+  fix('9.9.1, 9.9.2, 9.9.3');
+  const c5 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: day2 + 3600_000 });
+  assert.equal(c5.revised, 1, JSON.stringify(c5)); assert.equal(toSub().length, 2, 'one mail per card a day');
+  // a minor fact the day after: the card is revised, subscribers hear nothing
+  store._tables.evidence.push({ id: 'e10', story_id: uuid(1), kind: 'guidance', raw: 'Hunt for Y', url: 'https://www.cisa.gov/news-events/alerts/y', publisher_tier: 'A' });
+  const c6 = await hypeSweep(store, { run, fetchImpl: kevFetch, now: day2 + 24 * 3600_000 });
+  assert.equal(c6.revised, 1, JSON.stringify(c6)); assert.equal(toSub().length, 2);
+  // the mark that keeps it to one a day rides on the row and is never shown to the model
+  const head = (await store.listCardDrafts()).find((r) => r.status === 'promoted');
+  assert.equal(head.draft.subscribers_mailed, new Date(day2).toISOString().slice(0, 10));
 });
 
 test('coverage: the hourly tick re-checks stale cards on its own, fetches KEV only when one is stale, and defers past its deadline', async (t) => {

@@ -220,15 +220,27 @@ test('time budget: a run yields mid-extract and the next invocation finishes it'
 test('send: the digest goes out once per run — a re-entered send step (cut off mid-sweep, or yielded for time) never mails it again', async () => {
   const store = memoryStore();
   installFakeLLM(defaultResponder);
+  // subscribers get a copy of the same read: the confirmed one does, a pending one and the operator's own address do not
+  await store.insertSubscriber({ email: 'subscriber@example.test', token: 'a'.repeat(48), status: 'confirmed', requested_at: '2026-10-16T10:00:00Z' });
+  await store.insertSubscriber({ email: 'pending@example.test', token: 'b'.repeat(48), status: 'pending', requested_at: '2026-10-16T10:00:00Z' });
+  await store.insertSubscriber({ email: String(process.env.EMAIL_TO).toUpperCase(), token: 'c'.repeat(48), status: 'confirmed', requested_at: '2026-10-16T10:00:00Z' });
   const run = await runNetscaler(store);
   assert.equal(run.stage, 'sent');
   const digests = () => out.emails.filter((m) => m.to === process.env.EMAIL_TO && /^Cutsign — /.test(m.subject)).length;
+  const copies = () => out.emails.filter((m) => m.to === 'subscriber@example.test' && /^Cutsign — /.test(m.subject));
   assert.equal(digests(), 1);
   assert.ok(run.counts.emailed_at, 'the mark is written with the send');
+  assert.equal(copies().length, 1); assert.equal(run.counts.subscribers_emailed, 1);
+  const mine = out.emails.find((m) => m.to === process.env.EMAIL_TO && /^Cutsign — /.test(m.subject));
+  assert.equal(copies()[0].subject, mine.subject);
+  assert.ok(copies()[0].html.includes(`unsub=${'a'.repeat(48)}`) && !mine.html.includes('unsub='), 'the copy carries its own unsubscribe link; the operator\'s has none');
+  assert.equal(copies()[0].headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+  assert.ok(!out.emails.some((m) => m.to === 'pending@example.test'), 'an unconfirmed address gets nothing');
   // an invocation killed in the card sweep after the mail went out leaves the stage at rendered: the next tick re-enters
   await store.updateRun(run.id, { stage: 'rendered' });
   assert.equal(await advanceRun(store, run.id, { fetchImpl: fakeFetch(), deadline: Date.now() + 10 * 60_000 }), 'sent');
   assert.equal(digests(), 1, 'no second digest');
+  assert.equal(copies().length, 1, 'no second copy to a subscriber either');
   // a run reaching the send step with too little time left: the mail goes out, the sweep yields before its
   // first story, the stage stays put, and the chained invocation finishes the sweep without mailing again
   const { emailed_at: _, ...rest } = store._tables.runs[0].counts;

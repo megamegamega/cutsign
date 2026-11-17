@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { readFileSync } from 'node:fs';
-import { subscribe, confirm, unsubscribe, unsubscribeRequest, unsubscribeAskPage, notifyCardPublished, announceHandCards, validEmail, resultPage, subscribeForm, MAX_REQUESTS_PER_HOUR } from '../lib/subscribe.js';
+import { subscribe, confirm, unsubscribe, unsubscribeRequest, unsubscribeAskPage, notifyCardPublished, notifyDailyReport, announceHandCards, validEmail, resultPage, subscribeForm, MAX_REQUESTS_PER_HOUR } from '../lib/subscribe.js';
 import { CARDS } from '../lib/cards.js';
 import { cardPdfUrl, fetchCardPdf, PDF_MAX_BYTES } from '../lib/pdf.js';
 import { captureOutputs } from './helpers.js';
@@ -111,6 +111,44 @@ test('unsubscribe link: opening it (a mail gateway or link scanner does, before 
   const api = readFileSync(new URL('../api/subscribe.js', import.meta.url), 'utf8');
   assert.match(api, /unsubscribeRequest\(store, unsub, req\.method\)/);
   assert.ok(!/[^a-zA-Z]unsubscribe\(store/.test(api), 'the endpoint never unsubscribes without the method check');
+});
+
+test('daily report: every confirmed subscriber gets the operator\'s read with its own unsubscribe link, once; nobody else does', async () => {
+  const { emails } = captureOutputs();
+  const store = memoryStore();
+  await store.insertSubscriber({ email: 'a@example.test', token: 'a'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
+  await store.insertSubscriber({ email: 'b@example.test', token: 'b'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
+  await store.insertSubscriber({ email: 'gone@example.test', token: 'c'.repeat(48), status: 'unsubscribed', requested_at: new Date(now).toISOString() });
+  await store.insertSubscriber({ email: 'owner@example.test', token: 'd'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
+  const html = '<!doctype html><html><body><div class="w"><p>the read</p></div></body></html>';
+  const n = await notifyDailyReport(store, { subject: 'Cutsign — 2026-10-30 — 3 stories', html, text: 'the read', skip: ['Owner@Example.test ', undefined], site: SITE });
+  assert.equal(n, 2); assert.deepEqual(emails.map((m) => m.to).sort(), ['a@example.test', 'b@example.test']);
+  for (const m of emails) {
+    const tok = m.to[0].repeat(48);
+    assert.equal(m.subject, 'Cutsign — 2026-10-30 — 3 stories');
+    assert.match(m.headers['List-Unsubscribe'], new RegExp(`^<${SITE}/api/subscribe\\?unsub=${tok}>$`));
+    assert.equal(m.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+    assert.match(m.html, new RegExp(`<p>the read</p>.*unsub=${tok}.*</div></body></html>$`), 'the footer sits inside the page, after the read');
+    assert.ok(m.text.startsWith('the read') && m.text.includes(`unsub=${tok}`));
+    assert.ok(!m.html.includes('b@example.test') && !m.html.includes('owner@example.test'), 'no address but its own is anywhere in it');
+  }
+  // a body that does not end the usual way still gets the footer; a missing table is nobody, not an error
+  emails.length = 0;
+  await notifyDailyReport(store, { subject: 's', html: '<p>x</p>', text: 'x', skip: ['owner@example.test', 'b@example.test'], site: SITE });
+  assert.equal(emails.length, 1); assert.match(emails[0].html, /^<p>x<\/p><p style=.*unsub=a{48}/);
+  assert.equal(await notifyDailyReport({ listSubscribers: async () => { throw new Error('relation "card_subscribers" does not exist'); } }, { subject: 's', html: 'x' }), 0);
+});
+
+test('card update mail: says it is an update, which version and what changed', async () => {
+  const { emails } = captureOutputs();
+  const store = memoryStore();
+  await store.insertSubscriber({ email: 'a@example.test', token: 'a'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
+  const n = await notifyCardPublished(store, { title: 'Widget', url: `${SITE}/cards/widget-2026`, summary: 'Patch now.', site: SITE, fetchImpl: pdfNet(), update: { version: 4, changes: ['1 new KEV listing', '<b>1 new fix version</b>'] } });
+  assert.equal(n, 1);
+  assert.equal(emails[0].subject, 'Cutsign ▣ verdict card updated: Widget');
+  assert.ok(emails[0].html.includes('Updated (version 4): 1 new KEV listing; &lt;b&gt;1 new fix version&lt;/b&gt;.'), emails[0].html);
+  assert.ok(emails[0].text.includes('Updated (version 4): 1 new KEV listing;'));
+  assert.equal(emails[0].attachments?.length, 1);
 });
 
 test('announceHandCards: a manifest card mailed once when fresh, marked without mail when old, never twice', async () => {
