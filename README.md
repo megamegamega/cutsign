@@ -260,7 +260,9 @@ form from `lifecycle.js`. An address is stored pending, mailed a confirmation li
 that link is opened does it get mail: one message per new verdict card (an AI card at its first
 publication, a hand-written card when the sweep first sees it in the manifest and its as-of date is
 within three days), each with an unsubscribe link and `List-Unsubscribe` headers, one-click
-included. Addresses are never rendered, logged or sent anywhere but the mail sender; the sign-up
+included. Opening the unsubscribe link shows a page with one button and changes nothing: mail
+gateways and link scanners open every link in a message, and only the button (or a mail client's
+one-click POST) turns the mail off. Addresses are never rendered, logged or sent anywhere but the mail sender; the sign-up
 page never echoes one; a honeypot field and a site-wide cap of thirty requests an hour keep bots
 out. Revisions of a published card are not mailed.
 

@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
-import { subscribe, confirm, unsubscribe, notifyCardPublished, announceHandCards, validEmail, resultPage, subscribeForm, MAX_REQUESTS_PER_HOUR } from '../lib/subscribe.js';
+import { readFileSync } from 'node:fs';
+import { subscribe, confirm, unsubscribe, unsubscribeRequest, unsubscribeAskPage, notifyCardPublished, announceHandCards, validEmail, resultPage, subscribeForm, MAX_REQUESTS_PER_HOUR } from '../lib/subscribe.js';
 import { CARDS } from '../lib/cards.js';
 import { cardPdfUrl, fetchCardPdf, PDF_MAX_BYTES } from '../lib/pdf.js';
 import { captureOutputs } from './helpers.js';
@@ -86,6 +87,30 @@ test('confirm → one mail per new card with List-Unsubscribe → unsubscribe �
   assert.equal(await unsubscribe(store, tok, { now }), false, 'the rotated-out token is nothing now');
   assert.equal(await confirm(store, tok2, { now }), 'confirmed', 'the new one confirms');
   assert.equal((await store.getSubscriberByEmail('reader@example.test')).status, 'confirmed');
+});
+
+test('unsubscribe link: opening it (a mail gateway or link scanner does, before any person) changes nothing; only a POST turns the mail off', async () => {
+  captureOutputs();
+  const store = memoryStore();
+  const tok = 'd'.repeat(48);
+  await store.insertSubscriber({ email: 'reader@example.test', token: tok, status: 'confirmed', requested_at: new Date(now).toISOString() });
+  // GET and HEAD, as often as a scanner likes: still subscribed, and the page asks
+  for (const method of ['GET', 'HEAD', 'get']) assert.equal(await unsubscribeRequest(store, tok, method, { now }), 'ask');
+  assert.equal((await store.getSubscriberByEmail('reader@example.test')).status, 'confirmed');
+  const ask = unsubscribeAskPage(tok);
+  assert.match(ask, new RegExp(`<form method="post" action="/api/subscribe\\?unsub=${tok}"><button type="submit">Unsubscribe</button></form>`));
+  assert.ok(!ask.includes('example.test'), 'the page never echoes an address');
+  // the button, or a mail client's one-click POST to the same URL
+  assert.equal(await unsubscribeRequest(store, tok, 'POST', { now }), 'unsubscribed');
+  assert.equal((await store.getSubscriberByEmail('reader@example.test')).status, 'unsubscribed');
+  assert.equal(await unsubscribeRequest(store, tok, 'GET', { now }), 'unsubscribed', 'the link then says so, with no button');
+  // tokens that are nothing
+  for (const bad of ['', 'nope', 'e'.repeat(48)]) for (const method of ['GET', 'POST']) assert.equal(await unsubscribeRequest(store, bad, method, { now }), 'unknown');
+  assert.equal(unsubscribeAskPage('"><script>'), resultPage('unknown'), 'a malformed token is never put in a page');
+  // the endpoint goes through this and nothing else
+  const api = readFileSync(new URL('../api/subscribe.js', import.meta.url), 'utf8');
+  assert.match(api, /unsubscribeRequest\(store, unsub, req\.method\)/);
+  assert.ok(!/[^a-zA-Z]unsubscribe\(store/.test(api), 'the endpoint never unsubscribes without the method check');
 });
 
 test('announceHandCards: a manifest card mailed once when fresh, marked without mail when old, never twice', async () => {

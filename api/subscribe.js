@@ -1,11 +1,12 @@
 // Card subscriptions (lib/subscribe.js). Public, unauthenticated by design:
 //   POST /api/subscribe            form fields email (+ honeypot "website")  → confirmation mail
 //   GET  /api/subscribe?confirm=T  the link in that mail                     → subscribed
-//   GET|POST /api/subscribe?unsub=T  the link in every card mail, or the one-click List-Unsubscribe POST
+//   GET  /api/subscribe?unsub=T    the link in every card mail                → a page with one button; nothing changes
+//   POST /api/subscribe?unsub=T    that button, or the one-click List-Unsubscribe POST → unsubscribed
 // Answers are small HTML pages that never echo the address.
 
 import { supabaseStore } from '../lib/db.js';
-import { subscribe, confirm, unsubscribe, resultPage, validToken } from '../lib/subscribe.js';
+import { subscribe, confirm, unsubscribeRequest, unsubscribeAskPage, resultPage, validToken } from '../lib/subscribe.js';
 
 const MAX_BYTES = 10_000;
 
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
   const conf = url.searchParams.get('confirm');
   try {
     const store = supabaseStore();
-    if (unsub !== null) return page(res, 200, resultPage(validToken(unsub) && await unsubscribe(store, unsub) ? 'unsubscribed' : 'unknown'));
+    if (unsub !== null) { const k = await unsubscribeRequest(store, unsub, req.method); return page(res, 200, k === 'ask' ? unsubscribeAskPage(unsub) : resultPage(k)); }
     if (conf !== null) return page(res, 200, resultPage(validToken(conf) && await confirm(store, conf) ? 'confirmed' : 'unknown'));
     if (req.method !== 'POST') { res.statusCode = 302; res.setHeader('Location', '/?view=cards'); return res.end(''); }
     const f = fields(await readBody(req), req.headers['content-type'] || '');

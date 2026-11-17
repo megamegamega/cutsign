@@ -477,15 +477,23 @@ test('publish: a revision that leaves the Contain list alone keeps the card\'s r
 
 test('publish: with autopublish off the draft waits; turning it on publishes it on the next sweep without a new model call', async (t) => {
   t.after(off);
-  const { store, run, kevFetch, calls } = await world();
+  const { out, store, run, kevFetch, calls } = await world();
+  await store.insertSubscriber({ email: 'subscriber@example.test', token: 'b'.repeat(48), status: 'confirmed', requested_at: '2026-10-16T10:00:00Z' });
   const now = Date.parse('2026-10-16T13:00:00Z');
   await hypeSweep(store, { run, fetchImpl: kevFetch, now });
   assert.equal((await store.listCardDrafts())[0].status, 'draft');
+  assert.ok(!out.emails.some((m) => m.to === 'subscriber@example.test'), 'an unpublished draft is not mailed to subscribers');
   process.env.CARD_AUTOPUBLISH = '1';
   const c = await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 3600_000 });
   assert.equal(c.published, 1); assert.equal(calls.length, 1);
   const [row] = await store.listCardDrafts();
   assert.equal(row.status, 'promoted'); assert.ok(row.promoted_slug);
+  // published without a rewrite is still the card's first publication: subscribers are mailed, once
+  const mails = out.emails.filter((m) => m.to === 'subscriber@example.test');
+  assert.equal(mails.length, 1, JSON.stringify(c)); assert.equal(c.subscribers_notified, 1);
+  assert.match(mails[0].subject, /new verdict card/); assert.ok(mails[0].html.includes(`/cards/${row.promoted_slug}`));
+  await hypeSweep(store, { run, fetchImpl: kevFetch, now: now + 2 * 3600_000 });
+  assert.equal(out.emails.filter((m) => m.to === 'subscriber@example.test').length, 1, 'not again on the next sweep');
 });
 
 test('mail: a published card\'s first publication is emailed; its re-issue posts to Discord and sends no email', async (t) => {
