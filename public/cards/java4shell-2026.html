@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Java4Shell OpenJDK Base64 RCE — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Patch now + mitigate</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No exploitation reported</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Not in KEV</span>
+    <span class="tag">Trigger public · RCE chains withheld</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Many distro and bundled runtimes unfixed</span>
+    <span class="asof">as of 2026-11-18</span>
+  </div>
+  <div class="inner">
+    <h1>Java4Shell: OpenJDK Base64 decoder RCE</h1>
+    <p class="sub">An out-of-bounds heap write in the JVM's hardware-accelerated Base64 decoder — <span class="v">CVE-2026-114938</span>, scored 8.1 by Oracle (CVSS 3.1, high attack complexity), 9.8 preliminary by Red Hat and 9.2 by the finders (CVSS 4.0) — fixed November 17 in Oracle's November Critical Security Patch Update and the OpenJDK advisory. It needs an OpenJDK-based runtime 17.0.6 or later on an x86-64 CPU with AVX-512 VBMI. The finders, Calif, report code execution without a login against default configurations of Keycloak, Jira, Confluence, JFrog Artifactory, Jenkins and PingFederate; they published a trigger that proves the overwrite and are withholding the per-product exploit chains. <b>As of Nov 18 no source reports exploitation in the wild</b> (Talos, Cloudflare, Sophos, Censys) and the CVE is not in CISA's KEV catalog; CISA issued a patch-now alert on Nov 17.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-11-18&view=analyst#s-11b5d3a9">Java4Shell story 11-18</a>
+      <a href="/?d=2026-11-18&view=analyst#s-9d20313d">Oracle CSPU story 11-18</a>
+      <a href="/?d=2026-11-18&view=ciso#s-11b5d3a9">CISO card</a>
+      <span>IoC card: none published</span>
+      <a href="/?q=java4shell">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: patch outside the normal cycle, and set the JVM flag today wherever a fixed build does not exist yet.</b> This is memory corruption reachable before the login in the runtime under identity providers, CI servers and artifact stores — the systems that hold everyone else's credentials. Exposure is narrow and quick to scope: three checks (runtime version, CPU feature, untrusted Base64 on the path) rule most hosts in or out. The clock is the exploit, not the patch: the trigger is public, the malformed input sat in a public OpenJDK pull request from Sept 9, at least two labs say they have working remote exploitation (Calif; Wiz), and Calif says it will publish its chains. Fixed builds exist from Oracle, Amazon Corretto and Azul, but stable Debian and Ubuntu packages, Red Hat builds and the Keycloak images were still unfixed on Nov 18 — there the one-flag mitigation closes the gap. Hunting is thin (crashes and malformed Base64, no campaign indicators), so this is a patch event with a tripwire, not a hunt.</p>
+
+    <h2>30-second read</h2>
+    <p>Once <code>java.util.Base64</code> decoding gets hot, the JIT compiler swaps in a hand-written AVX-512 VBMI routine. A padded tail whose length is not a multiple of 4 drives its output length below zero, and a full 64-byte store lands up to 62 bytes past the destination array on the Java heap before the decoder rejects the input. The attacker picks where the bytes land, not their values; Calif's follow-on step ("JavaBleed") turns that into memory read and write. Triggering input is at least 65 characters on Java 21, 25 and 27 and at least 129 on Java 17 (Endor Labs). Many servers decode Base64 before checking the login — Basic-auth headers, SAML artifacts, CSRF tokens, cookies — and a Java client that connects out to a malicious TLS server is reachable too (Calif). A failed attempt can crash the JVM and the attacker can usually retry; a crash is far easier to cause than code execution (Datadog).</p>
+
+    <h2>Fixed versions — November 17, 2026</h2>
+    <table>
+      <tr><th>Runtime</th><th>Fixed build</th><th>Note</th></tr>
+      <tr><td>Oracle Java SE</td><td><span class="v">17.0.21.1</span> <span class="v">21.0.13.1</span> <span class="v">25.0.5.1</span> <span class="v">27.0.1.1</span> <span class="v">8u513-perf</span></td><td>Oracle's advisory lists only the affected builds (<span class="v">17.0.21.0.3</span>, <span class="v">21.0.13.0.3</span>, <span class="v">25.0.5.0.3</span>, <span class="v">27.0.1.0.3</span>, <span class="v">8u511b33-perf</span>); fixed numbers per Qualys, Rapid7 and Tenable. Fixed builds end in <b>.1</b> — the same number without the suffix is still vulnerable</td></tr>
+      <tr><td>Oracle GraalVM</td><td><span class="v">17.0.21.1</span> <span class="v">21.0.13.1</span>; Enterprise <span class="v">21.3.20.1</span></td><td>per The Hacker News</td></tr>
+      <tr><td>Amazon Corretto</td><td><span class="v">17.0.21.1.2</span> <span class="v">21.0.13.1.2</span> <span class="v">25.0.5.1.2</span> <span class="v">27.0.1.1.4</span></td><td><span class="ok">released Nov 17</span>; Amazon Linux errata out (ALAS-2026-4123, ALAS2023-2026-3478 to -3481)</td></tr>
+      <tr><td>Azul Zulu</td><td><span class="v">17.70.201</span> <span class="v">21.54.201</span> <span class="v">25.38.201</span> <span class="v">27.30.201</span></td><td>free builds, per The Hacker News</td></tr>
+      <tr><td>Eclipse Temurin</td><td><span class="v">17.0.21.1+2</span> <span class="v">21.0.13.1+2</span> <span class="v">25.0.5.1+2</span> <span class="v">27.0.1.1+4</span></td><td><span class="bad">in the release pipeline Nov 18</span> — binaries, then Docker images, appear as testing completes</td></tr>
+      <tr><td>Red Hat (RHEL 8/9/10, OpenJDK 17/21/25, build of Keycloak 26.4/26.6/26.8)</td><td><span class="bad">no errata yet</span></td><td>bulletin RHSB-2026-018, rated Critical, last updated Nov 18; Red Hat SSO 7.6 is affected only on OpenJDK 17</td></tr>
+      <tr><td>Debian / Ubuntu packages</td><td><span class="bad">stable releases still vulnerable</span></td><td>Debian: bookworm and trixie (security archive included) vulnerable, fixed only in unstable. Ubuntu: openjdk-17 "Vulnerable" on every release</td></tr>
+      <tr><td>Keycloak container images</td><td><span class="bad">no fixed image yet</span></td><td>x86-64 images <span class="v">26.8.2-1</span> and <span class="v">26.8.2-2</span> bundle an affected OpenJDK 21.0.13; the Operator image runs OpenJDK 25</td></tr>
+      <tr><td colspan="3" class="src">Java 8 and 11 are not affected (Oracle's Java 8 Enterprise Performance Pack is the one exception), nor is OpenJDK 17.0.0 to 17.0.5. Products that bundle their own runtime need an update from their maker; do not infer a fix from the product's version number.</td></tr>
+    </table>
+
+    <h2>Interim mitigation — if a fixed build is not running yet</h2>
+    <p class="src">From the finders, repeated by Red Hat, Keycloak, Temurin and Rapid7; the OpenJDK advisory itself prints no workaround. Each needs a JVM restart and neither replaces the patch.</p>
+    <pre>
+
+# preferred: turns off only the accelerated Base64 routine (may slow heavy Base64 workloads)
+
+-XX:-UseBASE64Intrinsics
+
+# alternative, x86-64 ONLY: turns off all AVX-512 use. An ARM64 JVM given this flag fails to start
+
+-XX:UseAVX=2
+
+# where to set it for Keycloak (shell, systemd, container -e, Operator custom resource spec.env)
+
+JAVA_OPTS_APPEND=-XX:-UseBASE64Intrinsics
+
+# the Keycloak Operator is a separate JVM; this does not cover the Keycloak pods
+
+JDK_JAVA_OPTIONS=-XX:-UseBASE64Intrinsics
+
+# prove it on the running process, not on the environment variable
+
+jcmd &lt;pid&gt; VM.flags -all | grep -F UseBASE64Intrinsics      # expect: bool UseBASE64Intrinsics = false
+
+</pre>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if — all three</h2>
+        <ul>
+          <li class="bad">Runtime: an OpenJDK-based build 17.0.6 or later without the fix (17, 21, 25, 27 lines, any vendor), or Oracle Java SE 8 Enterprise Performance Pack 8u511b33-perf</li>
+          <li class="bad">CPU: x86-64 exposing AVX-512 VBMI — Intel Xeon Ice Lake, Sapphire, Emerald and Granite Rapids; AMD Zen 4 or newer; cloud VMs on those processors included</li>
+          <li class="bad">Data path: untrusted input reaches <code>Base64.getDecoder()</code> or <code>getUrlDecoder()</code>. Calif's tested list, stated as incomplete — no login: Keycloak, Jira, Confluence, Artifactory, Jenkins, PingFederate; with a login: Kafka broker, Solr, Elasticsearch, Gerrit, Spinnaker</li>
+          <li class="bad">Also: Java clients that open TLS connections to servers you do not control</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">A fixed build is what the process is running (restarted since the update)</li>
+          <li class="ok">ARM64, or x86-64 without AVX-512 VBMI (Skylake-SP, Cascade Lake, AMD before Zen 4)</li>
+          <li class="ok">Java 8, Java 11, or OpenJDK 17.0.0 to 17.0.5</li>
+          <li class="ok">Mitigated, not fixed: the running JVM shows <code>UseBASE64Intrinsics = false</code> or is held to <code>UseAVX=2</code></li>
+        </ul>
+        <pre>
+
+# Linux host check: exposed hardware prints all four flags
+
+grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(avx512f|avx512bw|avx512vbmi|bmi2)$'
+
+# which runtime a process is really on
+
+jcmd &lt;pid&gt; VM.version
+
+</pre>
+      </div>
+    </div>
+
+    <h2>Hunt — published behaviors</h2>
+    <ul>
+      <li>A Base64 or Base64url token ending in <code>=</code> or <code>==</code> whose length is not a multiple of 4, in <code>Authorization</code> and <code>Proxy-Authorization</code> headers, cookies, token segments, query, form and JSON values. Length floor: 65 characters (Endor Labs; 129 on Java 17) or 32 (CrowdSec, Upwind) — the lower floor catches more and costs more noise</li>
+      <li>Bursts of <code>IllegalArgumentException</code> from <code>java.util.Base64</code> in request-handling code (Endor Labs, Mend, Upwind)</li>
+      <li>JVM crash logs (<code>hs_err_pid</code> files): a SIGSEGV in a garbage-collection copy routine with a compiled <code>Base64$Decoder.decode0</code> frame; unexplained restart bursts (Endor Labs, CISA)</li>
+      <li>Warm-up shape: a run of valid Base64 decodes from one source ahead of the malformed one, because the JIT must compile the decoder before the flawed routine is in use (Calif, Endor Labs)</li>
+      <li>Oversized or binary-looking responses from endpoints that echo decoded input (the memory-read step)</li>
+      <li>Rogue Java runtimes and suspicious Java child processes (CISA)</li>
+    </ul>
+    <p class="src">Upwind's caveat applies to all of these: none proves compromise, and their absence does not prove safety. No campaign infrastructure is published, so there is nothing to block by indicator.</p>
+
+    <h2>Detection coverage — as of Nov 18</h2>
+    <table>
+      <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
+      <tr><td rowspan="2">Vendor</td><td><a href="https://www.oracle.com/security-alerts/cspunov2026.html">Oracle</a> / <a href="https://openjdk.org/groups/vulnerability/advisories/2026-11-17">OpenJDK</a></td><td><span class="ok">Fixed Nov 17</span> — Oracle's Java SE risk matrix names the Compiler component, 8.1, remotely exploitable without authentication, one of 11 Java SE fixes; the OpenJDK advisory marks the 17, 21, 25 and 27 lines affected and 8 and 11 not. Neither prints technical detail or a workaround. Oracle credits Albert Yang and Quang Luong of Calif.io. Fix tracked as JDK-8393212 (OpenJDK bug ID, per Endor Labs)</td></tr>
+      <tr><td><a href="https://access.redhat.com/security/vulnerabilities/RHSB-2026-018">Red Hat</a> / <a href="https://www.keycloak.org/2026/11/java4shell-vulnerability-cve-2026-114938">Keycloak</a> / <a href="https://adoptium.net/news/2026/11/temurin-november-2026-cspu-java4shell">Temurin</a></td><td><span class="bad">Fixes pending</span> — Red Hat rates it Critical with no errata yet and prefers the <code>-XX:-UseBASE64Intrinsics</code> mitigation; Keycloak confirms Base64 is decoded on some pre-login requests, has no fixed image, and prints per-deployment steps; Temurin builds are in the pipeline</td></tr>
+      <tr><td rowspan="3">VM scanners</td><td><a href="https://blog.qualys.com/vulnerabilities-threat-research/2026/11/17/how-to-find-mitigate-and-patch-the-critical-java4shell-flaw-cve-2026-114938-now">Qualys</a></td><td><span class="ok">Published</span> — QIDs <span class="v">389494</span> (OpenJDK Java4Shell), <span class="v">389610</span> (Oracle Java SE November update), <span class="v">389608</span> (Amazon Corretto), in signature release VULNSIGS-2.6.747-3</td></tr>
+      <tr><td><a href="https://www.tenable.com/cve/CVE-2026-114938/plugins">Tenable</a></td><td><span class="ok">Published</span> — Nessus plugins <span class="v">382091</span> (Oracle Java SE), <span class="v">382045</span> (Corretto 17), <span class="v">382489</span> (Linux distros, unpatched), plus Amazon Linux checks <span class="v">382309</span> to <span class="v">382347</span>; more listed as coming</td></tr>
+      <tr><td><a href="https://www.rapid7.com/blog/post/etr-cve-2026-114938-reported-critical-pre-authentication-remote-code-execution-java-17">Rapid7</a></td><td><span class="ok">Published</span> — authenticated InsightVM / Nexpose check in content release 1.1.4115 (Nov 17)</td></tr>
+      <tr><td rowspan="2">EDR / endpoint VM</td><td><a href="https://www.sentinelone.com/blog/java4shell-vulnerability-in-openjdk-enables-rce-on-avx-512-cpus/">SentinelOne</a></td><td>Post published; its detection content was not readable for this card (the site refused automated reads) — read it directly</td></tr>
+      <tr><td>CrowdStrike · Microsoft Defender</td><td><span class="bad">Nothing published</span> found on either vendor's blog feed as of Nov 18 — verify in-product vulnerability content directly</td></tr>
+      <tr><td rowspan="5">WAF / edge / IDS</td><td><a href="https://blog.cloudflare.com/java4shell-waf-protection/">Cloudflare</a></td><td><span class="ok">Six managed rules, Nov 18</span> — "Java4Shell - Malformed Base64 …" for header, query, body, path, token and WebAuthn values, on Pro, Business and Enterprise, <b>default action Log</b>; no Free-plan rule yet. Review matches, then set to Block. Cloudflare reports no sign of exploitation on its network</td></tr>
+      <tr><td><a href="https://blog.talosintelligence.com/java4shell/">Cisco Talos</a></td><td><span class="ok">Snort rules</span> — SIDs <span class="v">1:67502</span> to <span class="v">1:67513</span> (Snort 2 and 3) and <span class="v">1:301754</span> (Snort 3), in the free community ruleset; they match malformed Base64 in specific HTTP request fields</td></tr>
+      <tr><td><a href="https://www.crowdsec.net/blog/java4shell-virtual-patching">CrowdSec</a></td><td><span class="ok">Free rule</span> <code>crowdsecurity/vpatch-CVE-2026-114938</code> — 32-character floor, inspects authorization headers, cookies and named parameters</td></tr>
+      <tr><td>Akamai · Emerging Threats</td><td><span class="bad">Nothing published</span> found by search (Akamai's blog refused automated reads; the Emerging Threats forum search returned nothing) — check rule release notes directly</td></tr>
+      <tr><td>All WAFs</td><td>Inbound HTTP only, stopgap not patch: no cover for Kafka and other non-HTTP protocols, outbound Java client connections, internal service-to-service traffic, or Base64 wrapped in another encoding (Cloudflare, Wiz)</td></tr>
+      <tr><td rowspan="2">Cloud / container</td><td><a href="https://www.wiz.io/blog/cve-2026-114938-rce-java4shell-openjdk">Wiz</a> / <a href="https://securitylabs.datadoghq.com/articles/java4shell-remote-code-execution-in-openjdk-cve-2026-114938/">Datadog</a></td><td><span class="ok">Published</span> — Wiz Threat Center query and advisory; Datadog Cloud Security findings and a host check. Wiz says it built a working proof within two hours and showed remote exploitation is feasible against Jenkins, Confluence and Tomcat</td></tr>
+      <tr><td><a href="https://security-tracker.debian.org/tracker/CVE-2026-114938">Debian</a> / <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu</a></td><td><span class="bad">Stable packages vulnerable</span> — image scanners that read distro data will flag them, with no fixed package to move to yet</td></tr>
+      <tr><td>Exposure</td><td><a href="https://censys.com/advisory/cve-2026-114938/">Censys</a></td><td>Advisory published without queries or counts; an outside scan cannot see the CPU feature or the bundled runtime</td></tr>
+      <tr><td>Community</td><td>Nuclei</td><td><span class="bad">Nothing published</span> — no template in the project's repository as of Nov 18. Public repositories offer Suricata, Sigma and ModSecurity rules next to trigger code; unvetted, deliberately not linked</td></tr>
+      <tr><td>KEV</td><td><a href="https://www.cisa.gov/news-events/alerts/2026/11/17/critical-java-vulnerability-requires-immediate-patching">CISA</a></td><td><span class="bad">Not listed</span> as of the Nov 17 catalog release. CISA's Nov 17 alert says inventory every runtime including bundled ones, patch internet-facing systems first, and watch for rogue runtimes, unexpected JVM crashes and suspicious Java processes. CISA's SSVC entry: exploitation none, automatable no, technical impact total. EPSS 0.7% on Nov 18</td></tr>
+    </table>
+    <p class="src">Standing caveats: this is a runtime flaw, so dependency scans of application manifests do not see it (Endor Labs); host scans miss runtimes inside container images and vendor appliances; an authenticated scan reads the installed version, not whether the running process was restarted.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Scope with three checks: runtime 17.0.6 or later, x86-64 with AVX-512 VBMI, untrusted Base64 on the path. Count bundled runtimes in vendor products, container images and appliances; a software inventory often misses them</li>
+          <li>Patch to the vendor's fixed build and restart every JVM, internet-facing identity, CI and artifact services first; rebuild and redeploy container images</li>
+          <li>Where no fixed build exists yet (distro packages, vendor-bundled runtimes), start the JVM with <code>-XX:-UseBASE64Intrinsics</code> and confirm it on the running process with jcmd</li>
+          <li>Restrict public access to Keycloak, Jira, Confluence, Jenkins and Artifactory login and management surfaces until they are patched or mitigated</li>
+          <li>Turn on the edge rule for malformed Base64 in log mode, review the matches, then block; it covers inbound HTTP only</li>
+          <li>Hunt back to Nov 17, and to Sept 9 where logs allow: malformed Base64 at the edge, decoder exception bursts, JVM crash logs, shells spawned by Java services</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>CISA KEV listing or a credible report of exploitation in the wild → emergency change for anything still unpatched and unmitigated</li>
+          <li>A product-specific exploit chain is published (Calif says it will) or a public code-execution exploit appears for a product you run</li>
+          <li>A JVM crash log with a Base64 decoder frame on an internet-facing service, or decoder exception bursts paired with malformed tokens from one source → incident lane</li>
+          <li>A Java service spawning a shell or download tool after such a burst → incident lane, treat its secrets as exposed</li>
+          <li>A vendor of a bundled runtime gives no fix date → keep the flag on and the exposure restricted</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">Vendors have shipped rules (Cloudflare, Talos, CrowdSec) and described behaviors (Endor Labs, Upwind, CISA), but nobody has published ready-made log queries. These translate the published behaviors into generic query logic. They are inferred: tune thresholds to your traffic before trusting them, and anything published above supersedes them.</p>
+    <p><b>Trigger shape at the edge</b> — padded Base64 whose length is not a multiple of 4:</p>
+    <pre>
+
+# web / proxy / WAF logs
+token matches [A-Za-z0-9+/_-]{64,} followed by = or ==
+AND length(token) mod 4 != 0
+| count by src_ip, path → valid encoders never produce this shape
+
+# most access logs do not record the Authorization header or cookies:
+# a WAF or IDS rule in log mode is the better sensor for those fields
+
+</pre>
+    <p><b>Decoder errors and crash canaries</b> — the flawed routine rejects the input after the overwrite, and a miss crashes the JVM:</p>
+    <pre>
+
+# application logs
+IllegalArgumentException from java.util.Base64, burst per host per 10m
+
+# host logs / file events
+"A fatal error has been detected by the Java Runtime Environment"
+new file hs_err_pid&lt;pid&gt;.log → open it: a Base64$Decoder.decode0 frame is the tell
+
+</pre>
+    <p><b>After a hit, and mitigation coverage</b>:</p>
+    <pre>
+
+# EDR process lineage
+parent.name = java AND child.name IN (sh, bash, curl, wget, nc, python*, cmd.exe, powershell.exe)
+→ CI servers spawn shells by design: baseline per host, look for children that are new since Nov 17
+
+# mitigation coverage
+java process starts whose command line lacks -XX:-UseBASE64Intrinsics and -XX:UseAVX=2
+→ a flag set through an environment variable does not show on the command line; jcmd is the proof
+
+</pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Web / Endpoint field names for Splunk, ECS for Elastic, Sysmon names for process and file events; tune to your add-on or integration:</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# trigger shape at the edge: padded Base64 token, 65+ characters, length not a multiple of 4
+
+index=* earliest=-14d@d (http_method=* OR uri_path=*)
+| rex field=_raw max_match=10 "(?&lt;b64&gt;[A-Za-z0-9+/_-]{64,}={1,2})"
+| mvexpand b64
+| eval n=len(b64)
+| where n % 4 != 0
+| stats count as hits dc(b64) as tokens min(_time) as first max(_time) as last values(uri_path) as paths by src dest
+| sort - hits
+
+# decoder error bursts: 20 or more per host in 10 minutes
+
+index=* earliest=-14d@d "IllegalArgumentException" ("java.util.Base64" OR "Illegal base64 character" OR "Input byte array has incorrect ending byte" OR "Last unit does not have enough valid bits")
+| bin _time span=10m
+| stats count as errors by host _time
+| where errors &gt;= 20
+| sort - errors
+
+# JVM crash canary in logs; with_decoder_frame counts crash text that names Base64
+
+index=* earliest=-14d@d ("A fatal error has been detected by the Java Runtime Environment" OR "hs_err_pid")
+| stats count as crashes count(eval(searchmatch("Base64"))) as with_decoder_frame min(_time) as first max(_time) as last by host
+| sort - with_decoder_frame - crashes
+
+# JVM crash log written to disk (Sysmon EID 11 / EDR file events)
+
+index=* earliest=-14d@d TargetFilename="*hs_err_pid*.log"
+| stats count as files min(_time) as first max(_time) as last values(TargetFilename) as paths by host Image
+
+# Java service spawning a shell or download tool (Sysmon EID 1 / EDR)
+
+index=* earliest=-14d@d ParentImage IN ("*/java","*\\java.exe") Image IN ("*/sh","*/bash","*/dash","*/curl","*/wget","*/nc","*/python*","*\\cmd.exe","*\\powershell.exe")
+| stats count values(CommandLine) as cmds min(_time) as first by host ParentImage Image
+| sort first
+
+# mitigation coverage: hosts where a Java process started without either flag in the last day
+
+index=* earliest=-24h Image IN ("*/java","*\\java.exe") CommandLine=*
+| eval flagged=if(like(CommandLine, "%-XX:-UseBASE64Intrinsics%") OR like(CommandLine, "%-XX:UseAVX=2%"), 1, 0)
+| stats count as starts min(flagged) as all_flagged latest(CommandLine) as sample by host
+| where all_flagged=0
+
+</pre>
+    <pre data-q="esql">
+
+// trigger shape at the edge: padded Base64 token, 65+ characters, length not a multiple of 4
+// (GROK keeps the first match in each event; the Splunk search keeps up to ten)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND http.request.method IS NOT NULL
+| GROK message "(?&lt;b64&gt;[A-Za-z0-9+/_-]{64,}={1,2})"
+| WHERE b64 IS NOT NULL
+| EVAL n = LENGTH(b64)
+| WHERE n % 4 != 0
+| STATS hits = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp), paths = VALUES(url.path) BY source.ip, destination.ip
+| SORT hits DESC
+
+// decoder error bursts: 20 or more per host in 10 minutes
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND message LIKE "*IllegalArgumentException*"
+| WHERE message LIKE "*java.util.Base64*" OR message LIKE "*Illegal base64 character*" OR message LIKE "*Input byte array has incorrect ending byte*" OR message LIKE "*Last unit does not have enough valid bits*"
+| EVAL bucket = DATE_TRUNC(10 minutes, @timestamp)
+| STATS errors = COUNT(*) BY host.name, bucket
+| WHERE errors &gt;= 20
+| SORT errors DESC
+
+// JVM crash canary in logs; with_decoder_frame counts crash text that names Base64
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days
+| WHERE message LIKE "*A fatal error has been detected by the Java Runtime Environment*" OR message LIKE "*hs_err_pid*"
+| EVAL decoder = CASE(message LIKE "*Base64*", 1, 0)
+| STATS crashes = COUNT(*), with_decoder_frame = SUM(decoder), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name
+| SORT with_decoder_frame DESC, crashes DESC
+
+// JVM crash log written to disk (endpoint file events)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND event.category == "file" AND file.name LIKE "hs_err_pid*.log"
+| STATS files = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp), paths = VALUES(file.path) BY host.name, process.name
+
+// Java service spawning a shell or download tool (endpoint process events)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND event.category == "process"
+| WHERE process.parent.name IN ("java", "java.exe") AND (process.name IN ("sh", "bash", "dash", "curl", "wget", "nc", "cmd.exe", "powershell.exe") OR process.name LIKE "python*")
+| STATS count = COUNT(*), cmds = VALUES(process.command_line), first = MIN(@timestamp) BY host.name, process.parent.name, process.name
+| SORT first
+
+// mitigation coverage: hosts where a Java process started without either flag in the last day
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 1 day AND event.category == "process" AND process.name IN ("java", "java.exe")
+| EVAL flagged = CASE(process.command_line LIKE "*-XX:-UseBASE64Intrinsics*" OR process.command_line LIKE "*-XX:UseAVX=2*", 1, 0)
+| STATS starts = COUNT(*), all_flagged = MIN(flagged), sample = VALUES(process.command_line) BY host.name
+| WHERE all_flagged == 0
+
+</pre>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">Jan 2023</span><span>OpenJDK 17.0.6 ships the AVX-512 Base64 decoder, backported from JDK 18 (Endor Labs)</span></li>
+      <li><span class="d">Sep 9</span><span>Public OpenJDK pull request 32781, "AVX-512 Base64 decoder overwrites output buffer on short padded tail", is opened with a triggering input</span></li>
+      <li><span class="d">Oct 14</span><span>Fix committed under embargo as JDK-8393212, "Base64 optimization improvements" (Endor Labs)</span></li>
+      <li><span class="d">Oct 22</span><span>CVE-2026-114938 reserved by Oracle</span></li>
+      <li><span class="d">Nov 4</span><span>The public pull request is closed unmerged</span></li>
+      <li><span class="d">Nov 17</span><span>Oracle's November Critical Security Patch Update and the OpenJDK advisory ship the fix; Calif publishes its write-up and trigger; CISA alert; Corretto and Azul builds released; Qualys, Tenable, Rapid7 and Talos publish coverage; Red Hat opens RHSB-2026-018</span></li>
+      <li><span class="d">Nov 18</span><span>Keycloak advisory (no fixed image yet); Temurin builds in the pipeline; Cloudflare managed rules in Log mode; CrowdSec rule; stable Debian and Ubuntu packages still vulnerable. No exploitation reported; not in KEV</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://www.oracle.com/security-alerts/cspunov2026.html">Oracle — Critical Security Patch Update, Nov 2026</a> ·
+      <a href="https://openjdk.org/groups/vulnerability/advisories/2026-11-17">OpenJDK — vulnerability advisory, Nov 17</a> ·
+      <a href="https://calif.io/java4shell">Calif — Java4Shell write-up</a> ·
+      <a href="https://www.cisa.gov/news-events/alerts/2026/11/17/critical-java-vulnerability-requires-immediate-patching">CISA alert, Nov 17</a> ·
+      <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-114938">NVD — CVE-2026-114938</a> ·
+      <a href="https://access.redhat.com/security/vulnerabilities/RHSB-2026-018">Red Hat — RHSB-2026-018</a> ·
+      <a href="https://www.keycloak.org/2026/11/java4shell-vulnerability-cve-2026-114938">Keycloak advisory</a> ·
+      <a href="https://adoptium.net/news/2026/11/temurin-november-2026-cspu-java4shell">Eclipse Temurin guidance</a> ·
+      <a href="https://github.com/corretto/corretto-27/blob/27.0.1.1.4/CHANGELOG.md">Amazon Corretto 27 changelog</a> ·
+      <a href="https://github.com/openjdk/jdk/pull/32781">OpenJDK pull request 32781</a> ·
+      <a href="http://www.openwall.com/lists/oss-security/2026/11/17/31">oss-security post</a> ·
+      <a href="https://www.endorlabs.com/learn/java4shell-unauthenticated-rce-reported-in-openjdk-17-cve-2026-114938">Endor Labs — root cause and detection logic</a> ·
+      <a href="https://securitylabs.datadoghq.com/articles/java4shell-remote-code-execution-in-openjdk-cve-2026-114938/">Datadog Security Labs</a> ·
+      <a href="https://www.wiz.io/blog/cve-2026-114938-rce-java4shell-openjdk">Wiz</a> ·
+      <a href="https://blog.talosintelligence.com/java4shell/">Cisco Talos</a> ·
+      <a href="https://blog.cloudflare.com/java4shell-waf-protection/">Cloudflare — WAF rules</a> ·
+      <a href="https://www.crowdsec.net/blog/java4shell-virtual-patching">CrowdSec — virtual patch</a> ·
+      <a href="https://blog.qualys.com/vulnerabilities-threat-research/2026/11/17/how-to-find-mitigate-and-patch-the-critical-java4shell-flaw-cve-2026-114938-now">Qualys</a> ·
+      <a href="https://www.tenable.com/blog/java4shell-cve-2026-114938-frequently-asked-questions-about-openjdk-rce-vulnerability">Tenable FAQ</a> ·
+      <a href="https://www.rapid7.com/blog/post/etr-cve-2026-114938-reported-critical-pre-authentication-remote-code-execution-java-17">Rapid7</a> ·
+      <a href="https://censys.com/advisory/cve-2026-114938/">Censys advisory</a> ·
+      <a href="https://www.sophos.com/en-us/security-advisories/sophos-sa-20261118-java4shell">Sophos advisory</a> ·
+      <a href="https://thehackernews.com/2026/11/java4shell-cve-2026-114938-enables-pre.html">The Hacker News — fixed builds, Upwind and Blackpoint tests</a> ·
+      <a href="https://security-tracker.debian.org/tracker/CVE-2026-114938">Debian tracker</a> ·
+      <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu CVE page</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: Cutsign 11-18</span>
+  </div>
+</div>
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-11-18', QUERY = 'java4shell';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> \u2014 verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance \u2014 live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching \u201c' + esc(QUERY) + '\u201d. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' \u00b7 ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' \u00b7 <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+<script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
+</body>
+</html>
