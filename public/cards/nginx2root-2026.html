@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>NGINX2Root NGINX HTTP/2 flaws — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Patch now + mitigate</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No exploitation reported</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Not in KEV</span>
+    <span class="tag">Proof-of-concept code public</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Distro packages unfixed</span>
+    <span class="asof">as of 2026-11-18</span>
+  </div>
+  <div class="inner">
+    <h1>NGINX2Root: NGINX HTTP/2 memory corruption</h1>
+    <p class="sub">Two memory-corruption flaws in NGINX's HTTP/2 module, fixed November 18 in NGINX Open Source 1.30.7 and 1.31.9 and in NGINX Plus: <span class="v">CVE-2026-123007</span> (a flow-control counter underflow that ends in an out-of-bounds copy; any listener with HTTP/2 on, back to version 1.9.5) and <span class="v">CVE-2026-123633</span> (a use-after-free when connection slots run low; HTTP/2 plus proxying to a backend, back to 1.19.7). F5 scores both 8.1 (CVSS 3.1) and 9.2 (CVSS 4.0) and says code execution needs ASLR disabled or bypassed. Three research teams — Wiz, Xint and Rapid7 — say they bypassed ASLR and ran code as the NGINX worker in lab tests, without a login; Rapid7 published proof-of-concept scripts for one build. They are part of Xint's "NGINX2Root" set: five NGINX flaws fixed in the same release, plus a Linux kernel flaw with no patch yet that takes a compromised worker to root on the host. <b>As of Nov 18 no source reports exploitation in the wild</b> and neither CVE is in CISA's KEV catalog.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <span>not in a brief yet — published after the Nov 18 brief</span>
+      <a href="/?q=CVE-2026-123007">news &amp; updates (live)</a>
+      <a href="/cards/java4shell-2026.html">same week: Java4Shell card</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: patch outside the normal cycle; where a fixed package does not exist yet, turn HTTP/2 off on the listener.</b> This is memory corruption reachable without a login in the most widely deployed web server and reverse proxy, three independent labs report working code execution, and proof-of-concept code was public on the day of the fix. What tempers it: exploitation is hard and build-specific. Rapid7's route for CVE-2026-123007 is tied to one build and needs roughly 119 GiB sent down a single connection — minutes on a fast link, not achievable below about 300 Mbit/s inside NGINX's default one-hour connection lifetime — so worker crashes are the likelier first effect, and the attempt is loud in flow data. The gap is the supply chain: Debian marks every release vulnerable, the community ingress-nginx controller is archived and will not ship this fix, and products built on NGINX need their own rebuilds. Access logs do not record the trigger, so hunting is a tripwire on the worker process, not a log search.</p>
+
+    <h2>30-second read</h2>
+    <p><b>CVE-2026-123007:</b> when a canceled stream's queued data is discarded, NGINX returns its flow-control credit without checking the HTTP/2 maximum. A later unsigned check wraps, the send window grows far past its limit, and the oversized value reaches the TLS send path as a bad length for a memory copy — out-of-bounds read and write. A server that only serves static files is reachable; no backend or third-party module is needed (Wiz). <b>CVE-2026-123633:</b> an HTTP/2 connection waiting on a partial frame stays on the reusable-connection list; when the worker runs short of connection slots it can close and free that connection while a proxied request is still using it. A failed attempt crashes a worker, the replacement has the same memory layout, and the attacker can try again (Xint). Code runs as the worker account; reaching root needs the separate kernel step.</p>
+
+    <h2>Fixed versions — November 18, 2026</h2>
+    <table>
+      <tr><th>Product</th><th>Fixed in</th><th>Note</th></tr>
+      <tr><td>NGINX Open Source</td><td><span class="v">1.30.7</span> stable · <span class="v">1.31.9</span> mainline</td><td><span class="ok">released Nov 18</span>; the same release fixes all five NGINX2Root flaws. Official container image tags <span class="v">1.30.7</span> and <span class="v">1.31.9</span> were published the same day</td></tr>
+      <tr><td>NGINX Plus</td><td><span class="v">37.0.8.1</span> · <span class="v">37.3.0.1</span></td><td>these cover both CVEs. F5's records list lower builds (<span class="v">37.0.7.1</span>, <span class="v">37.2.0.1</span>) for CVE-2026-123633 alone; R33 and later are affected, and Rapid7 notes no fix listed for R34 to R36</td></tr>
+      <tr><td>Debian packages</td><td><span class="bad">unfixed</span></td><td>bookworm, trixie and unstable, security archive included, all marked vulnerable for both CVEs</td></tr>
+      <tr><td>Ubuntu / Red Hat packages</td><td><span class="bad">no fix listed</span></td><td>Ubuntu had no page for either CVE on Nov 18; Red Hat tracks CVE-2026-123007 (Bugzilla 2575895, preliminary 8.1) with no errata or affected-product list yet</td></tr>
+      <tr><td>Community ingress-nginx (Kubernetes)</td><td><span class="bad">no fix coming</span></td><td>the project was archived in March 2026 at controller v1.15.1 and will not release again (Upwind)</td></tr>
+      <tr><td>F5 NGINX Ingress Controller</td><td>not confirmed</td><td>v5.8.0 and 2026-lts-r11 were released Nov 18, hours before the NGINX fix; their release notes do not mention these CVEs</td></tr>
+      <tr><td>OpenResty and products built on NGINX</td><td><span class="bad">no fixed release seen</span></td><td>OpenResty's latest release predates the fix and an issue is open; proxy managers, mail suites, gateways and appliances each need their maker's rebuild</td></tr>
+      <tr><td colspan="3" class="src">Distro backports keep the old version string: compare the full package revision with the distro advisory, not the banner. A reload does not replace the running binary and leaves open connections on old workers — restart, or do a live binary upgrade (CIRCL, Xint).</td></tr>
+    </table>
+
+    <h2>Interim mitigation — if a fixed build is not running yet</h2>
+    <p class="src">From Wiz, Xint and CIRCL. F5's own CVE records list no workaround. Turning HTTP/2 off blocks these two CVEs only, and breaks gRPC and anything else that needs HTTP/2.</p>
+    <pre>
+
+# nginx 1.25.1 and later: in every server block that shares the address and port (IPv6 too),
+# and remove "http2" from the listen lines
+
+http2 off;
+
+# nginx 1.9.5 to 1.25.0: was "listen 443 ssl http2;"
+
+listen 443 ssl;
+
+# restart, not reload, so connections held by old workers are dropped
+
+systemctl restart nginx
+
+# confirm from outside: the answer must not negotiate h2
+
+openssl s_client -connect &lt;host&gt;:443 -alpn h2 &lt;/dev/null 2&gt;/dev/null | grep -i alpn
+
+# the worker-to-root step has no kernel patch: stop the SCTP module loading where it is not used
+# (does not unload a module already loaded, or SCTP built into the kernel)
+
+echo 'install sctp /bin/false' &gt; /etc/modprobe.d/disable-sctp.conf
+
+</pre>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">CVE-2026-123007: any listener with HTTP/2 on, NGINX Open Source 1.9.5 to 1.30.6 or 1.31.0 to 1.31.8, NGINX Plus R33 and later before the fixed builds — static-file servers included</li>
+          <li class="bad">CVE-2026-123633: HTTP/2 on and requests proxied to a backend, from 1.19.7</li>
+          <li class="bad">Anything built on NGINX until it is rebuilt: ingress controllers, API gateways, proxy managers, appliances, container images</li>
+          <li class="bad">Host root, not just the worker: the kernel's SCTP code is reachable (Linux 4.15 and later; many distributions load the module on first use). Containers share the host kernel</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">A fixed build is what is running (restarted since the update)</li>
+          <li class="ok">HTTP/2 is off on every listener, confirmed by the ALPN check — for these two CVEs only</li>
+          <li class="ok">A distro backport is applied, confirmed by package revision</li>
+          <li>Partly: an edge or CDN that terminates the client's HTTP/2 itself may shield the origin, depending on the implementation (Wiz); an origin reachable directly is still exposed</li>
+          <li class="bad">Does not count: ASLR or PIE being on. The researchers bypass both; CIRCL says not to close or downgrade a finding on them</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>The rest of the NGINX2Root set — same fixed release</h2>
+    <table>
+      <tr><th>CVE</th><th>Where</th><th>Needs</th><th>Blocked by HTTP/2 off</th></tr>
+      <tr><td><span class="v">CVE-2026-123634</span></td><td>DNS resolver use-after-free, from 1.13.4</td><td><code>resolver</code>, a <code>proxy_pass</code> built from the request, and a subrequest such as <code>mirror</code></td><td><span class="bad">no</span> — use a fixed upstream, or <code>mirror off;</code></td></tr>
+      <tr><td><span class="v">CVE-2026-121810</span></td><td>HTTP/3 connection use-after-free, from 1.25.0</td><td>HTTP/3 plus proxying</td><td><span class="bad">no</span> — <code>http3 off;</code> and remove <code>listen … quic</code></td></tr>
+      <tr><td><span class="v">CVE-2026-113425</span></td><td>mail proxy use-after-free, from 0.5.15</td><td><code>mail</code> block with <code>proxy on</code> and <code>auth_http</code></td><td><span class="bad">no</span> — bind mail listeners to loopback or firewall them</td></tr>
+      <tr><td>no CVE yet</td><td>Linux kernel SCTP use-after-free, from Linux 4.15</td><td>code execution as the worker first</td><td>not an NGINX setting — block the SCTP module; no kernel patch as of Nov 18</td></tr>
+    </table>
+
+    <h2>Hunt — published behaviors</h2>
+    <ul>
+      <li>An NGINX worker starting any program, a shell above all — the strongest sign of success (Xint, Upwind, CIRCL)</li>
+      <li>Worker crashes: <code>exited on signal 11</code> in the error log, core dumps, restart bursts. Crashes have other causes too</li>
+      <li>One long-lived connection that receives far more than it sends, next to many short TLS connections from the same source (Xint; Rapid7's route sends about 119 GiB)</li>
+      <li>SCTP sockets opened, or the SCTP module loaded, on a web-server host or container node (Upwind)</li>
+      <li>Unusual outbound connections or DNS from the worker (CIRCL)</li>
+    </ul>
+    <p class="src">Access logs do not show the trigger: it travels in HTTP/2 control frames (<code>WINDOW_UPDATE</code>, <code>RST_STREAM</code>), which NGINX does not log as requests. A clean access log rules nothing out. No campaign infrastructure is published, so there is nothing to block by indicator.</p>
+    <pre>
+
+# host checks published by Xint
+
+grep -Ei 'worker process.*exited|signal 11|segfault' /var/log/nginx/error.log
+coredumpctl list nginx
+ss -tinp state established '( sport = :443 )'       # look for bytes_received racing ahead of bytes_sent
+
+# audit rule for programs started by the worker account; records only from the moment it is installed
+
+auditctl -a always,exit -F arch=b64 -S execve,execveat -F euid=&lt;nginx uid&gt; -k nginx_worker_exec
+ausearch -k nginx_worker_exec -ts recent -i
+
+</pre>
+
+    <h2>Detection coverage — as of Nov 18</h2>
+    <table>
+      <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
+      <tr><td rowspan="2">Vendor</td><td><a href="https://my.f5.com/manage/s/article/K000163926">F5</a> / <a href="https://nginx.org/en/security_advisories.html">nginx.org</a></td><td><span class="ok">Fixed Nov 18</span> — F5 articles K000163926 (CVE-2026-123007), K000163928 (CVE-2026-123633) and overview K000164058. F5: 8.1 and 9.2, data plane only, workaround "None", code execution where ASLR is off or bypassed. nginx.org rates CVE-2026-123007 "major" and CVE-2026-123633 "medium". Credits: Xint, Wiz Research, Rapid7 (Stephen Fewer), Ikotas Labs, Albert Ebb Metnir</td></tr>
+      <tr><td><a href="https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities">Wiz</a> / <a href="https://xint.io/blog/nginx2root-remote-code-execution">Xint</a> / <a href="https://www.rapid7.com/blog/post/ve-cve-2026-123007-critical-nginx-http-2-integer-underflow-leads-to-rce-fixed">Rapid7</a></td><td><span class="ok">Root cause and lab results published</span> — the finders' own claims, not independently verified: code execution with ASLR bypassed. Wiz and Xint withhold their exploits; Rapid7 published proof-of-concept scripts and a demonstration against the official NGINX 1.31.8 container image on x86-64, a route it calls specific to that build. The code repository is deliberately not linked here</td></tr>
+      <tr><td rowspan="2">VM scanners</td><td>Tenable</td><td><span class="bad">Nothing published</span> — no plugins listed for either CVE as of Nov 18</td></tr>
+      <tr><td>Qualys · Rapid7</td><td>Not confirmed — Qualys's blog search refused automated reads today; Rapid7 has a database entry for CVE-2026-123007 but its write-up names no InsightVM check. Verify in product</td></tr>
+      <tr><td>EDR / endpoint VM</td><td>CrowdStrike · Microsoft Defender · SentinelOne</td><td><span class="bad">Nothing published</span> found on any of the three blog feeds as of Nov 18</td></tr>
+      <tr><td rowspan="2">WAF / edge / IDS</td><td>Cloudflare · Cisco Talos · Emerging Threats · Akamai</td><td><span class="bad">Nothing published</span> found on the Cloudflare and Talos feeds or the Emerging Threats forum; Akamai's blog refuses automated reads — check rule release notes directly</td></tr>
+      <tr><td>All WAFs</td><td>The trigger is HTTP/2 control frames, below what request-inspection rules see. Any cover comes from an edge that terminates the client's HTTP/2 connection itself, and only for origins that cannot be reached around it</td></tr>
+      <tr><td rowspan="2">Cloud / container</td><td><a href="https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities">Wiz</a> / <a href="https://www.upwind.io/blog/nginx-cve-2026-123007-and-cve-2026-123633-four-web-facing-rces-one-patch-and-where-kubernetes-is-exposed">Upwind</a></td><td><span class="ok">Published</span> — Wiz Threat Center query and advisory; Upwind's Kubernetes exposure write-up. Images built on NGINX stay vulnerable until rebuilt and redeployed</td></tr>
+      <tr><td><a href="https://security-tracker.debian.org/tracker/CVE-2026-123007">Debian</a> / <a href="https://access.redhat.com/security/cve/CVE-2026-123007">Red Hat</a></td><td><span class="bad">No fixed packages</span> — image scanners that read distro data will flag NGINX with nothing to move to yet</td></tr>
+      <tr><td>CERT</td><td><a href="https://www.circl.lu/pub/tr-105/">CIRCL</a></td><td><span class="ok">Technical report TR-105</span> (TLP:CLEAR), Nov 18 — verification commands, restart-not-reload, keep ASLR on but do not rely on it</td></tr>
+      <tr><td>Community</td><td>Nuclei</td><td><span class="bad">Nothing published</span> — no template in the project's repository as of Nov 18</td></tr>
+      <tr><td>KEV</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA</a></td><td><span class="bad">Not listed</span> as of the Nov 17 catalog release, the latest available; no CISA alert found. CISA's SSVC entry on both records: exploitation none, automatable no, technical impact total. No EPSS score yet</td></tr>
+    </table>
+    <p class="src">Standing caveats: a version banner does not show a distro backport; host scans miss NGINX inside container images, ingress controllers and appliances; a scan reads the installed version, not whether the running workers were restarted.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Inventory every NGINX, including ingress controllers, gateways, proxy managers, appliances and container images built on it; note which listeners have HTTP/2 on and which proxy to a backend</li>
+          <li>Upgrade to NGINX Open Source 1.30.7 or 1.31.9, or NGINX Plus 37.0.8.1 or 37.3.0.1, internet-facing first; rebuild images, then restart rather than reload</li>
+          <li>Where no fixed package exists yet (distro packages, the archived community ingress controller, products built on NGINX), turn HTTP/2 off on every listener, restart, and confirm with an ALPN check</li>
+          <li>Block the SCTP kernel module on hosts and container nodes that do not use it; the worker-to-root step has no kernel patch yet</li>
+          <li>Put a tripwire on the worker: alert on any program started by the NGINX worker account, and on worker crash bursts</li>
+          <li>Plan the move off the archived community ingress-nginx controller; it will not receive this fix</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>CISA KEV listing or a credible report of exploitation in the wild → emergency change; HTTP/2 off on anything not yet fixed</li>
+          <li>An NGINX worker starts a shell or any unexpected program → incident lane; treat the TLS private keys and backend credentials that worker could read as exposed</li>
+          <li>Worker crash bursts on an internet-facing listener together with one long-lived, inbound-heavy connection → incident lane</li>
+          <li>Exploit code generalizes: a proof of concept that covers distro builds, or the withheld Wiz or Xint chains are published</li>
+          <li>A kernel fix for the SCTP flaw ships → patch kernels on NGINX hosts and container nodes</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — while you wait</h2>
+    <p class="src">The researchers published host commands (above) but no ready-made log queries, and no vendor has shipped rules. These translate the published behaviors into generic query logic. They are inferred: tune thresholds to your traffic before trusting them, and anything published above supersedes them.</p>
+    <p><b>Worker tripwires</b> — a crash is the likely first effect, a child process is the sign of success:</p>
+    <pre>
+
+# nginx error log / kernel log
+"worker process &lt;pid&gt; exited on signal 11"  OR  "nginx ... segfault at"
+| count by host per hour → a burst on an internet-facing listener is the canary
+
+# EDR process lineage
+parent.name = nginx AND child.name != nginx
+→ a stock NGINX worker starts no programs; any hit needs an explanation
+
+</pre>
+    <p><b>The transfer the exploit needs</b> — one source pushing tens of gigabytes into port 443 and getting little back:</p>
+    <pre>
+
+# network flow / firewall logs
+dest_port = 443, sum bytes client→server by src, dest
+client→server ≥ 50 GiB AND client→server &gt; 20 × server→client
+→ uploads and backups to a web app look the same: exclude known upload endpoints
+
+</pre>
+    <p><b>The worker-to-root step</b> — SCTP coming to life on a web host:</p>
+    <pre>
+
+# process events / kernel log
+modprobe run with "sctp" or "proto-132" on the command line (the kernel loading the module on first use)
+kernel message "sctp: Hash tables configured"
+→ on a host with no SCTP workload, either is worth a look
+
+</pre>
+    <p><b>Splunk (<code>index=*</code>) / Elastic ES|QL (<code>FROM logs-*</code>)</b> — CIM Network Traffic / Endpoint field names for Splunk, ECS for Elastic, Sysmon names for process events; tune to your add-on or integration, and check which direction your sensor counts as inbound:</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# worker crash canary: NGINX error log and kernel log, per host per hour
+
+index=* earliest=-14d@d (("worker process" "exited on signal") OR ("nginx" "segfault at"))
+| bin _time span=1h
+| stats count as crashes by host _time
+| sort - crashes
+
+# NGINX starting any program other than itself (Sysmon EID 1 / EDR)
+
+index=* earliest=-14d@d ParentImage="*/nginx" Image!="*/nginx"
+| stats count values(CommandLine) as cmds min(_time) as first max(_time) as last by host Image User
+| sort first
+
+# one source sending 50 GiB or more into port 443 and receiving under a twentieth of that back
+
+index=* earliest=-14d@d dest_port=443 bytes_in=*
+| stats sum(bytes_in) as inbound sum(bytes_out) as outbound count as flows by src dest
+| where inbound &gt;= 53687091200 AND inbound &gt; 20 * outbound
+| sort - inbound
+
+# SCTP module loaded on demand (Sysmon EID 1 / EDR)
+
+index=* earliest=-14d@d Image="*/modprobe" (CommandLine="*sctp*" OR CommandLine="*proto-132*")
+| stats count min(_time) as first max(_time) as last values(CommandLine) as cmds by host
+
+# SCTP module initialised (kernel log)
+
+index=* earliest=-14d@d "sctp: Hash tables configured"
+| stats count min(_time) as first max(_time) as last by host
+
+</pre>
+    <pre data-q="esql">
+
+// worker crash canary: NGINX error log and kernel log, per host per hour
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days
+| WHERE message LIKE "*worker process*exited on signal*" OR message LIKE "*nginx*segfault at*"
+| EVAL bucket = DATE_TRUNC(1 hour, @timestamp)
+| STATS crashes = COUNT(*) BY host.name, bucket
+| SORT crashes DESC
+
+// NGINX starting any program other than itself (endpoint process events)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND event.category == "process"
+| WHERE process.parent.name == "nginx" AND process.name != "nginx"
+| STATS count = COUNT(*), cmds = VALUES(process.command_line), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, process.name, user.name
+| SORT first
+
+// one source sending 50 GiB or more into port 443 and receiving under a twentieth of that back
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND destination.port == 443 AND source.bytes IS NOT NULL
+| STATS inbound = SUM(source.bytes), outbound = SUM(destination.bytes), flows = COUNT(*) BY source.ip, destination.ip
+| WHERE inbound &gt;= 53687091200 AND inbound &gt; 20 * outbound
+| SORT inbound DESC
+
+// SCTP module loaded on demand (endpoint process events)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND event.category == "process" AND process.name == "modprobe"
+| WHERE process.command_line LIKE "*sctp*" OR process.command_line LIKE "*proto-132*"
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp), cmds = VALUES(process.command_line) BY host.name
+
+// SCTP module initialised (kernel log)
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND message LIKE "*sctp: Hash tables configured*"
+| STATS count = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name
+
+</pre>
+    </div>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">2015</span><span>NGINX 1.9.5 adds HTTP/2; the flow-control flaw (CVE-2026-123007) is present from this release</span></li>
+      <li><span class="d">Oct 11–16</span><span>Xint finds the flaws and reports them to F5 (Xint)</span></li>
+      <li><span class="d">Oct 21</span><span>Wiz reports CVE-2026-123633 to F5, which says another team had already reported it (Wiz)</span></li>
+      <li><span class="d">Nov 9–10</span><span>F5 reserves both CVEs; Xint validates the patches</span></li>
+      <li><span class="d">Nov 11–17</span><span>Rapid7 and Wiz each report CVE-2026-123007 independently; F5 schedules the release</span></li>
+      <li><span class="d">Nov 18</span><span>NGINX 1.30.7 and 1.31.9 released with F5's advisories; Wiz, Xint and Rapid7 publish; Rapid7's proof-of-concept scripts go public; CIRCL issues TR-105; fixed official container tags published; Debian marks every release vulnerable. No exploitation reported; not in KEV</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://nginx.org/en/security_advisories.html">nginx.org — security advisories</a> ·
+      <a href="https://nginx.org/en/CHANGES">nginx.org — 1.31.9 change log</a> ·
+      <a href="https://my.f5.com/manage/s/article/K000163926">F5 — K000163926 (CVE-2026-123007)</a> ·
+      <a href="https://my.f5.com/manage/s/article/K000163928">F5 — K000163928 (CVE-2026-123633)</a> ·
+      <a href="https://www.cve.org/CVERecord?id=CVE-2026-123007">CVE record — CVE-2026-123007</a> ·
+      <a href="https://www.cve.org/CVERecord?id=CVE-2026-123633">CVE record — CVE-2026-123633</a> ·
+      <a href="https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities">Wiz — root cause and timeline</a> ·
+      <a href="https://xint.io/blog/nginx2root-remote-code-execution">Xint — NGINX2Root write-up</a> ·
+      <a href="https://www.rapid7.com/blog/post/ve-cve-2026-123007-critical-nginx-http-2-integer-underflow-leads-to-rce-fixed">Rapid7 — CVE-2026-123007 analysis</a> ·
+      <a href="https://www.circl.lu/pub/tr-105/">CIRCL — TR-105</a> ·
+      <a href="https://www.upwind.io/blog/nginx-cve-2026-123007-and-cve-2026-123633-four-web-facing-rces-one-patch-and-where-kubernetes-is-exposed">Upwind — Kubernetes exposure</a> ·
+      <a href="https://security-tracker.debian.org/tracker/CVE-2026-123007">Debian tracker — CVE-2026-123007</a> ·
+      <a href="https://security-tracker.debian.org/tracker/CVE-2026-123633">Debian tracker — CVE-2026-123633</a> ·
+      <a href="https://access.redhat.com/security/cve/CVE-2026-123007">Red Hat — CVE-2026-123007</a> ·
+      <a href="https://github.com/kubernetes/ingress-nginx">Kubernetes ingress-nginx (archived)</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: not yet in a Cutsign brief</span>
+  </div>
+</div>
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-11-18', QUERY = 'CVE-2026-123007';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> \u2014 verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance \u2014 live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching \u201c' + esc(QUERY) + '\u201d. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' \u00b7 ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' \u00b7 <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+<script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
+</body>
+</html>
