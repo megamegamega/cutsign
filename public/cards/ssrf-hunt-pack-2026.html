@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>SSRF hunting and detection — Cutsign verdict card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one verdict card — lane banner up top, then exposure/action columns that stack on phones. */
+:root{
+  --bg:#f4f5f3; --panel:#ffffff; --ink:#1c2024; --mut:#5c6670; --line:#d9dde0;
+  --lane:#9a3232; --lane-bg:#fbe9e9; --ok:#2e6e3e; --bad:#a33232; --mono-bg:#eef0ee;
+  --disp:'Libre Franklin',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#15181b; --panel:#1d2126; --ink:#e8eaec; --mut:#9aa4ad; --line:#333a41;
+  --lane:#e08a8a; --lane-bg:#2b1a1a; --ok:#7dc48e; --bad:#e08a8a; --mono-bg:#23282d; color-scheme:dark;
+}}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--disp);margin:0;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.top{max-width:880px;margin:0 auto 12px;display:flex;align-items:center;gap:16px;font:600 12px var(--mono)}
+.top a{color:var(--mut);text-decoration:none}
+.top a:hover{color:var(--ink)}
+.top .pdf{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--ink);font:600 12px var(--mono);padding:6px 12px;cursor:pointer}
+.top .pdf:hover{border-color:var(--lane)}
+.since{max-width:880px;margin:0 auto 12px;background:var(--lane-bg);border:1px solid var(--line);border-left:3px solid var(--lane);border-radius:0 10px 10px 0;padding:10px 14px;font-size:13px}
+.since ul{margin:4px 0 0;padding-left:18px}
+.card{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane{background:var(--lane-bg);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline}
+.lane .tag{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lane);border:1.5px solid var(--lane);border-radius:4px;padding:5px 9px}
+.lane .asof{font:400 12px var(--mono);color:var(--mut);margin-left:auto}
+.inner{padding:20px 22px}
+h1{font:800 26px/1.15 var(--disp);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--mut);margin:0 0 14px;font-size:14px}
+.cl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.cl a,.cl span{font:600 11.5px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink);text-decoration:none}
+.cl a:hover{border-color:var(--lane)}
+.cl span{color:var(--mut);border-style:dashed}
+.verdict{font-size:16.5px;line-height:1.5;border-left:3px solid var(--lane);padding:2px 0 2px 14px;margin:0 0 22px}
+.verdict b{font-weight:800}
+h2{font:800 12px/1 var(--disp);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:16px;margin:22px 0 10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cols>div{min-width:0}
+@media (max-width:620px){.cols{grid-template-columns:1fr}
+  /* a phone share-sheet PDF snapshots the screen layout, not the print one: no card outline or gutter to show */
+  body{background:var(--panel)} .card{border:none;border-radius:0}}
+ul{margin:6px 0;padding-left:20px}
+li{margin:5px 0}
+.ok{color:var(--ok);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+code,.v{font:13px var(--mono);background:var(--mono-bg);border-radius:4px;padding:1px 6px;white-space:nowrap}
+pre{font:12px/1.5 var(--mono);background:var(--mono-bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:6px 0 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-top:1px solid var(--line);padding:7px 10px 7px 0;text-align:left;vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border-top:none}
+.tl{list-style:none;padding:0;margin:6px 0}
+.tl li{display:flex;gap:12px;margin:7px 0}
+.tl .d{font:600 12.5px var(--mono);color:var(--mut);flex:0 0 86px;padding-top:1px}
+.src{font-size:13px;color:var(--mut)}
+.src a{color:inherit}
+.foot{border-top:1px solid var(--line);padding:12px 22px;font:400 11.5px var(--mono);color:var(--mut);display:flex;flex-wrap:wrap;gap:6px 16px}
+a{color:var(--ink)}
+.num{font-variant-numeric:tabular-nums}
+@media print{
+  @page{margin:0} /* the full bleed the comment below assumes: phones have no "Margins: None" control */
+  /* PDFs are always dark, whatever theme the page is viewed in; print-color-adjust keeps
+     the browser from stripping the backgrounds. Margins "None" + headers off = full bleed. */
+  :root{--bg:#15181b;--panel:#1d2126;--ink:#e8eaec;--mut:#9aa4ad;--line:#333a41;--lane:#e08a8a;--lane-bg:#2b1a1a;--ok:#7dc48e;--bad:#e08a8a;--mono-bg:#23282d}
+  html,body{background:var(--bg)!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body{padding:0;font-size:12.5px}
+  .top,.cl{display:none}
+  .since{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .card{border:none;max-width:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  a{text-decoration:none;color:inherit}
+  tr,li,pre{break-inside:avoid}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/?view=cards">← Verdict cards</a>
+  <a href="/">Cutsign</a>
+  <button class="pdf" onclick="window.print()">Print / save PDF</button>
+</div>
+
+<div id="since" class="since" hidden></div>
+
+<div class="card">
+  <div class="lane">
+    <span class="tag">Hunt + harden</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Technique reference</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE · CWE-918</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Queries are templates</span>
+    <span class="asof">as of 2026-11-20</span>
+  </div>
+  <div class="inner">
+    <h1>SSRF hunting &amp; detection — find the endpoints, then prove which fetches happened</h1>
+    <p class="sub">Server-side request forgery (SSRF, CWE-918) is when an application fetches a URL that a caller supplied, so the caller borrows the server's network position: cloud metadata credentials, loopback admin interfaces, internal services. A WAF or access log records the request that <i>asks</i> for the fetch. Whether the server made it shows only in that server's own DNS lookups and outbound connections, so success is judged by matching the inbound request to what the receiving server did next. The technique is in current use: ten of the 21 entries that CISA's exploited-vulnerabilities catalog names or describes as SSRF were added in 2026 (catalog release of Nov 18). Sysdig recorded the LMDeploy flaw <span class="v">CVE-2026-33626</span> exploited 12 hours 31 minutes after its advisory, and watchTowr reported the MLflow flaw <span class="v">CVE-2026-64849</span> exploited within hours of the CVE being assigned. This card is a reusable pack: a passive way to list candidate endpoints, nine hunts in Splunk and Elastic, and what to fix.</p>
+
+    <div class="cl">
+      <span>On Cutsign:</span>
+      <a href="/?d=2026-11-16&view=analyst#s-d2e47059">agents' playbook 11-16</a>
+      <a href="/?d=2026-11-09&view=analyst#s-bf4b735d">Storm-3358 11-09</a>
+      <a href="/?d=2026-10-28&view=analyst#s-a005a77d">PeopleSoft chain 10-28</a>
+      <a href="/cards/agentic-intrusion-hunts-2026.html">agentic hunt pack</a>
+      <a href="/?q=SSRF">news &amp; updates (live)</a>
+    </div>
+
+    <p class="verdict"><b>Verdict: nothing to patch from a vendor — this is an inventory and egress job. List every place a server fetches a URL it was handed, then judge success from what the server did, not from what the WAF logged.</b> Work in three passes. First, find the endpoints that accept URLs (code search, API inventory, Q1). Second, find the requests that pointed them at metadata, internal or out-of-band destinations (Q2, Q3). Third, check whether the receiving server then resolved or reached that destination (Q4 to Q7); a match is the only passive evidence that a fetch happened. Passive methods produce candidates: each one needs a single targeted, authorized test to confirm. Where one SSRF has been confirmed, expect siblings, because the same helper or HTTP client is usually called from other endpoints. Escalate when a web or application server reaches a metadata endpoint it has no reason to call, or when instance credentials are used from somewhere else (Q6, Q9).</p>
+
+    <h2>30-second read</h2>
+    <p><b>Inventory</b> — Q1 lists hosts, paths and parameters whose value is a URL. <b>Attempts</b> — Q2 flags values aimed at metadata endpoints, loopback, private ranges, non-HTTP schemes and disguised IP addresses; Q3 flags out-of-band testing domains. <b>Proof</b> — Q4 finds your hosts looking up those testing domains; Q5, the headline query, pairs a destination named in a request with a lookup or connection inside a minute; Q6 watches for new callers of the metadata endpoint; Q7 watches the web tier for new internal destinations and scanning bursts. <b>Impact</b> — Q8 compares response size and time on suspect requests with the endpoint's norm; Q9 (AWS only) finds instance credentials used from elsewhere. Every query is a template: field names follow Splunk CIM and Elastic ECS defaults, and none has been run against real data.</p>
+
+    <div class="cols">
+      <div>
+        <h2>Exposed if</h2>
+        <ul>
+          <li class="bad">Any feature fetches a URL a caller supplies: webhooks, import-from-URL, link previews, PDF or image rendering, feed readers, model or tool servers that load remote images and documents</li>
+          <li class="bad">The fetching server can read cloud metadata without a session token or required header (IMDSv1 on AWS, legacy endpoints elsewhere)</li>
+          <li class="bad">The web tier can open connections to any internal address and any internet address</li>
+          <li class="bad">An internal service trusts loopback or the web tier's address without a login — ZDI's PeopleSoft write-up shows SSRF turning into code execution that way</li>
+          <li class="bad">Validation checks the hostname once and the HTTP client then resolves it again (the gap Cloud Security Alliance describes in MLflow) or follows redirects</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Not exposed if</h2>
+        <ul>
+          <li class="ok">Every outbound fetch goes through one helper that allow-lists destinations and checks the resolved address on each hop</li>
+          <li class="ok">The metadata service is gated: IMDSv2 required on AWS; Azure and Google Cloud demand a header a plain forged GET cannot add</li>
+          <li class="ok">Web-tier egress is default-deny, with fetches leaving through one logged egress path</li>
+          <li class="ok">DNS queries and outbound connections from application servers are logged, so Q4 to Q7 can answer</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Find candidate endpoints passively</h2>
+    <ul>
+      <li><b>Variant analysis.</b> When one SSRF is known, find the helper or HTTP client call behind it and list every other caller. This is the cheapest step and the most productive.</li>
+      <li><b>Code search.</b> Outbound HTTP calls whose URL comes from request input; webhook, URL-import, link-preview and PDF or image rendering features. CodeQL and Semgrep ship SSRF rules (coverage table below).</li>
+      <li><b>API inventory.</b> OpenAPI specifications and gateway routes with parameters named <code>url</code>, <code>uri</code>, <code>src</code>, <code>dest</code>, <code>callback</code>, <code>webhook</code>, <code>redirect</code>, <code>target</code>, <code>host</code>, <code>feed</code>, <code>proxy</code>, <code>image</code>, <code>link</code>. This covers POST bodies, which logs usually do not.</li>
+      <li><b>Passive URL archives.</b> Wayback Machine, Common Crawl and urlscan hold historical parameterized URLs for your domains, including endpoints that no longer appear in current traffic.</li>
+      <li><b>Logs.</b> Q1 below turns web logs into the same list from the traffic side.</li>
+      <li><b>Then confirm.</b> Passive methods produce candidates. Each needs one targeted, authorized test before it is called a finding.</li>
+    </ul>
+
+    <h2>Detection coverage — as of Nov 20</h2>
+    <table>
+      <tr><th>Category</th><th>Source</th><th>Status</th></tr>
+      <tr><td>Reference guidance</td><td><a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP cheat sheet</a> · <a href="https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/">OWASP Top 10</a></td><td><span class="ok">Prevention guidance published</span> — allow-lists over deny-lists ("bypass-prone"), check every resolved address, disable redirect following, allow HTTP and HTTPS only. SSRF was its own category in the 2021 Top 10 (A10) and sits inside A01 Broken Access Control in the 2025 edition</td></tr>
+      <tr><td>WAF / edge</td><td><a href="https://github.com/coreruleset/coreruleset/blob/v4.30.0/rules/REQUEST-934-APPLICATION-ATTACK-GENERIC.conf">OWASP CRS</a> · <a href="https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-baseline.html">AWS WAF</a> · <a href="https://developers.cloudflare.com/changelog/post/2026-08-04-waf-release/">Cloudflare</a> · Akamai</td><td><span class="ok">Rules exist</span> — CRS 4.30.0 rule IDs: 934110 (cloud metadata URL in a parameter) and 934190 (scheme-less localhost or internal hostname) at paranoia level 1, 934120 (URL parameter using an IP address) at level 2 only. AWS managed Core rule set: four <code>EC2MetaDataSSRF_*</code> rules (body, cookie, URI path, query arguments), action Block, EC2 metadata only; body inspection stops at 8 KB behind a load balancer, 16 to 64 KB elsewhere. Cloudflare Managed Ruleset: "SSRF - Cloud" moved from Disabled to Block on Aug 4, 2026. Akamai: no public rule list found; check the rule set in the console</td></tr>
+      <tr><td>WAF / edge</td><td>All WAFs</td><td><span class="bad">Inbound only</span> — a WAF sees the ask, never the fetch. It misses values in bodies past the inspection limit, hostnames that resolve to internal addresses, and redirects. A stopgap, not the fix</td></tr>
+      <tr><td>Cloud platform</td><td><a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html">AWS</a> · <a href="https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service">Azure</a> · <a href="https://docs.cloud.google.com/compute/docs/metadata/querying-metadata">Google Cloud</a></td><td><span class="ok">Metadata gating available</span> — AWS IMDSv2 needs a session token fetched with a PUT, rejects that PUT when it carries <code>X-Forwarded-For</code>, and limits the reply to one network hop by default; it has to be set to required, or IMDSv1 still answers. Azure requires the header <code>Metadata: true</code> and rejects <code>X-Forwarded-For</code>. Google Cloud requires <code>Metadata-Flavor: Google</code> and rejects <code>X-Forwarded-For</code>. These stop a forged plain GET, not an SSRF that controls headers</td></tr>
+      <tr><td>Cloud detection</td><td><a href="https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html">Amazon GuardDuty</a></td><td><span class="ok">Findings exist</span> — <code>InstanceCredentialExfiltration.OutsideAWS</code> (High) and <code>.InsideAWS</code> (High; Medium for an affiliated account), plus <code>ResourceCredentialExfiltration.*</code> for ECS tasks and Lambda functions. AWS notes GuardDuty learns continued use from the same remote host or account and stops raising the finding, so silence is not proof. Q9 reads these</td></tr>
+      <tr><td>SIEM content</td><td><a href="https://www.elastic.co/guide/en/security/current/web-server-cloud-metadata-ssrf-request.html">Elastic</a></td><td><span class="ok">Prebuilt rules published</span> — "Web Server Cloud Metadata SSRF Request" (inbound, over NGINX, Apache, Tomcat, IIS, Traefik and Zeek HTTP logs), "Cloud Instance Metadata Credential Path HTTP Request" (outbound) and "Suspicious Instance Metadata Service (IMDS) API Request" (endpoint). Attempt and metadata-call rules; no rule found that pairs the two</td></tr>
+      <tr><td>SIEM content</td><td>Splunk Threat Research · Sigma</td><td>No generic SSRF analytic found in a search on Nov 20 — the Splunk detections found are tied to single products. Not confirmed absent: check both libraries directly</td></tr>
+      <tr><td>Runtime</td><td><a href="https://www.sysdig.com/blog/cve-2026-33626-how-attackers-exploited-lmdeploy-llm-inference-engines-in-12-hours">Sysdig / Falco</a> · <a href="https://docs.datadoghq.com/security/default_rules/appsec-ssrf-vulnerability-trigger">Datadog</a></td><td><span class="ok">Host and in-app detection</span> — Falco rules "Contact EC2 Instance Metadata Service From Container", with Google Cloud, Azure and ECS task-metadata twins, fire on the connection itself. Datadog's "SSRF exploited" rule uses an in-app library to check whether user input changed an outbound URL. Both see the fetch, which logs at the edge cannot</td></tr>
+      <tr><td>Code scanning</td><td><a href="https://codeql.github.com/codeql-query-help/python/py-full-ssrf/">CodeQL</a> · <a href="https://registry.semgrep.dev/rule/python.flask.security.injection.tainted-url-host.tainted-url-host">Semgrep</a></td><td><span class="ok">Rules published</span> — CodeQL query IDs <code>py/full-ssrf</code>, <code>py/partial-ssrf</code>, <code>java/ssrf</code>, <code>js/request-forgery</code>, <code>go/request-forgery</code>, <code>rb/request-forgery</code>, <code>rust/request-forgery</code>. Semgrep registry rules named <code>tainted-url-host</code> for Flask, Spring, Go and PHP, and <code>csharp.lang.security.ssrf.web-request.ssrf</code>. They find request input flowing into a URL; they do not judge whether the destination check is sound</td></tr>
+      <tr><td>Exploitation record</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA KEV</a></td><td>21 entries named or described as SSRF, ten of them added in 2026 (catalog release 2026.11.18): Plex Media Server (two), SonicWall SMA1000 (two), MLflow, Cisco Unified Communications Manager, Omnissa Workspace ONE, GitLab (two), Zimbra</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do now</h2>
+        <ul>
+          <li>Run Q1 over 30 days to list the endpoints that accept URLs, and give the list to the application owners with the code-search checklist</li>
+          <li>Run Q2, Q3 and Q4 over the same window, then Q5 for the destinations that show up on both sides</li>
+          <li>Schedule Q6 and Q9 as alerts: a server newly calling a metadata endpoint, or instance credentials used from elsewhere, needs no tuning to matter</li>
+          <li>Require IMDSv2 on every instance and set default-deny egress from the web tier</li>
+          <li>Fix in code: allow-list destinations, validate the resolved address on every hop, restrict schemes, stop following redirects</li>
+          <li>Turn on DNS query logging and egress logging for application servers wherever Q4 to Q7 came back empty because the data is not collected</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Escalation triggers</h2>
+        <ul>
+          <li>Q5 pairs a requested destination with a lookup or connection from the receiving server: treat the endpoint as vulnerable and find out what was returned</li>
+          <li>Q6 shows a web server, interpreter or rendering helper calling a metadata endpoint: assume the role's credentials were read</li>
+          <li>Q9 or a GuardDuty credential-exfiltration finding: incident. Revoke the role's sessions and review what the credentials did</li>
+          <li>Q7b burst from a web-tier host: the application is being used to scan the internal network</li>
+          <li>The vulnerable server can reach a service that trusts loopback or the web tier: SSRF may become code execution</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Shared constants</h2>
+    <p class="src">Used by several queries and printed once here. The queries inline them so each runs on its own; to maintain them in one place, save each regex as a Splunk macro or the lists as a lookup, and in Elastic keep them in a lookup index. All addresses and domains are public values.</p>
+    <pre>
+
+Metadata endpoints
+  169.254.169.254            instance metadata service on AWS, Azure, Google Cloud and most other clouds
+  169.254.170.2              AWS ECS task metadata and task-role credentials
+  fd00:ec2::254              AWS instance metadata over IPv6
+  metadata.google.internal   Google Cloud metadata server (resolves to 169.254.169.254)
+  100.100.100.200            Alibaba Cloud instance metadata
+
+Internal ranges
+  127.0.0.0/8, ::1                             loopback
+  10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16    private IPv4 (RFC 1918)
+  169.254.0.0/16, fe80::/10                    link-local (holds the metadata addresses above)
+  fc00::/7                                     IPv6 unique local
+
+Out-of-band testing domains
+  interact.sh, oast.fun, oast.pro, oast.live, oast.site, oast.online, oast.me    public Interactsh callback servers
+  oastify.com, burpcollaborator.net                                              public Burp Collaborator servers
+  webhook.site, requestbin.com, pipedream.net, requestrepo.com                   request-capture services
+  dnslog.cn                                                                      DNS callback logger
+  ngrok.io, ngrok-free.app                                                       tunnelling service
+
+</pre>
+    <p class="src">The testing domains are shared services that authorized testers and developers also use, and the list can never be complete: a callback server can be self-hosted under any domain. Q5 is the method that does not depend on the list. <span class="v">requestrepo.com</span> is on it because Sysdig recorded it in the LMDeploy exploitation.</p>
+
+    <div id="pubguid" hidden></div>
+
+    <h2>Inferred detections — nine hunts, Q1 to Q9</h2>
+    <p class="src">Inferred from the shape of the technique, not taken from a vendor. Every query is a <b>template — validate against your data before alerting</b>; none has been run against real data. Detection guidance the pipeline extracts for SSRF stories renders live above and supersedes these.</p>
+    <p><b>Placeholders — substitute before running.</b> Splunk searches read <code>index=*</code> and Elastic queries read <code>FROM logs-*</code> so they run anywhere; both are the expensive way to search, so narrow them to your own index or data stream first.</p>
+    <table>
+      <tr><th>Placeholder</th><th>Substitute</th></tr>
+      <tr><td><code>&lt;web_access&gt;</code></td><td>Sourcetype of web server, WAF, load balancer or API gateway access logs (CIM Web)</td></tr>
+      <tr><td><code>&lt;dns&gt;</code></td><td>Sourcetype of DNS query logs that keep the client address (CIM Network Resolution)</td></tr>
+      <tr><td><code>&lt;network_traffic&gt;</code></td><td>Sourcetype of firewall or flow logs (CIM Network Traffic)</td></tr>
+      <tr><td><code>&lt;endpoint_network&gt;</code></td><td>Sourcetype of host-level network events that name the process (EDR, Sysmon for Linux, eBPF sensor)</td></tr>
+      <tr><td><code>&lt;cloud_audit&gt;</code> · <code>&lt;cloud_findings&gt;</code></td><td>Sourcetypes of AWS CloudTrail and of exported GuardDuty findings (Q9 only)</td></tr>
+      <tr><td><code>&lt;web_tier_cidr&gt;</code></td><td>Address range of your web and application servers (Q7; optional in Q4)</td></tr>
+    </table>
+    <p class="src">Elastic queries need no sourcetype: they select by ECS fields (<code>http.request.method</code>, <code>dns.question.name</code>, <code>destination.ip</code>) and, for Q9, by the AWS integration's <code>event.dataset</code>. <b>Decoding:</b> parameter values are URL-decoded once before matching. A double-encoded value (<code>%253A%252F%252F</code>) is missed; wrap the decode in a second one to catch it. Elastic's <code>URL_DECODE</code> needs version 9.2 or later. <b>KQL:</b> where the logic is a plain filter, a KQL line for Discover sits in a comment at the top of the Elastic tab.</p>
+
+    <p><b>Q1 · Endpoints that accept URLs (inventory).</b> <b>Detects:</b> every host, path and parameter whose decoded query-string value starts with a URL scheme. This is the candidate list, not a finding. <b>Needs:</b> web, WAF, load balancer or gateway access logs that keep the query string. <b>Read:</b> one row per parameter. A parameter used by many clients is a product feature such as a redirect or share link; one used by a handful is more likely a callback or import function, and worth reading in code first. <b>False positives:</b> browser redirect and return-URL parameters, OAuth <code>redirect_uri</code>, tracking parameters. They stay on the list until code review shows the server does not fetch them. <b>Misses:</b> POST bodies, JSON and headers; values with no scheme (<code>//host</code>, bare <code>host:port</code>); double-encoded values. The Elastic twin records the first URL-bearing parameter of each request only.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q1 inventory · template — validate against your data before alerting · default 30 days
+# cost: reads every web event whose query string holds "://"; on a large index start with -24h or one site
+index=* sourcetype=&lt;web_access&gt; earliest=-30d (uri_query="*://*" OR uri_query="*%3A%2F%2F*" OR uri_query="*%3a%2f%2f*")
+| eval q=urldecode(uri_query)
+| rex field=q max_match=20 "(?:^|&amp;)(?&lt;param&gt;[^=&amp;]{1,64})=(?&lt;scheme&gt;[a-zA-Z][a-zA-Z0-9+.\-]{1,12})://"
+| where isnotnull(param)
+| mvexpand param
+| stats count as requests dc(src) as clients values(scheme) as schemes values(http_method) as methods by site uri_path param
+| sort - requests
+
+</pre>
+    <pre data-q="esql">
+
+// Q1 inventory · template — validate against your data before alerting · default 30 days
+// cost: scans every web event with a query string; narrow FROM to your web data streams. URL_DECODE needs Elastic 9.2 or later
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND http.request.method IS NOT NULL AND url.query IS NOT NULL
+| WHERE url.query LIKE "*://*" OR url.query LIKE "*%3A%2F%2F*" OR url.query LIKE "*%3a%2f%2f*"
+| EVAL q = URL_DECODE(url.query)
+| GROK q """(?:^|&amp;)(?&lt;param&gt;[^=&amp;]{1,64})=(?&lt;scheme&gt;[a-zA-Z][a-zA-Z0-9+.-]{1,12})://"""
+| WHERE param IS NOT NULL
+| STATS requests = COUNT(*), clients = COUNT_DISTINCT(source.ip), schemes = VALUES(scheme), methods = VALUES(http.request.method) BY url.domain, url.path, param
+| SORT requests DESC
+
+</pre>
+    </div>
+
+    <p><b>Q2 · Inbound SSRF attempts.</b> <b>Detects:</b> parameter values that point at a metadata endpoint, loopback, a private or link-local address, a non-HTTP scheme (file, gopher, dict, ftp), or an IP address written in decimal, hex, octal or IPv6-mapped form. <b>Needs:</b> the same logs as Q1. <b>Read:</b> the <code>kinds</code> column says which class matched. A 4xx from the WAF is a blocked attempt. A 2xx or 5xx means the request reached the application: take those endpoints to Q5 and Q8. Many paths from one client in a short time is a scanner. <b>False positives:</b> authorized scanning, OAuth <code>redirect_uri</code> values pointing at localhost (normal for native and command-line clients), admin tools that take an internal address by design, parameters that carry a client address. <b>Misses:</b> everything Q1 misses, plus hostnames that resolve to internal addresses and redirects, which look like ordinary external URLs here.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q2 inbound attempts · template — validate against your data before alerting · default 7 days
+# cost: one regex pass per web event with a query string. The order inside case() decides the label when several match
+index=* sourcetype=&lt;web_access&gt; earliest=-7d uri_query=*
+| eval q=lower(urldecode(uri_query))
+| eval kind=case(
+    match(q, "=(https?://)?(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|\[?fd00:ec2::254\]?|metadata\.google\.internal)([^0-9a-z.]|$)"), "metadata",
+    match(q, "=(file|gopher|dict|ftp)://"), "scheme",
+    match(q, "=(https?://)?(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|\[::1\])([^0-9a-z.]|$)"), "loopback",
+    match(q, "=(https?://)?(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})([^0-9a-z.]|$)"), "internal",
+    match(q, "=https?://(\d{8,10}|0x[0-9a-f]{8}|0[0-7]{9,11}|0x[0-9a-f]{1,2}(\.0x[0-9a-f]{1,2}){3}|0[0-7]{1,3}(\.0[0-7]{1,3}){3}|\[(0:){5}ffff:[0-9a-f.:]+\]|\[::ffff:[0-9a-f.:]+\])([^0-9a-z.]|$)"), "encoded_ip")
+| where isnotnull(kind)
+| stats count as requests dc(src) as clients values(kind) as kinds values(status) as statuses min(_time) as first max(_time) as last by site uri_path
+| sort - requests
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q2 inbound attempts · template — validate against your data before alerting · default 7 days
+// cost: one regex pass per web event with a query string. RLIKE matches the whole string, hence the leading and trailing .*
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND http.request.method IS NOT NULL AND url.query IS NOT NULL
+| EVAL q = TO_LOWER(URL_DECODE(url.query))
+| EVAL kind = CASE(
+    q RLIKE """.*=(https?://)?(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|\[?fd00:ec2::254\]?|metadata\.google\.internal)([^0-9a-z.].*)?""", "metadata",
+    q RLIKE """.*=(file|gopher|dict|ftp)://.*""", "scheme",
+    q RLIKE """.*=(https?://)?(localhost|127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|0\.0\.0\.0|\[::1\])([^0-9a-z.].*)?""", "loopback",
+    q RLIKE """.*=(https?://)?(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3})([^0-9a-z.].*)?""", "internal",
+    q RLIKE """.*=https?://([0-9]{8,10}|0x[0-9a-f]{8}|0[0-7]{9,11}|0x[0-9a-f]{1,2}(\.0x[0-9a-f]{1,2}){3}|0[0-7]{1,3}(\.0[0-7]{1,3}){3}|\[(0:){5}ffff:[0-9a-f.:]+\]|\[::ffff:[0-9a-f.:]+\])([^0-9a-z.].*)?""", "encoded_ip")
+| WHERE kind IS NOT NULL
+| STATS requests = COUNT(*), clients = COUNT_DISTINCT(source.ip), kinds = VALUES(kind), statuses = VALUES(http.response.status_code), first = MIN(@timestamp), last = MAX(@timestamp) BY url.domain, url.path
+| SORT requests DESC
+
+</pre>
+    </div>
+
+    <p><b>Q3 · Out-of-band testing domains in inbound requests.</b> <b>Detects:</b> the callback and request-capture domains from the constants in a query string, referrer or user agent, which is how blind SSRF is tested. <b>Needs:</b> the same logs as Q1, with referrer and user agent. <b>Read:</b> someone is testing: a scanner, a researcher or an attacker. The endpoint named is where they expect a fetch; Q4 says whether one happened. <b>False positives:</b> authorized testing, and developers who use tunnel and webhook services for integration work. <b>Misses:</b> self-hosted callback servers on unlisted domains.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q3 out-of-band testing domains in inbound requests · template — validate against your data before alerting · default 30 days
+# cost: regex over the query string, referrer and user agent of every web event; add a site filter on a large index
+index=* sourcetype=&lt;web_access&gt; earliest=-30d
+| eval hay=lower(urldecode(coalesce(uri_query,"")." ".coalesce(http_referrer,"")." ".coalesce(http_user_agent,"")))
+| regex hay="(^|[^a-z0-9\-])(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com)([^a-z0-9.\-]|$)"
+| stats count as requests dc(src) as clients values(http_user_agent) as agents min(_time) as first max(_time) as last by site uri_path
+| sort - requests
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q3 out-of-band testing domains in inbound requests · template — validate against your data before alerting · default 30 days
+// cost: regex over three fields of every web event; narrow FROM to your web data streams. Values are matched undecoded
+// KQL (Discover), query string only: url.query : (*interact.sh* or *oast.fun* or *oast.pro* or *oast.live* or *oast.site* or *oast.online* or *oast.me* or *oastify.com* or *burpcollaborator.net* or *webhook.site* or *requestbin.com* or *pipedream.net* or *dnslog.cn* or *ngrok.io* or *ngrok-free.app* or *requestrepo.com*)
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND http.request.method IS NOT NULL
+| EVAL hay = TO_LOWER(CONCAT(COALESCE(url.query, ""), " ", COALESCE(http.request.referrer, ""), " ", COALESCE(user_agent.original, "")))
+| WHERE hay RLIKE """(.*[^a-z0-9\-])?(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com)([^a-z0-9.\-].*)?"""
+| STATS requests = COUNT(*), clients = COUNT_DISTINCT(source.ip), agents = VALUES(user_agent.original), first = MIN(@timestamp), last = MAX(@timestamp) BY url.domain, url.path
+| SORT requests DESC
+
+</pre>
+    </div>
+
+    <p><b>Q4 · DNS lookups for out-of-band testing domains.</b> <b>Detects:</b> one of your hosts resolving one of those domains. From a server, that means something on it acted on supplied input: blind SSRF, or another injection class that uses the same callbacks. <b>Needs:</b> DNS query logs that keep the client address. Logs taken upstream of the resolver show the resolver as the client. <b>Read:</b> the client is the host that did the lookup. The subdomain is unique per test, so match it against the Q3 requests to find the endpoint. <b>False positives:</b> testers' and developers' workstations, sandboxes and mail or URL scanners that open links. <b>Note:</b> the KQL line relies on <code>dns.question.registered_domain</code>, which can differ for domains on the public suffix list; the ES|QL query matches on the full name instead.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q4 DNS lookups for out-of-band testing domains · template — validate against your data before alerting · default 30 days
+# cost: light when the DNS sourcetype is narrow. To keep servers only, add: | where cidrmatch("&lt;web_tier_cidr&gt;", src)
+index=* sourcetype=&lt;dns&gt; earliest=-30d
+| eval name=lower(mvindex(query, 0))
+| regex name="(^|\.)(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com)\.?$"
+| stats count as lookups dc(name) as names min(_time) as first max(_time) as last by src
+| sort - lookups
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q4 DNS lookups for out-of-band testing domains · template — validate against your data before alerting · default 30 days
+// cost: light. To keep servers only, add: | WHERE CIDR_MATCH(source.ip, "&lt;web_tier_cidr&gt;")
+// KQL (Discover): dns.question.registered_domain : ("interact.sh" or "oast.fun" or "oast.pro" or "oast.live" or "oast.site" or "oast.online" or "oast.me" or "oastify.com" or "burpcollaborator.net" or "webhook.site" or "requestbin.com" or "pipedream.net" or "dnslog.cn" or "ngrok.io" or "ngrok-free.app" or "requestrepo.com")
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND dns.question.name IS NOT NULL
+| EVAL name = TO_LOWER(dns.question.name)
+| WHERE name RLIKE """(.*\.)?(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com)\.?"""
+| STATS lookups = COUNT(*), names = COUNT_DISTINCT(name), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, source.ip
+| SORT lookups DESC
+
+</pre>
+    </div>
+
+    <p><b>Q5 · Correlation: likely successful SSRF (the headline query).</b> <b>Detects:</b> a hostname or address that arrived in an inbound request parameter and was then resolved or connected to by one of your hosts, within 60 seconds in Splunk and within the same clock minute in Elastic. <b>Needs:</b> web logs, plus DNS query logs or traffic logs that cover the web tier. <b>Read:</b> <code>endpoints</code> is where the destination was asked for and <code>fetched_by</code> is the host that went there; they should be the same server or its backend. Lowest counts come first, because one request followed by one lookup of a domain nobody else uses is the signature. Each row is a candidate for one authorized test. <b>False positives:</b> your own hostnames and your CDN, payment, identity and analytics domains appear in parameters and are resolved constantly: exclude them once seen. Popular external domains also coincide by chance. <b>Misses:</b> destinations in POST bodies; lookups answered from a cache; access logs stamped when the response completes, which can put the lookup before the request (widen the window); in Elastic, pairs that straddle a minute boundary; the literal metadata address, which flow logs do not record (Q6).</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q5 correlation: a destination named in an inbound parameter, then resolved or reached within 60 s · template — validate against your data before alerting · default 24 hours
+# cost: the most expensive search on this card (web, DNS and traffic events in one pass). Start with -1h and narrow the DNS and traffic side to your web tier
+index=* earliest=-24h ((sourcetype=&lt;web_access&gt; uri_query=*) OR sourcetype=&lt;dns&gt; OR sourcetype=&lt;network_traffic&gt;)
+| eval q=lower(urldecode(uri_query))
+| rex field=q max_match=10 "=(?:[a-z][a-z0-9+.\-]{1,12}:)?//(?:[^/@&amp;\s]*@)?(?&lt;asked&gt;\[[0-9a-f:.]+\]|[a-z0-9._\-]+)"
+| eval side=case(isnotnull(uri_query), "inbound", isnotnull(query), "lookup", isnotnull(dest_ip), "connect")
+| eval key=case(side="inbound", asked, side="lookup", lower(mvindex(query, 0)), side="connect", dest_ip)
+| mvexpand key
+| eval key=trim(key, "[].")
+| where isnotnull(key)
+| sort 0 _time
+| streamstats time_window=60s count(eval(side="inbound")) as asked_recently by key
+| eval fetched=if(side!="inbound" AND asked_recently&gt;0, 1, 0)
+| stats sum(fetched) as fetches count(eval(side="inbound")) as asks dc(eval(if(side="inbound", src, null()))) as askers values(eval(if(side="inbound", uri_path, null()))) as endpoints values(eval(if(fetched=1, src, null()))) as fetched_by min(_time) as first max(_time) as last by key
+| where fetches&gt;0
+| sort fetches
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q5 correlation: a destination named in an inbound parameter, then resolved or reached in the same minute · template — validate against your data before alerting · default 24 hours
+// cost: the most expensive query on this card (it reads web, DNS and network events together). Start with 1 hour and narrow FROM. URL_DECODE needs Elastic 9.2 or later
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 24 hours
+| WHERE (http.request.method IS NOT NULL AND url.query IS NOT NULL) OR dns.question.name IS NOT NULL OR destination.ip IS NOT NULL
+| EVAL q = TO_LOWER(URL_DECODE(url.query))
+| GROK q """=(?:[a-z][a-z0-9+.\-]{1,12}:)?//(?:[^/@&amp;\s]*@)?(?&lt;asked&gt;\[[0-9a-f:.]+\]|[a-z0-9._\-]+)"""
+| EVAL side = CASE(http.request.method IS NOT NULL, "inbound", dns.question.name IS NOT NULL, "lookup", "connect")
+| EVAL key = CASE(side == "inbound", REPLACE(asked, """[\[\]]""", ""), side == "lookup", TO_LOWER(dns.question.name), TO_STRING(destination.ip))
+| WHERE key IS NOT NULL
+| EVAL minute = DATE_TRUNC(1 minute, @timestamp)
+| STATS asks = COUNT(*) WHERE side == "inbound", fetches = COUNT(*) WHERE side != "inbound", endpoints = VALUES(url.path) WHERE side == "inbound", fetched_by = VALUES(host.name) WHERE side != "inbound", first = MIN(@timestamp) BY key, minute
+| WHERE asks &gt; 0 AND fetches &gt; 0
+| STATS minutes = COUNT(*), asks = SUM(asks), fetches = SUM(fetches), endpoints = VALUES(endpoints), fetched_by = VALUES(fetched_by), first = MIN(first) BY key
+| SORT minutes ASC
+
+</pre>
+    </div>
+
+    <p><b>Q6 · Web and application tier calling metadata endpoints.</b> <b>Detects:</b> a host and process that started calling a metadata endpoint in the last 24 hours, against a 14-day baseline. <b>Needs:</b> host-level network events that name the process. AWS states that VPC flow logs do not capture traffic to <span class="v">169.254.169.254</span>, and a proxy sees it only if the application sends link-local traffic through it. <b>Read:</b> cloud SDKs inside an application runtime call the metadata endpoint to refresh role credentials, so java, python or node on a host with an instance role is expected. Not expected: a web server or interpreter with no SDK, a rendering helper (headless browser, PDF or image converter), curl or wget. <b>False positives:</b> new deployments and autoscaled hosts, where everything is first seen (group by process and role instead of host); monitoring and configuration agents. <b>Stronger control:</b> with IMDSv2 required, a forged GET fails outright, and on AWS the CloudWatch metric <code>MetadataNoToken</code> counts the IMDSv1 calls an instance still makes.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q6 hosts and processes that began calling a metadata endpoint · template — validate against your data before alerting · 14-day baseline, last 24 hours reported
+# cost: light (four destination addresses). Needs host-level network events: AWS VPC flow logs do not record traffic to 169.254.169.254
+index=* sourcetype=&lt;endpoint_network&gt; earliest=-14d (dest_ip="169.254.169.254" OR dest_ip="169.254.170.2" OR dest_ip="100.100.100.200" OR dest_ip="fd00:ec2::254")
+| eval proc=coalesce(process_name, app, "unknown")
+| stats count as connections min(_time) as first max(_time) as last by host proc dest_ip
+| where first &gt;= relative_time(now(), "-24h")
+| sort first
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q6 hosts and processes that began calling a metadata endpoint · template — validate against your data before alerting · 14-day baseline, last 24 hours reported
+// cost: light (four destination addresses). Needs host-level network events: AWS VPC flow logs do not record traffic to 169.254.169.254
+// KQL (Discover): destination.ip : ("169.254.169.254" or "169.254.170.2" or "100.100.100.200" or "fd00:ec2::254")
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND CIDR_MATCH(destination.ip, "169.254.169.254/32", "169.254.170.2/32", "100.100.100.200/32", "fd00:ec2::254/128")
+| STATS connections = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY host.name, process.name, destination.ip
+| WHERE first &gt; NOW() - 24 hours
+| SORT first
+
+</pre>
+    </div>
+
+    <p><b>Q7 · Web tier reaching internal hosts or ports outside its baseline, and the burst variant.</b> <b>Detects:</b> Q7a, an internal destination and port a web-tier host reached for the first time in the last 24 hours; Q7b, one web-tier host touching 20 or more internal hosts or 15 or more ports inside a minute, which is what internal port scanning through SSRF looks like. <b>Needs:</b> firewall or flow logs for traffic from the web tier to internal ranges, including denied flows, and your <code>&lt;web_tier_cidr&gt;</code>. <b>Read:</b> in Q7a, look for new connections to databases, caches and admin ports (Sysdig's list: 6379, 3306, 5432, 9200, 2375 and 2376). In Q7b, many ports on one host is a port scan and many hosts on one port is a sweep. <b>False positives:</b> deployments, new backends, service discovery, health checks, and vulnerability scanners that sit in the web tier. <b>Misses:</b> loopback scanning, which never leaves the host (Sysdig recorded a loopback port sweep in the LMDeploy case); that needs host-level events. Add the IPv6 ranges from the constants on a dual-stack tier.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q7a web tier reaching an internal host and port for the first time · template — validate against your data before alerting · 14-day baseline, last 24 hours reported
+# cost: heavy on raw traffic logs; use tstats over an accelerated Network_Traffic data model if you have one
+
+index=* sourcetype=&lt;network_traffic&gt; earliest=-14d
+| where cidrmatch("&lt;web_tier_cidr&gt;", src_ip) AND (cidrmatch("10.0.0.0/8", dest_ip) OR cidrmatch("172.16.0.0/12", dest_ip) OR cidrmatch("192.168.0.0/16", dest_ip) OR cidrmatch("127.0.0.0/8", dest_ip))
+| stats count as flows min(_time) as first max(_time) as last values(action) as actions by src_ip dest_ip dest_port
+| where first &gt;= relative_time(now(), "-24h")
+| sort first
+| convert ctime(first) ctime(last)
+
+# Q7b burst: one web-tier host touching 20 or more internal hosts, or 15 or more ports, in a minute · template — validate against your data before alerting · default 24 hours
+# cost: moderate; blocked flows count too, so include deny events
+
+index=* sourcetype=&lt;network_traffic&gt; earliest=-24h
+| where cidrmatch("&lt;web_tier_cidr&gt;", src_ip) AND (cidrmatch("10.0.0.0/8", dest_ip) OR cidrmatch("172.16.0.0/12", dest_ip) OR cidrmatch("192.168.0.0/16", dest_ip) OR cidrmatch("127.0.0.0/8", dest_ip))
+| bin _time span=1m
+| stats dc(dest_ip) as hosts dc(dest_port) as ports count as flows values(action) as actions by src_ip _time
+| where hosts&gt;=20 OR ports&gt;=15
+| sort - ports
+
+</pre>
+    <pre data-q="esql">
+
+// Q7a web tier reaching an internal host and port for the first time · template — validate against your data before alerting · 14-day baseline, last 24 hours reported
+// cost: heavy on raw flow data; narrow FROM to your firewall or flow data streams
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 14 days AND CIDR_MATCH(source.ip, "&lt;web_tier_cidr&gt;") AND CIDR_MATCH(destination.ip, "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8")
+| STATS flows = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp), actions = VALUES(event.action) BY source.ip, destination.ip, destination.port
+| WHERE first &gt; NOW() - 24 hours
+| SORT first
+
+// Q7b burst: one web-tier host touching 20 or more internal hosts, or 15 or more ports, in a minute · template — validate against your data before alerting · default 24 hours
+// cost: moderate; blocked flows count too, so include deny events
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 24 hours AND CIDR_MATCH(source.ip, "&lt;web_tier_cidr&gt;") AND CIDR_MATCH(destination.ip, "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8")
+| EVAL minute = DATE_TRUNC(1 minute, @timestamp)
+| STATS hosts = COUNT_DISTINCT(destination.ip), ports = COUNT_DISTINCT(destination.port), flows = COUNT(*), actions = VALUES(event.action) BY source.ip, minute
+| WHERE hosts &gt;= 20 OR ports &gt;= 15
+| SORT ports DESC
+
+</pre>
+    </div>
+
+    <p><b>Q8 · Response anomalies on URL-accepting endpoints.</b> <b>Detects:</b> requests that match the Q2 or Q3 patterns and whose response was five times larger or smaller than that endpoint's median, or five times slower. <b>Needs:</b> web logs with response size and response time. <b>Read:</b> a larger response suggests content came back; a slower one suggests the server waited on a filtered port or a slow internal service. Steady timing differences between requests that name different ports work as a port-scan oracle. <b>False positives:</b> endpoints whose responses vary by nature (search, export, download), cold caches, error pages, and medians taken over very few requests. <b>Note:</b> the Splunk search returns the requests; the Elastic twin returns the endpoint.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q8 response size or time far from the endpoint's norm, on a request that named an internal or out-of-band destination · template — validate against your data before alerting · default 7 days
+# cost: eventstats holds every web event with a query string in memory; run it per site, or only on the endpoints Q1 listed
+index=* sourcetype=&lt;web_access&gt; earliest=-7d uri_query=*
+| eval q=lower(urldecode(uri_query)), endpoint=coalesce(site, dest, "")." ".uri_path
+| eval suspect=if(match(q, "=(https?://)?(169\.254\.|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost|metadata\.google\.internal)") OR match(q, "(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com)"), 1, 0)
+| eventstats median(bytes_out) as norm_bytes median(response_time) as norm_time by endpoint
+| where suspect=1 AND (bytes_out &gt; 5*norm_bytes OR bytes_out &lt; norm_bytes/5 OR response_time &gt; 5*norm_time)
+| table _time src endpoint status bytes_out norm_bytes response_time norm_time uri_query
+| sort - bytes_out
+
+</pre>
+    <pre data-q="esql">
+
+// Q8 response size or time far from the endpoint's norm, on a request that named an internal or out-of-band destination · template — validate against your data before alerting · default 7 days
+// cost: aggregates every web event with a query string. Returns the endpoint, not the request: pull its requests afterwards. event.duration is in nanoseconds
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND http.request.method IS NOT NULL AND url.query IS NOT NULL
+| EVAL q = TO_LOWER(URL_DECODE(url.query))
+| EVAL suspect = q RLIKE """.*=(https?://)?(169\.254\.|127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|metadata\.google\.internal).*""" OR q RLIKE """.*(interact\.sh|oast\.(fun|pro|live|site|online|me)|oastify\.com|burpcollaborator\.net|webhook\.site|requestbin\.com|pipedream\.net|dnslog\.cn|ngrok\.io|ngrok-free\.app|requestrepo\.com).*"""
+| STATS norm_bytes = MEDIAN(http.response.body.bytes), norm_ns = MEDIAN(event.duration), suspects = COUNT(*) WHERE suspect, max_bytes = MAX(http.response.body.bytes) WHERE suspect, min_bytes = MIN(http.response.body.bytes) WHERE suspect, max_ns = MAX(event.duration) WHERE suspect BY url.domain, url.path
+| WHERE suspects &gt; 0 AND (max_bytes &gt; 5 * norm_bytes OR min_bytes &lt; norm_bytes / 5 OR max_ns &gt; 5 * norm_ns)
+| SORT suspects DESC
+
+</pre>
+    </div>
+
+    <p><b>Q9 · AWS only: instance credentials used from somewhere else.</b> <b>Detects:</b> Q9a, one EC2 instance-role session calling AWS from two or more source addresses; Q9b, GuardDuty findings for instance, task or function credentials used from outside. <b>Needs:</b> CloudTrail management events and exported GuardDuty findings. <b>Read:</b> in Q9a, an address outside your own ranges is the pattern that follows theft of metadata credentials, more so with identity and listing calls. In Q9b, any finding is worth a look, and silence is not proof (see the coverage table). <b>False positives:</b> Q9a, an instance that stopped and started with a new public address, several NAT gateways, one session using both a VPC endpoint and the internet; Q9b, internet traffic that leaves through an on-premises gateway, which AWS documents as a known cause. <b>Other clouds:</b> the equivalent on Azure and Google Cloud is a managed-identity or service-account token used from an unexpected address in the sign-in or audit logs; no query is written here for those.</p>
+    <div class="qs">
+    <pre data-q="spl">
+
+# Q9a AWS only: one EC2 instance-role session calling AWS from two or more source addresses · template — validate against your data before alerting · default 7 days
+# cost: moderate on CloudTrail. The session name of an instance role is the instance ID (i-…), which is what the regex keys on
+
+index=* sourcetype=&lt;cloud_audit&gt; earliest=-7d userIdentity.type=AssumedRole
+| rename userIdentity.arn as arn, sourceIPAddress as caller
+| where match(arn, ":assumed-role/[^/]+/i-[0-9a-f]{8,17}$") AND match(caller, "^[0-9a-f:.]+$")
+| stats dc(caller) as sources values(caller) as callers count as calls dc(eventName) as actions min(_time) as first max(_time) as last by arn
+| where sources&gt;=2
+| sort - sources
+| convert ctime(first) ctime(last)
+
+# Q9b AWS only: GuardDuty findings for instance, task or function credentials used elsewhere · template — validate against your data before alerting · default 30 days
+# cost: light
+
+index=* sourcetype=&lt;cloud_findings&gt; earliest=-30d (type="UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.*" OR type="UnauthorizedAccess:IAMUser/ResourceCredentialExfiltration.*")
+| rename resource.accessKeyDetails.principalId as principal, service.action.awsApiCallAction.remoteIpDetails.ipAddressV4 as caller
+| stats count as findings min(_time) as first max(_time) as last values(caller) as callers values(severity) as severity by type principal
+| sort - last
+| convert ctime(first) ctime(last)
+
+</pre>
+    <pre data-q="esql">
+
+// Q9a AWS only: one EC2 instance-role session calling AWS from two or more source addresses · template — validate against your data before alerting · default 7 days
+// cost: moderate on CloudTrail. The session name of an instance role is the instance ID (i-…), which is what the regex keys on
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 7 days AND event.dataset == "aws.cloudtrail" AND aws.cloudtrail.user_identity.type == "AssumedRole"
+| WHERE aws.cloudtrail.user_identity.arn RLIKE """.*:assumed-role/[^/]+/i-[0-9a-f]{8,17}""" AND source.ip IS NOT NULL
+| STATS sources = COUNT_DISTINCT(source.ip), callers = VALUES(source.ip), calls = COUNT(*), actions = COUNT_DISTINCT(event.action), first = MIN(@timestamp), last = MAX(@timestamp) BY aws.cloudtrail.user_identity.arn
+| WHERE sources &gt;= 2
+| SORT sources DESC
+
+// Q9b AWS only: GuardDuty findings for instance, task or function credentials used elsewhere · template — validate against your data before alerting · default 30 days
+// cost: light
+// KQL (Discover): event.dataset : "aws.guardduty" and aws.guardduty.type : *CredentialExfiltration*
+
+FROM logs-*
+| WHERE @timestamp &gt; NOW() - 30 days AND event.dataset == "aws.guardduty" AND aws.guardduty.type LIKE "UnauthorizedAccess:IAMUser/*CredentialExfiltration*"
+| STATS findings = COUNT(*), first = MIN(@timestamp), last = MAX(@timestamp) BY aws.guardduty.type, aws.guardduty.resource.access_key_details.principal_id
+| SORT last DESC
+
+</pre>
+    </div>
+
+    <h2>Recommendations</h2>
+    <div class="cols">
+      <div>
+        <p><b>Remediation (in code)</b></p>
+        <ul>
+          <li>Allow-list destinations wherever the set is known; a deny-list is the last resort</li>
+          <li>Validate the resolved IP address, not the hostname string, and connect to the address that was validated</li>
+          <li>Block private, loopback and link-local ranges after DNS resolution, on every A and AAAA answer</li>
+          <li>Allow <code>http</code> and <code>https</code> only</li>
+          <li>Do not follow redirects, or validate each hop again</li>
+          <li>Do not return the raw upstream response to the caller; that turns a blind SSRF into a full read</li>
+        </ul>
+      </div>
+      <div>
+        <p><b>Hardening (around it)</b></p>
+        <ul>
+          <li>Default-deny egress from the web tier</li>
+          <li>IMDSv2 required, hop limit left at one unless containers need more</li>
+          <li>DNS query and egress logging on application servers</li>
+          <li>WAF SSRF rules in blocking mode (OWASP CRS, or the managed sets in the coverage table), as a stopgap</li>
+          <li>No internal service that trusts loopback or the web tier's address without a login</li>
+        </ul>
+      </div>
+    </div>
+    <p><b>Verifying a fix.</b> Replay the original request. Test equivalent destinations and encodings (other internal addresses, decimal, hex, octal and IPv6-mapped forms). Test a redirect from an allowed host to a blocked one, and a hostname that resolves to an internal address. Confirm legitimate use still works. Banner data of the kind internet-wide scanners collect cannot verify this: SSRF is behavior behind the listener and is not visible from outside.</p>
+
+    <h2>Limitations</h2>
+    <ul>
+      <li>POST bodies are usually not logged, so Q1 to Q3, Q5 and Q8 see query strings only. The API inventory and code search cover the gap.</li>
+      <li>Encrypted, encoded or nested payloads (base64, JSON inside a parameter, double encoding) evade Q1 to Q3.</li>
+      <li>Blind SSRF shows only in DNS and egress data (Q4 to Q7). Where that data is not collected, there is nothing to hunt in.</li>
+      <li>DNS-based and redirect-based SSRF look like an ordinary external URL at the edge; Q5 catches the DNS case only when the final lookup is logged.</li>
+      <li>The queries are templates on default CIM and ECS field names, untested against real data. Expect to adjust field names, thresholds and windows.</li>
+    </ul>
+
+    <h2>Timeline</h2>
+    <ul class="tl">
+      <li><span class="d">Nov 2019</span><span>AWS releases IMDSv2, a session-token metadata service built as a defense against SSRF and open proxies</span></li>
+      <li><span class="d">2021</span><span>OWASP Top 10 adds SSRF as its own category (A10:2021)</span></li>
+      <li><span class="d">Jan 2022</span><span>GuardDuty adds a finding for instance credentials used from another AWS account</span></li>
+      <li><span class="d">Mar 9, 2025</span><span>GreyNoise records about 400 addresses exploiting 10 SSRF CVEs in one day, many hitting several at once</span></li>
+      <li><span class="d">2025 edition</span><span>OWASP Top 10 folds SSRF into A01 Broken Access Control</span></li>
+      <li><span class="d">Apr 21–22, 2026</span><span>LMDeploy <span class="v">CVE-2026-33626</span>: Sysdig records exploitation 12 hours 31 minutes after the advisory. One eight-minute session requested AWS metadata credentials, probed loopback Redis, called an out-of-band service, then swept loopback ports</span></li>
+      <li><span class="d">Aug 4, 2026</span><span>Cloudflare moves its "SSRF - Cloud" managed rule from Disabled to Block</span></li>
+      <li><span class="d">Aug 17–19, 2026</span><span>MLflow <span class="v">CVE-2026-64849</span> (CVSS 9.3): watchTowr reports exploitation against cloud-hosted servers within hours of CVE assignment, aimed at metadata credentials; CISA adds it to the exploited list on Aug 19</span></li>
+      <li><span class="d">Oct 20, 2026</span><span>CISA adds two Plex Media Server SSRF flaws to the exploited list</span></li>
+      <li><span class="d">Oct 28, 2026</span><span>Brief: ZDI's write-up of the Oracle PeopleSoft chain, where an SSRF in the integration gateway reaches a component that trusts loopback and ends in a web shell</span></li>
+      <li><span class="d">Nov 6, 2026</span><span>Microsoft: Storm-3358 exploits internet-facing file-upload and SSRF flaws at financial organizations, with agentic tooling</span></li>
+      <li><span class="d">Nov 16, 2026</span><span>Brief: the playbook Amazon's decoys captured from agents hunting exposed AI gateways includes SSRF to cloud metadata</span></li>
+      <li><span class="d">Nov 20, 2026</span><span>This card issued</span></li>
+    </ul>
+
+    <h2>Sources</h2>
+    <p class="src">
+      <a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP — SSRF Prevention Cheat Sheet</a> ·
+      <a href="https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/">OWASP Top 10:2025 — A01</a> ·
+      <a href="https://github.com/coreruleset/coreruleset/releases/tag/v4.30.0">OWASP CRS 4.30.0</a> ·
+      <a href="https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-baseline.html">AWS WAF — baseline rule groups</a> ·
+      <a href="https://developers.cloudflare.com/changelog/post/2026-08-04-waf-release/">Cloudflare — WAF release Aug 4, 2026</a> ·
+      <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html">AWS — Instance Metadata Service</a> ·
+      <a href="https://aws.amazon.com/blogs/security/defense-in-depth-open-firewalls-reverse-proxies-ssrf-vulnerabilities-ec2-instance-metadata-service/">AWS — IMDSv2 defense in depth</a> ·
+      <a href="https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs-limitations.html">AWS — VPC flow log limitations</a> ·
+      <a href="https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service">Microsoft — Azure Instance Metadata Service</a> ·
+      <a href="https://docs.cloud.google.com/compute/docs/metadata/querying-metadata">Google Cloud — querying VM metadata</a> ·
+      <a href="https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html">Amazon GuardDuty — IAM finding types</a> ·
+      <a href="https://www.elastic.co/guide/en/security/current/web-server-cloud-metadata-ssrf-request.html">Elastic — Web Server Cloud Metadata SSRF Request</a> ·
+      <a href="https://www.elastic.co/docs/reference/query-languages/esql/functions-operators/string-functions/url_decode">Elastic — URL_DECODE</a> ·
+      <a href="https://www.sysdig.com/blog/cve-2026-33626-how-attackers-exploited-lmdeploy-llm-inference-engines-in-12-hours">Sysdig — LMDeploy exploited in 12 hours</a> ·
+      <a href="https://www.securityweek.com/mlflow-vulnerability-exploited-for-cloud-credential-theft/">SecurityWeek — MLflow exploited for cloud credential theft</a> ·
+      <a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-mlflow-ssrf-cve-2026-64849-20260826-csa-st/">Cloud Security Alliance — MLflow research note</a> ·
+      <a href="https://www.greynoise.io/blog/new-ssrf-exploitation-surge">GreyNoise — SSRF exploitation surge</a> ·
+      <a href="https://docs.datadoghq.com/security/default_rules/appsec-ssrf-vulnerability-trigger">Datadog — SSRF exploited rule</a> ·
+      <a href="https://codeql.github.com/codeql-query-help/python/py-full-ssrf/">CodeQL — full SSRF query</a> ·
+      <a href="https://registry.semgrep.dev/rule/python.flask.security.injection.tainted-url-host.tainted-url-host">Semgrep — tainted-url-host</a> ·
+      <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA — Known Exploited Vulnerabilities catalog</a> ·
+      <a href="/?q=SSRF">Cutsign — SSRF (all stories)</a>
+    </p>
+  </div>
+  <div class="foot">
+    <span>Public OSINT only — contains no internal data</span>
+    <span>Marcus Liberto · <a href="https://github.com/megamegamega/cutsign">source</a></span>
+    <span>Lane and triggers per CIRT triage-flow draft</span>
+    <span>Tracked story: none — technique reference; related threads Oct 28 / Nov 9 / Nov 16</span>
+  </div>
+</div>
+
+<script>
+// Live from the pipeline: (1) stories newer than this card's as-of date; (2) published
+// detection guidance stored for the matching stories. New guidance the pipeline extracts
+// appears here without re-issuing the card; published content supersedes inferred queries.
+(async () => {
+  const AS_OF = '2026-11-20', QUERY = 'SSRF';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let stories = [];
+  try {
+    const d = await (await fetch('/?q=' + encodeURIComponent(QUERY) + '&format=json')).json();
+    stories = d.stories || [];
+  } catch { return; }
+  const newer = stories.filter((s) => s.brief_date && s.brief_date > AS_OF);
+  if (newer.length) {
+    const el = document.getElementById('since');
+    el.innerHTML = '<b>Since this card</b> \u2014 verdict is as of ' + AS_OF + '; newer pipeline coverage:<ul>'
+      + newer.map((s) => '<li><a href="/?d=' + encodeURIComponent(s.brief_date) + '&view=analyst#s-' + esc(s.id.slice(0, 8)) + '">' + esc(s.brief_date) + '</a> \u2014 ' + esc(s.title) + '</li>').join('') + '</ul>';
+    el.hidden = false;
+  }
+  try {
+    const ids = new Set(stories.map((s) => s.id));
+    const days = [...new Set(stories.map((s) => s.brief_date).filter(Boolean))].sort().reverse().slice(0, 6);
+    const seen = new Set(); const out = [];
+    for (const day of days) {
+      const a = await (await fetch('/?view=agent&format=json&d=' + encodeURIComponent(day))).json();
+      for (const s of a.stories || []) {
+        if (!ids.has(s.id)) continue;
+        for (const g of s.detection_guidance || []) {
+          const k = (g.text || '').slice(0, 80);
+          if (!k || seen.has(k)) continue; seen.add(k);
+          out.push({ day, g });
+        }
+      }
+    }
+    if (!out.length) return;
+    const el = document.getElementById('pubguid');
+    el.innerHTML = '<h2>Published detection guidance \u2014 live from the pipeline (' + out.length + ')</h2>'
+      + '<p class="src">Pulled on page load from the stored stories matching \u201c' + esc(QUERY) + '\u201d. New guidance the pipeline extracts lands here without re-issuing the card; published content supersedes the inferred queries below. Query text is raw (not defanged), ready to run.</p>'
+      + out.map(({ day, g }) => '<p class="src">' + (g.publisher_tier ? 'tier ' + esc(g.publisher_tier) + ' \u00b7 ' : '') + 'as of ' + esc(day)
+        + (g.url ? ' \u00b7 <a href="' + esc(g.url) + '">source</a>' : '') + '</p><pre>' + esc(g.text || '') + '</pre>').join('');
+    el.hidden = false;
+  } catch {}
+})();
+</script>
+<script src="/cards/lifecycle.js" defer></script>
+<script src="/cards/qswitch.js" defer></script>
+</body>
+</html>
