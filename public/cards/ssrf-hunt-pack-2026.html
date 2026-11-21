@@ -94,7 +94,7 @@ a{color:var(--ink)}
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Technique reference</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">No CVE · CWE-918</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Queries are templates</span>
-    <span class="asof">as of 2026-11-20</span>
+    <span class="asof">as of 2026-11-21 · re-issued (first issued 2026-11-20)</span>
   </div>
   <div class="inner">
     <h1>SSRF hunting &amp; detection — find the endpoints, then prove which fetches happened</h1>
@@ -146,7 +146,18 @@ a{color:var(--ink)}
       <li><b>Then confirm.</b> Passive methods produce candidates. Each needs one targeted, authorized test before it is called a finding.</li>
     </ul>
 
-    <h2>Detection coverage — as of Nov 20</h2>
+    <h2>Validating what an outside scanner found</h2>
+    <p>Scanners and agents test for SSRF the same way: they put a unique hostname on a callback service into a parameter and wait for the server to look it up. If someone else's tool has already run against your endpoints, your own logs hold its test list and its results.</p>
+    <ul>
+      <li><b>1. Rebuild the session.</b> Q3 finds requests carrying callback domains. Every URL the source sent one to is an endpoint it tested, and the unique subdomain label ties each request to one endpoint and parameter.</li>
+      <li><b>2. Match each label to DNS and egress logs (Q4, Q5).</b> An HTTP connection to the callback host from the application server proves the fetch. A DNS-only match is weaker: resolvers, log pipelines and URL sandboxes also look up hostnames they see. BBOT rates a DNS-only callback LOW and an HTTP callback HIGH for the same reason.</li>
+      <li><b>3. Treat "tested, no callback" as unknown.</b> A server with no internet egress never calls back, and can still be made to reach internal hosts. Qualys documents this as a miss condition for its own scanner.</li>
+      <li><b>4. Re-test under authorization with a listener you own.</b> One request per candidate, carrying a hostname that resolves to a canary host inside the network, catches the no-egress cases that internet callback services cannot see.</li>
+      <li><b>5. Run variant analysis on each confirmed endpoint</b> (first item of the checklist above). It finds the siblings no scanner crawled.</li>
+    </ul>
+    <p><b>Recognizing the tool.</b> BBOT's <code>generic_ssrf</code> module (flagged active, invasive and web-heavy) sends three tests per URL: one GET per parameter name from a fixed list of 28 (<code>Dest</code>, <code>Redirect</code>, <code>URI</code>, <code>Path</code>, <code>Continue</code>, <code>URL</code> and so on); a POST carrying all 28 at once, sent in capitalized and then lower-case form; and an XML body with an external entity. Each value is <code>http://</code> plus a four-character label on an interactsh domain. The POST can be padded with about a megabyte of filler under the form field <code>__nowafpls_pad</code> to get past a WAF's body inspection limit, so look for oversized POSTs to endpoints that normally take small ones. An AI-driven agent varies its requests more: key on the callback domains and the source's session, not on a request shape.</p>
+
+    <h2>Detection coverage — as of Nov 21</h2>
     <table>
       <tr><th>Category</th><th>Source</th><th>Status</th></tr>
       <tr><td>Reference guidance</td><td><a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP cheat sheet</a> · <a href="https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/">OWASP Top 10</a></td><td><span class="ok">Prevention guidance published</span> — allow-lists over deny-lists ("bypass-prone"), check every resolved address, disable redirect following, allow HTTP and HTTPS only. SSRF was its own category in the 2021 Top 10 (A10) and sits inside A01 Broken Access Control in the 2025 edition</td></tr>
@@ -158,6 +169,7 @@ a{color:var(--ink)}
       <tr><td>SIEM content</td><td>Splunk Threat Research · Sigma</td><td>No generic SSRF analytic found in a search on Nov 20 — the Splunk detections found are tied to single products. Not confirmed absent: check both libraries directly</td></tr>
       <tr><td>Runtime</td><td><a href="https://www.sysdig.com/blog/cve-2026-33626-how-attackers-exploited-lmdeploy-llm-inference-engines-in-12-hours">Sysdig / Falco</a> · <a href="https://docs.datadoghq.com/security/default_rules/appsec-ssrf-vulnerability-trigger">Datadog</a></td><td><span class="ok">Host and in-app detection</span> — Falco rules "Contact EC2 Instance Metadata Service From Container", with Google Cloud, Azure and ECS task-metadata twins, fire on the connection itself. Datadog's "SSRF exploited" rule uses an in-app library to check whether user input changed an outbound URL. Both see the fetch, which logs at the edge cannot</td></tr>
       <tr><td>Code scanning</td><td><a href="https://codeql.github.com/codeql-query-help/python/py-full-ssrf/">CodeQL</a> · <a href="https://registry.semgrep.dev/rule/python.flask.security.injection.tainted-url-host.tainted-url-host">Semgrep</a></td><td><span class="ok">Rules published</span> — CodeQL query IDs <code>py/full-ssrf</code>, <code>py/partial-ssrf</code>, <code>java/ssrf</code>, <code>js/request-forgery</code>, <code>go/request-forgery</code>, <code>rb/request-forgery</code>, <code>rust/request-forgery</code>. Semgrep registry rules named <code>tainted-url-host</code> for Flask, Spring, Go and PHP, and <code>csharp.lang.security.ssrf.web-request.ssrf</code>. They find request input flowing into a URL; they do not judge whether the destination check is sound</td></tr>
+      <tr><td>Web app scanning</td><td><a href="https://blog.qualys.com/product-tech/2022/12/01/out-of-band-detections-using-qualys-periscope">Qualys WAS</a> · <a href="https://portswigger.net/burp/documentation/desktop/testing-workflow/vulnerabilities/ssrf/testing-for-blind-ssrf">Burp Suite</a> · <a href="https://www.blacklanternsecurity.com/bbot/Stable/modules/list_of_modules/">BBOT</a> · nuclei</td><td><span class="ok">Active checks exist</span> — all work by out-of-band callback. Qualys WAS QIDs 150258 (SSRF), 150298 (SSRF to AWS metadata service) and 150307 (external service interaction via HTTP header) use its Periscope sensor, which records DNS lookups; the same sensor backs product-specific SSRF detections for Jira, Keycloak, Apache Solr and Adobe Experience Manager. Burp uses Collaborator; BBOT and nuclei use interactsh. Limits: the scanner has to reach the endpoint and the parameter (an API needs its specification and credentials loaded), and a server without internet egress produces no callback, so a clean scan does not clear it. Network vulnerability scanners check known product CVEs and do not test custom code</td></tr>
       <tr><td>Exploitation record</td><td><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA KEV</a></td><td>21 entries named or described as SSRF, ten of them added in 2026 (catalog release 2026.11.18): Plex Media Server (two), SonicWall SMA1000 (two), MLflow, Cisco Unified Communications Manager, Omnissa Workspace ONE, GitLab (two), Zimbra</td></tr>
     </table>
 
@@ -607,6 +619,7 @@ FROM logs-*
       <li><span class="d">Nov 6, 2026</span><span>Microsoft: Storm-3358 exploits internet-facing file-upload and SSRF flaws at financial organizations, with agentic tooling</span></li>
       <li><span class="d">Nov 16, 2026</span><span>Brief: the playbook Amazon's decoys captured from agents hunting exposed AI gateways includes SSRF to cloud metadata</span></li>
       <li><span class="d">Nov 20, 2026</span><span>This card issued</span></li>
+      <li><span class="d">Nov 21, 2026</span><span>This card re-issued: steps for validating an outside scanner's results and a web application scanning row added</span></li>
     </ul>
 
     <h2>Sources</h2>
@@ -632,6 +645,9 @@ FROM logs-*
       <a href="https://codeql.github.com/codeql-query-help/python/py-full-ssrf/">CodeQL — full SSRF query</a> ·
       <a href="https://registry.semgrep.dev/rule/python.flask.security.injection.tainted-url-host.tainted-url-host">Semgrep — tainted-url-host</a> ·
       <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA — Known Exploited Vulnerabilities catalog</a> ·
+      <a href="https://blog.qualys.com/product-tech/2022/12/01/out-of-band-detections-using-qualys-periscope">Qualys — out-of-band detections using Periscope</a> ·
+      <a href="https://portswigger.net/burp/documentation/desktop/testing-workflow/vulnerabilities/ssrf/testing-for-blind-ssrf">PortSwigger — testing for blind SSRF</a> ·
+      <a href="https://www.blacklanternsecurity.com/bbot/Stable/modules/list_of_modules/">Black Lantern Security — BBOT module list</a> ·
       <a href="/?q=SSRF">Cutsign — SSRF (all stories)</a>
     </p>
   </div>
@@ -648,7 +664,7 @@ FROM logs-*
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-11-20', QUERY = 'SSRF';
+  const AS_OF = '2026-11-21', QUERY = 'SSRF';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {
