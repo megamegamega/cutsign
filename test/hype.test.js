@@ -616,12 +616,31 @@ test('coverage: a hand-written card gets the same daily check, stored on its man
   assert.ok(out.discord.some((l) => l.startsWith(`Cutsign ▣ coverage changed for card ${card.slug}`)), out.discord.join('\n'));
 });
 
+test('coverage: a hand-written card that declares CVEs is checked for those alone; one that declares none uses its thread\'s', async () => {
+  // the thread's story names another campaign's CVE (CVE-2026-1, in KEV); the card declares its own
+  const { store, run, hot } = await world({ carded: true });
+  const card = CARDS[0];
+  assert.ok(card.cves.length && !card.cves.includes('CVE-2026-1'));
+  // a second hand card that declares no CVE, on a story that carries one
+  const bare = CARDS.find((c) => c.status === 'active' && !c.cves.length && c.story_ids.length);
+  store._tables.stories.push(story(9, { id: bare.story_ids[0], run_id: 'old-run', cves: ['CVE-2026-7'], source_urls: ['https://www.cisa.gov/news-events/alerts/x'] }));
+  const now = Date.parse('2026-10-28T13:00:00Z');
+  const net = routed({ kev: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-16' }, { cveID: 'CVE-2026-7', dateAdded: '2026-10-16' }] });
+  const c = await hypeSweep(store, { run, fetchImpl: net, now });
+  assert.equal(c.errors, 0, JSON.stringify(c));
+  const cov = (await store.getStory(hot.id)).raw_iocs.hype.card_coverage;
+  assert.deepEqual(cov.cves, card.cves, 'the declared CVEs, not the thread\'s');
+  assert.ok(!/CVE-2026-1\b/.test(JSON.stringify(cov)), 'no row, KEV entry or origin for the thread\'s other CVE');
+  const bareCov = (await store.getStory(bare.story_ids[0])).raw_iocs.hype.card_coverage;
+  assert.deepEqual(bareCov.cves, ['CVE-2026-7'], 'a card with no CVEs of its own is checked for its thread\'s');
+});
+
 test('coverage: cards and published drafts whose campaign is not in today\'s brief are still checked daily', async (t) => {
   t.after(off);
   const { store, run, out } = await published();
   const now = Date.parse('2026-10-28T13:00:00Z');
   // a hand-written card whose manifest row exists but belongs to an older run (not analyzed today)
-  const card = CARDS[1];
+  const card = CARDS.find((c) => c.status === 'active' && c !== CARDS[0] && c.story_ids.length);
   store._tables.stories.push(story(9, { id: card.story_ids[0], run_id: 'old-run', cves: card.cves, source_urls: ['https://www.cisa.gov/news-events/alerts/x'] }));
   // a published AI card from an earlier day, its check a day old
   const old = await store.insertCardDraft({ story_id: uuid(8), thread_ids: [uuid(8)], title: 'Older published card', score: 10, reasons: [], draft: { ...DRAFT, cves: ['CVE-2026-8'], coverage: { checked_at: '2026-10-27T12:00:00Z', lanes: [{ id: 'cloudflare_waf', name: 'Cloudflare WAF managed-ruleset changelog', status: 'nothing found', detail: '' }] } }, version: 1, status: 'promoted', promoted_slug: 'older-2026', surfaced_at: '2026-10-27T12:00:00Z' });

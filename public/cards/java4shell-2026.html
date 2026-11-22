@@ -91,15 +91,15 @@ a{color:var(--ink)}
 <div class="card">
   <div class="lane">
     <span class="tag">Patch now + mitigate</span>
-    <span class="tag" style="color:var(--mut);border-color:var(--mut)">No exploitation reported</span>
+    <span class="tag">Exploit attempts on sensors · no confirmed compromise</span>
     <span class="tag" style="color:var(--mut);border-color:var(--mut)">Not in KEV</span>
     <span class="tag">Trigger public · RCE chains withheld</span>
-    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Many distro and bundled runtimes unfixed</span>
-    <span class="asof">as of 2026-11-18</span>
+    <span class="tag" style="color:var(--mut);border-color:var(--mut)">Distro fixes out · bundled runtimes lag</span>
+    <span class="asof">as of 2026-11-22 · re-issued (first issued 2026-11-18)</span>
   </div>
   <div class="inner">
     <h1>Java4Shell: OpenJDK Base64 decoder RCE</h1>
-    <p class="sub">An out-of-bounds heap write in the JVM's hardware-accelerated Base64 decoder — <span class="v">CVE-2026-114938</span>, scored 8.1 by Oracle (CVSS 3.1, high attack complexity), 9.8 preliminary by Red Hat and 9.2 by the finders (CVSS 4.0) — fixed November 17 in Oracle's November Critical Security Patch Update and the OpenJDK advisory. It needs an OpenJDK-based runtime 17.0.6 or later on an x86-64 CPU with AVX-512 VBMI. The finders, Calif, report code execution without a login against default configurations of Keycloak, Jira, Confluence, JFrog Artifactory, Jenkins and PingFederate; they published a trigger that proves the overwrite and are withholding the per-product exploit chains. <b>As of Nov 18 no source reports exploitation in the wild</b> (Talos, Cloudflare, Sophos, Censys) and the CVE is not in CISA's KEV catalog; CISA issued a patch-now alert on Nov 17.</p>
+    <p class="sub">An out-of-bounds heap write in the JVM's hardware-accelerated Base64 decoder — <span class="v">CVE-2026-114938</span>, scored 8.1 by Oracle (CVSS 3.1, high attack complexity), 9.8 preliminary by Red Hat and 9.2 by the finders (CVSS 4.0) — fixed November 17 in Oracle's November Critical Security Patch Update and the OpenJDK advisory. It needs an OpenJDK-based runtime 17.0.6 or later on an x86-64 CPU with AVX-512 VBMI. The finders, Calif, report code execution without a login against default configurations of Keycloak, Jira, Confluence, JFrog Artifactory, Jenkins and PingFederate; they published a trigger that proves the overwrite and are withholding the per-product exploit chains. <b>As of Nov 22 attempts are reported, and no source confirms a compromise</b>: watchTowr reports scanning with the User-Agent string <code>java4shell-recon</code> and blind exploit attempts against its honeypots, and Previdian counted nine attempts on five sensors (both via The Hacker News). The CVE is not in CISA's KEV catalog as of the Nov 20 release; CISA issued a patch-now alert on Nov 17.</p>
 
     <div class="cl">
       <span>On Cutsign:</span>
@@ -110,7 +110,7 @@ a{color:var(--ink)}
       <a href="/?q=java4shell">news &amp; updates (live)</a>
     </div>
 
-    <p class="verdict"><b>Verdict: patch outside the normal cycle, and set the JVM flag today wherever a fixed build does not exist yet.</b> This is memory corruption reachable before the login in the runtime under identity providers, CI servers and artifact stores — the systems that hold everyone else's credentials. Exposure is narrow and quick to scope: three checks (runtime version, CPU feature, untrusted Base64 on the path) rule most hosts in or out. The clock is the exploit, not the patch: the trigger is public, the malformed input sat in a public OpenJDK pull request from Sept 9, at least two labs say they have working remote exploitation (Calif; Wiz), and Calif says it will publish its chains. Fixed builds exist from Oracle, Amazon Corretto and Azul, but stable Debian and Ubuntu packages, Red Hat builds and the Keycloak images were still unfixed on Nov 18 — there the one-flag mitigation closes the gap. Hunting is thin (crashes and malformed Base64, no campaign indicators), so this is a patch event with a tripwire, not a hunt.</p>
+    <p class="verdict"><b>Verdict: patch outside the normal cycle, and set the JVM flag today wherever a fixed build does not exist yet.</b> This is memory corruption reachable before the login in the runtime under identity providers, CI servers and artifact stores — the systems that hold everyone else's credentials. Exposure is narrow and quick to scope: three checks (runtime version, CPU feature, untrusted Base64 on the path) rule most hosts in or out. The clock is the exploit, not the patch: the trigger is public, the malformed input sat in a public OpenJDK pull request from Sept 9, at least two labs say they have working remote exploitation (Calif; Wiz), and Calif says it will publish its chains. Fixed builds now exist from Oracle, Amazon Corretto, Azul, Eclipse Temurin, Red Hat (RHEL 8, 9 and 10), Debian and Ubuntu, and the Keycloak 26.8 images are rebuilt. What still lags is the runtime bundled inside other products and images not yet rebuilt: on Nov 22 Red Hat still listed its build of Keycloak, JBoss EAP, AMQ Broker and its Jenkins images as affected — there the one-flag mitigation closes the gap. Hunting is thin (crashes and malformed Base64, no campaign indicators), so this is a patch event with a tripwire, not a hunt.</p>
 
     <h2>30-second read</h2>
     <p>Once <code>java.util.Base64</code> decoding gets hot, the JIT compiler swaps in a hand-written AVX-512 VBMI routine. A padded tail whose length is not a multiple of 4 drives its output length below zero, and a full 64-byte store lands up to 62 bytes past the destination array on the Java heap before the decoder rejects the input. The attacker picks where the bytes land, not their values; Calif's follow-on step ("JavaBleed") turns that into memory read and write. Triggering input is at least 65 characters on Java 21, 25 and 27 and at least 129 on Java 17 (Endor Labs). Many servers decode Base64 before checking the login — Basic-auth headers, SAML artifacts, CSRF tokens, cookies — and a Java client that connects out to a malicious TLS server is reachable too (Calif). A failed attempt can crash the JVM and the attacker can usually retry; a crash is far easier to cause than code execution (Datadog).</p>
@@ -122,10 +122,11 @@ a{color:var(--ink)}
       <tr><td>Oracle GraalVM</td><td><span class="v">17.0.21.1</span> <span class="v">21.0.13.1</span>; Enterprise <span class="v">21.3.20.1</span></td><td>per The Hacker News</td></tr>
       <tr><td>Amazon Corretto</td><td><span class="v">17.0.21.1.2</span> <span class="v">21.0.13.1.2</span> <span class="v">25.0.5.1.2</span> <span class="v">27.0.1.1.4</span></td><td><span class="ok">released Nov 17</span>; Amazon Linux errata out (ALAS-2026-4123, ALAS2023-2026-3478 to -3481)</td></tr>
       <tr><td>Azul Zulu</td><td><span class="v">17.70.201</span> <span class="v">21.54.201</span> <span class="v">25.38.201</span> <span class="v">27.30.201</span></td><td>free builds, per The Hacker News</td></tr>
-      <tr><td>Eclipse Temurin</td><td><span class="v">17.0.21.1+2</span> <span class="v">21.0.13.1+2</span> <span class="v">25.0.5.1+2</span> <span class="v">27.0.1.1+4</span></td><td><span class="bad">in the release pipeline Nov 18</span> — binaries, then Docker images, appear as testing completes</td></tr>
-      <tr><td>Red Hat (RHEL 8/9/10, OpenJDK 17/21/25, build of Keycloak 26.4/26.6/26.8)</td><td><span class="bad">no errata yet</span></td><td>bulletin RHSB-2026-018, rated Critical, last updated Nov 18; Red Hat SSO 7.6 is affected only on OpenJDK 17</td></tr>
-      <tr><td>Debian / Ubuntu packages</td><td><span class="bad">stable releases still vulnerable</span></td><td>Debian: bookworm and trixie (security archive included) vulnerable, fixed only in unstable. Ubuntu: openjdk-17 "Vulnerable" on every release</td></tr>
-      <tr><td>Keycloak container images</td><td><span class="bad">no fixed image yet</span></td><td>x86-64 images <span class="v">26.8.2-1</span> and <span class="v">26.8.2-2</span> bundle an affected OpenJDK 21.0.13; the Operator image runs OpenJDK 25</td></tr>
+      <tr><td>Eclipse Temurin</td><td><span class="v">17.0.21.1+2</span> <span class="v">21.0.13.1+2</span> <span class="v">25.0.5.1+2</span> <span class="v">27.0.1.1+4</span></td><td><span class="ok">released</span> — x86-64 Linux and Alpine builds of all four lines since Nov 18; Windows and macOS x86-64 builds of 17, 21 and 25 by Nov 20. JDK 27 for Windows was still the earlier build on Nov 22 (Adoptium release API). Docker Hub lists <span class="v">21.0.13.1_2</span> image tags dated Nov 20; other lines not checked</td></tr>
+      <tr><td>Red Hat OpenJDK packages (RHEL 8/9/10)</td><td><span class="v">17.0.21.1.2</span> <span class="v">21.0.13.1.2</span> <span class="v">25.0.5.1.2</span></td><td><span class="ok">errata out Nov 18–19</span> — Red Hat advisories RHSA-2026:100563 to RHSA-2026:100573 cover java-17, java-21 and java-25 on RHEL 8, 9 and 10 and their extended-support streams, plus the portable and Windows builds</td></tr>
+      <tr><td>Red Hat products that bundle a runtime</td><td><span class="bad">still listed affected</span></td><td>on Nov 22 Red Hat's CVE record shows no erratum for the Red Hat build of Keycloak image, JBoss EAP 7.4 and 8.1 OpenJDK 17 images, AMQ Broker, streams for Apache Kafka and the OpenShift Jenkins images. Bulletin RHSB-2026-018, rated Critical, updated Nov 20; Red Hat SSO 7.6 is affected only on OpenJDK 17</td></tr>
+      <tr><td>Debian / Ubuntu packages</td><td><span class="ok">fixed through the security archives</span></td><td>Debian: bookworm openjdk-17 <span class="v">17.0.21.1+2-1~deb12u1</span> (advisory DLA-4917-1); trixie openjdk-21 <span class="v">21.0.13.1+2-1~deb13u1</span> (DSA-6639-1) and openjdk-25 <span class="v">25.0.5.1+2-1~deb13u1</span> (DSA-6640-1); testing (forky) still vulnerable for 21 and 25. Ubuntu: notices USN-9155-1 to USN-9158-1 (Nov 18) fix openjdk-17, 21 and 25 on 22.04, 24.04, 26.04 and 26.10; 18.04 and 20.04 through ESM</td></tr>
+      <tr><td>Keycloak container images</td><td><span class="v">26.8.2-3</span></td><td><span class="ok">26.8 images rebuilt</span> on Red Hat OpenJDK 21.0.13.1 — tags <code>latest</code>, <code>26.8</code>, <code>26.8.2</code> and <code>26.8.2-3</code> (advisory updated Nov 19). <span class="v">26.8.2-1</span> and <span class="v">26.8.2-2</span> stay affected, so pull again or pin the new tag. The advisory names no fixed image for earlier release lines or for the Operator, which runs OpenJDK 25</td></tr>
       <tr><td colspan="3" class="src">Java 8 and 11 are not affected (Oracle's Java 8 Enterprise Performance Pack is the one exception), nor is OpenJDK 17.0.0 to 17.0.5. Products that bundle their own runtime need an update from their maker; do not infer a fix from the product's version number.</td></tr>
     </table>
 
@@ -198,11 +199,11 @@ jcmd &lt;pid&gt; VM.version
     </ul>
     <p class="src">Upwind's caveat applies to all of these: none proves compromise, and their absence does not prove safety. No campaign infrastructure is published, so there is nothing to block by indicator.</p>
 
-    <h2>Detection coverage — as of Nov 18</h2>
+    <h2>Detection coverage — as of Nov 18; fix, distro and KEV rows rechecked Nov 22</h2>
     <table>
       <tr><th>Category</th><th>Vendor</th><th>Status</th></tr>
       <tr><td rowspan="2">Vendor</td><td><a href="https://www.oracle.com/security-alerts/cspunov2026.html">Oracle</a> / <a href="https://openjdk.org/groups/vulnerability/advisories/2026-11-17">OpenJDK</a></td><td><span class="ok">Fixed Nov 17</span> — Oracle's Java SE risk matrix names the Compiler component, 8.1, remotely exploitable without authentication, one of 11 Java SE fixes; the OpenJDK advisory marks the 17, 21, 25 and 27 lines affected and 8 and 11 not. Neither prints technical detail or a workaround. Oracle credits Albert Yang and Quang Luong of Calif.io. Fix tracked as JDK-8393212 (OpenJDK bug ID, per Endor Labs)</td></tr>
-      <tr><td><a href="https://access.redhat.com/security/vulnerabilities/RHSB-2026-018">Red Hat</a> / <a href="https://www.keycloak.org/2026/11/java4shell-vulnerability-cve-2026-114938">Keycloak</a> / <a href="https://adoptium.net/news/2026/11/temurin-november-2026-cspu-java4shell">Temurin</a></td><td><span class="bad">Fixes pending</span> — Red Hat rates it Critical with no errata yet and prefers the <code>-XX:-UseBASE64Intrinsics</code> mitigation; Keycloak confirms Base64 is decoded on some pre-login requests, has no fixed image, and prints per-deployment steps; Temurin builds are in the pipeline</td></tr>
+      <tr><td><a href="https://access.redhat.com/security/vulnerabilities/RHSB-2026-018">Red Hat</a> / <a href="https://www.keycloak.org/2026/11/java4shell-vulnerability-cve-2026-114938">Keycloak</a> / <a href="https://adoptium.net/news/2026/11/temurin-november-2026-cspu-java4shell">Temurin</a></td><td><span class="ok">Fixes released</span> — Red Hat rates it Critical and shipped RHEL 8, 9 and 10 errata on Nov 18–19; its products that bundle a runtime are still listed affected, with <code>-XX:-UseBASE64Intrinsics</code> as the interim mitigation. Keycloak confirms Base64 is decoded on some pre-login requests, rebuilt its 26.8 images (tag <span class="v">26.8.2-3</span>) and prints per-deployment steps. Temurin builds are published</td></tr>
       <tr><td rowspan="3">VM scanners</td><td><a href="https://blog.qualys.com/vulnerabilities-threat-research/2026/11/17/how-to-find-mitigate-and-patch-the-critical-java4shell-flaw-cve-2026-114938-now">Qualys</a></td><td><span class="ok">Published</span> — QIDs <span class="v">389494</span> (OpenJDK Java4Shell), <span class="v">389610</span> (Oracle Java SE November update), <span class="v">389608</span> (Amazon Corretto), in signature release VULNSIGS-2.6.747-3</td></tr>
       <tr><td><a href="https://www.tenable.com/cve/CVE-2026-114938/plugins">Tenable</a></td><td><span class="ok">Published</span> — Nessus plugins <span class="v">382091</span> (Oracle Java SE), <span class="v">382045</span> (Corretto 17), <span class="v">382489</span> (Linux distros, unpatched), plus Amazon Linux checks <span class="v">382309</span> to <span class="v">382347</span>; more listed as coming</td></tr>
       <tr><td><a href="https://www.rapid7.com/blog/post/etr-cve-2026-114938-reported-critical-pre-authentication-remote-code-execution-java-17">Rapid7</a></td><td><span class="ok">Published</span> — authenticated InsightVM / Nexpose check in content release 1.1.4115 (Nov 17)</td></tr>
@@ -214,10 +215,10 @@ jcmd &lt;pid&gt; VM.version
       <tr><td>Akamai · Emerging Threats</td><td><span class="bad">Nothing published</span> found by search (Akamai's blog refused automated reads; the Emerging Threats forum search returned nothing) — check rule release notes directly</td></tr>
       <tr><td>All WAFs</td><td>Inbound HTTP only, stopgap not patch: no cover for Kafka and other non-HTTP protocols, outbound Java client connections, internal service-to-service traffic, or Base64 wrapped in another encoding (Cloudflare, Wiz)</td></tr>
       <tr><td rowspan="2">Cloud / container</td><td><a href="https://www.wiz.io/blog/cve-2026-114938-rce-java4shell-openjdk">Wiz</a> / <a href="https://securitylabs.datadoghq.com/articles/java4shell-remote-code-execution-in-openjdk-cve-2026-114938/">Datadog</a></td><td><span class="ok">Published</span> — Wiz Threat Center query and advisory; Datadog Cloud Security findings and a host check. Wiz says it built a working proof within two hours and showed remote exploitation is feasible against Jenkins, Confluence and Tomcat</td></tr>
-      <tr><td><a href="https://security-tracker.debian.org/tracker/CVE-2026-114938">Debian</a> / <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu</a></td><td><span class="bad">Stable packages vulnerable</span> — image scanners that read distro data will flag them, with no fixed package to move to yet</td></tr>
+      <tr><td><a href="https://security-tracker.debian.org/tracker/CVE-2026-114938">Debian</a> / <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu</a></td><td><span class="ok">Fixed packages published</span> — DLA-4917-1, DSA-6639-1, DSA-6640-1; USN-9155-1 to USN-9158-1. Image scanners that read distro data now have a fixed version to point to; images built on the older packages still need a rebuild</td></tr>
       <tr><td>Exposure</td><td><a href="https://censys.com/advisory/cve-2026-114938/">Censys</a></td><td>Advisory published without queries or counts; an outside scan cannot see the CPU feature or the bundled runtime</td></tr>
       <tr><td>Community</td><td>Nuclei</td><td><span class="bad">Nothing published</span> — no template in the project's repository as of Nov 18. Public repositories offer Suricata, Sigma and ModSecurity rules next to trigger code; unvetted, deliberately not linked</td></tr>
-      <tr><td>KEV</td><td><a href="https://www.cisa.gov/news-events/alerts/2026/11/17/critical-java-vulnerability-requires-immediate-patching">CISA</a></td><td><span class="bad">Not listed</span> as of the Nov 17 catalog release. CISA's Nov 17 alert says inventory every runtime including bundled ones, patch internet-facing systems first, and watch for rogue runtimes, unexpected JVM crashes and suspicious Java processes. CISA's SSVC entry: exploitation none, automatable no, technical impact total. EPSS 0.7% on Nov 18</td></tr>
+      <tr><td>KEV</td><td><a href="https://www.cisa.gov/news-events/alerts/2026/11/17/critical-java-vulnerability-requires-immediate-patching">CISA</a></td><td><span class="bad">Not listed</span> as of the Nov 20 catalog release (2026.11.20). CISA's Nov 17 alert says inventory every runtime including bundled ones, patch internet-facing systems first, and watch for rogue runtimes, unexpected JVM crashes and suspicious Java processes. CISA's SSVC entry: exploitation none, automatable no, technical impact total. EPSS 0.7% on Nov 18</td></tr>
     </table>
     <p class="src">Standing caveats: this is a runtime flaw, so dependency scans of application manifests do not see it (Endor Labs); host scans miss runtimes inside container images and vendor appliances; an authenticated scan reads the installed version, not whether the running process was restarted.</p>
 
@@ -227,7 +228,7 @@ jcmd &lt;pid&gt; VM.version
         <ul>
           <li>Scope with three checks: runtime 17.0.6 or later, x86-64 with AVX-512 VBMI, untrusted Base64 on the path. Count bundled runtimes in vendor products, container images and appliances; a software inventory often misses them</li>
           <li>Patch to the vendor's fixed build and restart every JVM, internet-facing identity, CI and artifact services first; rebuild and redeploy container images</li>
-          <li>Where no fixed build exists yet (distro packages, vendor-bundled runtimes), start the JVM with <code>-XX:-UseBASE64Intrinsics</code> and confirm it on the running process with jcmd</li>
+          <li>Where no fixed build exists yet (vendor-bundled runtimes, images not yet rebuilt), start the JVM with <code>-XX:-UseBASE64Intrinsics</code> and confirm it on the running process with jcmd</li>
           <li>Restrict public access to Keycloak, Jira, Confluence, Jenkins and Artifactory login and management surfaces until they are patched or mitigated</li>
           <li>Turn on the edge rule for malformed Base64 in log mode, review the matches, then block; it covers inbound HTTP only</li>
           <li>Hunt back to Nov 17, and to Sept 9 where logs allow: malformed Base64 at the edge, decoder exception bursts, JVM crash logs, shells spawned by Java services</li>
@@ -236,7 +237,7 @@ jcmd &lt;pid&gt; VM.version
       <div>
         <h2>Escalation triggers</h2>
         <ul>
-          <li>CISA KEV listing or a credible report of exploitation in the wild → emergency change for anything still unpatched and unmitigated</li>
+          <li>CISA KEV listing or a confirmed compromise (attempts against sensors are already reported) → emergency change for anything still unpatched and unmitigated</li>
           <li>A product-specific exploit chain is published (Calif says it will) or a public code-execution exploit appears for a product you run</li>
           <li>A JVM crash log with a Base64 decoder frame on an internet-facing service, or decoder exception bursts paired with malformed tokens from one source → incident lane</li>
           <li>A Java service spawning a shell or download tool after such a burst → incident lane, treat its secrets as exposed</li>
@@ -398,6 +399,9 @@ FROM logs-*
       <li><span class="d">Nov 4</span><span>The public pull request is closed unmerged</span></li>
       <li><span class="d">Nov 17</span><span>Oracle's November Critical Security Patch Update and the OpenJDK advisory ship the fix; Calif publishes its write-up and trigger; CISA alert; Corretto and Azul builds released; Qualys, Tenable, Rapid7 and Talos publish coverage; Red Hat opens RHSB-2026-018</span></li>
       <li><span class="d">Nov 18</span><span>Keycloak advisory (no fixed image yet); Temurin builds in the pipeline; Cloudflare managed rules in Log mode; CrowdSec rule; stable Debian and Ubuntu packages still vulnerable. No exploitation reported; not in KEV</span></li>
+      <li><span class="d">Nov 18–19</span><span>Ubuntu (USN-9155-1 to USN-9158-1) and Red Hat (RHEL 8, 9 and 10) ship fixed OpenJDK packages; Temurin publishes x86-64 Linux builds; Keycloak rebuilds its 26.8 images</span></li>
+      <li><span class="d">By Nov 20</span><span>watchTowr and Previdian report scanning and exploit attempts against their sensors (The Hacker News); no compromise confirmed. CISA's Nov 20 catalog release does not list the CVE</span></li>
+      <li><span class="d">Nov 22</span><span>This card re-issued: fixed Red Hat, Debian (DLA-4917-1, DSA-6639-1, DSA-6640-1), Ubuntu, Keycloak and Temurin builds confirmed against each vendor; exploit attempts noted; Red Hat products that bundle a runtime still listed affected</span></li>
     </ul>
 
     <h2>Sources</h2>
@@ -426,7 +430,10 @@ FROM logs-*
       <a href="https://www.sophos.com/en-us/security-advisories/sophos-sa-20261118-java4shell">Sophos advisory</a> ·
       <a href="https://thehackernews.com/2026/11/java4shell-cve-2026-114938-enables-pre.html">The Hacker News — fixed builds, Upwind and Blackpoint tests</a> ·
       <a href="https://security-tracker.debian.org/tracker/CVE-2026-114938">Debian tracker</a> ·
-      <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu CVE page</a>
+      <a href="https://ubuntu.com/security/CVE-2026-114938">Ubuntu CVE page</a> ·
+      <a href="https://access.redhat.com/security/cve/CVE-2026-114938">Red Hat — CVE-2026-114938 record and errata</a> ·
+      <a href="https://api.adoptium.net/v3/assets/latest/21/hotspot?os=linux&amp;image_type=jdk">Adoptium release API</a> ·
+      <a href="https://thehackernews.com/2026/11/cisa-urges-immediate-patching-of.html">The Hacker News — exploitation attempts (watchTowr, Previdian)</a>
     </p>
   </div>
   <div class="foot">
@@ -441,7 +448,7 @@ FROM logs-*
 // detection guidance stored for the matching stories. New guidance the pipeline extracts
 // appears here without re-issuing the card; published content supersedes inferred queries.
 (async () => {
-  const AS_OF = '2026-11-18', QUERY = 'java4shell';
+  const AS_OF = '2026-11-22', QUERY = 'java4shell';
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let stories = [];
   try {

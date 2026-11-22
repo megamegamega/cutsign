@@ -533,7 +533,7 @@ const flat = (s) => s.replace(/<[^>]+>/g, '').replace(/&(#?\w+);/g, (m, e) => EN
 
 test('hand cards: every active one has a record, and each step is a step the card prints', () => {
   const active = CARDS.filter((c) => c.status === 'active');
-  assert.ok(active.length >= 10);
+  assert.ok(active.length >= 5, 'the manifest still carries active hand cards');
   for (const c of active) {
     const h = HAND_ACTIONS[c.slug];
     assert.ok(h, `${c.slug} has no response actions in lib/handactions.js`);

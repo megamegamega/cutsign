@@ -157,7 +157,8 @@ test('announceHandCards: a manifest card mailed once when fresh, marked without 
   await store.insertSubscriber({ email: 'reader@example.test', token: 'a'.repeat(48), status: 'confirmed', requested_at: new Date(now).toISOString() });
   for (const c of CARDS) for (const id of c.story_ids) store._tables.stories.push({ id, run_id: 'r', ordinal: 1, title: c.title, raw_iocs: { exposure: null } });
   // a card with no brief story (a retrospective carded on request) has no story row to carry the mark: it is never announced
-  const storied = CARDS.filter((c) => c.story_ids.length); const storyless = CARDS.filter((c) => !c.story_ids.length);
+  // archived cards are out of the announcement, like the daily checks
+  const storied = CARDS.filter((c) => c.status === 'active' && c.story_ids.length); const storyless = CARDS.filter((c) => !c.story_ids.length);
   const newest = [...storied].sort((a, b) => b.date.localeCompare(a.date))[0];
   const at = Date.parse(newest.date) + 86400_000; // the day after the newest card's as-of date
   const net = pdfNet();
