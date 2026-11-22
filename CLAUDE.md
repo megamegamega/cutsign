@@ -24,4 +24,9 @@ named index.
 - Verdict cards (`public/cards/`) are public OSINT only, re-issued in place (bump `AS_OF` and the
   manifest date together — a test enforces it), and label every bare identifier they print.
 - Titles and summaries claim outcomes only as strongly as the sources confirm.
+- The stale-card checks (`lib/cardchecks.js`, on the watch tick) read what a hand-written card says from
+  its page, so keep the conventions: a status is a `<span class="ok">` or `<span class="bad">` in the
+  table row that names its subject (a distro by name), the chips say `No exploitation reported` and
+  `Not in KEV` in those words while they hold, and history goes in the `ul.tl` timeline. The checks
+  flag and ask for re-issue drafts; they never edit, archive or publish.
 - Delegated review runs at `max` effort; mechanical fan-outs at `low`.

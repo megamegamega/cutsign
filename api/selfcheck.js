@@ -9,6 +9,7 @@
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
 import { CARDS, archiveCandidates, PUBLISHED_MAX, ARCHIVE_QUIET_DAYS } from '../lib/cards.js';
+import { DIGEST_ROW, MIGRATION } from '../lib/cardchecks.js';
 import { supabaseStore } from '../lib/db.js';
 
 const BASE = process.env.SELFCHECK_BASE || 'https://cutsign.vercel.app';
@@ -91,6 +92,18 @@ export default async function handler(req, res) {
 
   if (failures.length) await postDiscord(`Cutsign selfcheck ✖ ${failures.length} failure${failures.length === 1 ? '' : 's'}:\n` + failures.map((f) => '• ' + f).join('\n'));
 
+  // the stale-card checks (lib/cardchecks.js) need their table: said here once a day until migration 0008 is applied
+  let cardChecks = null;
+  try {
+    const rows = await supabaseStore().listCardChecks();
+    cardChecks = { cards: rows.filter((r) => r.slug !== DIGEST_ROW).length, open_flags: rows.reduce((n, r) => n + (r.state?.flags || []).length, 0) };
+  } catch (e) {
+    if (/card_checks/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
+      cardChecks = { off: `apply ${MIGRATION}` };
+      await postDiscord(`Cutsign ▣ stale-card checks are off until ${MIGRATION} is applied.`);
+    } else cardChecks = { error: String(e?.message || e).slice(0, 160) };
+  }
+
   // Mondays: nominate quiet cards for archiving (a human decides; nothing changes here)
   let candidates = []; let published = null;
   if (new Date().getUTCDay() === 1) {
@@ -109,5 +122,5 @@ export default async function handler(req, res) {
       if (published >= PUBLISHED_MAX * 0.75) await postDiscord(`Cutsign ▣ ${published} active AI cards; the site carries the newest ${PUBLISHED_MAX}. Quiet cards archive themselves after ${ARCHIVE_QUIET_DAYS} days, so this many at once means more cards a month than the limit was set for: raise PUBLISHED_MAX in lib/cards.js before the oldest active ones drop off the Cards, Exposure and Response tabs.`);
     } catch { /* table missing: nothing published */ }
   }
-  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates, published_ai_cards: published });
+  return res.json({ ok: failures.length === 0, checked: new Date().toISOString(), failures, archive_candidates: candidates, published_ai_cards: published, card_checks: cardChecks });
 }

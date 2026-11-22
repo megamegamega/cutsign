@@ -3,7 +3,8 @@
 // watch once (pages, feeds, and a model only where something changed); the later ticks collect the
 // batched model answers, finish the free checks (KEV, NVD, GitHub) and refresh card coverage.
 // Order inside a tick: batched answers, response actions for cards that have none yet, the inbox, the
-// watches, the card loop, card coverage with what is left of the tick, then indicator facts (free lookups). Every step has a deadline
+// watches, the stale-card checks for hand-written cards (lib/cardchecks.js: free lookups, once a day per
+// card), the card loop, card coverage with what is left of the tick, then indicator facts (free lookups). Every step has a deadline
 // inside the function's 300 s (2026-11-14: the card loop had none, and a tick that ran long was cut
 // off before it answered, with the steps behind the loop never reached).
 //   GET /api/watch?h=NN   Authorization: Bearer $CRON_SECRET
@@ -16,6 +17,7 @@ import { hypeSweep, coverageOnlySweep, actionsOnlySweep, enrichOnlySweep } from 
 import { intake } from '../lib/intake.js';
 import { applyUpdate } from '../lib/update.js';
 import { collectJobs } from '../lib/jobs.js';
+import { cardChecksSweep } from '../lib/cardchecks.js';
 
 export const config = { maxDuration: 300 };
 
@@ -80,6 +82,14 @@ export default async function handler(req, res) {
     const counts = await runWatchTick(store, { deadline: started + 240_000, minIntervalMs: WATCH_EVERY_MS(), slowGapMs: SLOW_GAP_MS() });
     mark('watches');
     if (counts.errors >= 8) await postDiscord(`Cutsign ⚠ watch tick: ${counts.errors} source fetches failed (${counts.checked}/${counts.watches} watches checked).`);
+    // Stale-card checks for the hand-written cards (lib/cardchecks.js): KEV, distro fixes, cited advisories,
+    // exploitation, coverage rows, archive candidates. Each card once a day, stalest first; public lookups
+    // only, no model. Before the card loop, because a new KEV listing hands that card's run to it for the
+    // AI re-issue draft. No card starts after 215 s or a minute into the step, so on a tick whose watches
+    // ran long it defers everything to the next tick of the block. It flags; it never edits or publishes.
+    let cardChecks = {};
+    try { cardChecks = await cardChecksSweep(store, { deadline: Math.min(started + 215_000, Date.now() + 60_000) }); } catch (e) { cardChecks = { error: String(e?.message || e).slice(0, 160) }; }
+    mark('card_checks');
     // something developed: re-score the latest brief's stories, since a KEV listing or a material
     // change during the day can push one over the card bar (lib/hype.js); never fails the tick
     // The card loop runs for today's brief and for the run of every story that developed this tick: a
@@ -91,10 +101,11 @@ export default async function handler(req, res) {
     try { recentStoryIds = [...new Set((await store.listWatchEvents({ since: new Date(started - 86_400_000).toISOString() })).filter((e) => e.level === 'HIGH').map((e) => e.watch_story_id).filter(Boolean))]; } catch { /* no events table */ }
     // and for a run whose hunt proposals just landed (a day-one draft waited for them, lib/hype.js)
     const landedRuns = jobs.runs || [];
-    if (counts.events > 0 || recentStoryIds.length || landedRuns.length) {
+    const staleRuns = cardChecks.runs || [];
+    if (counts.events > 0 || recentStoryIds.length || landedRuns.length || staleRuns.length) {
       try {
         const latest = (await store.listRecentSentRuns(3)).sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
-        const runIds = new Set([...(latest ? [latest.id] : []), ...landedRuns]);
+        const runIds = new Set([...(latest ? [latest.id] : []), ...staleRuns, ...landedRuns]);
         for (const sid of [...(counts.event_story_ids || []), ...recentStoryIds]) { try { const s = await store.getStory(sid); if (s?.run_id) runIds.add(s.run_id); } catch { /* skip */ } }
         const runs = [];
         for (const id of [...runIds].slice(0, 4)) { const r = id === latest?.id ? latest : await store.getRun(id); if (r) runs.push(r); }
@@ -117,7 +128,7 @@ export default async function handler(req, res) {
     mark('coverage');
     mark('end');
     console.log(`[watch] tick ended at ${secs.end} s of 300: ${JSON.stringify({ ...secs, enrich_counts: enrich })}`);
-    return res.json({ ok: true, ...counts, jobs, actions, updates, opened, coverage, hype, enrich, seconds: secs });
+    return res.json({ ok: true, ...counts, jobs, actions, updates, opened, card_checks: cardChecks, coverage, hype, enrich, seconds: secs });
   } catch (e) {
     // before migration 0002 is applied the tables don't exist — skip quietly instead of alerting on every tick
     if (/watch(es|_events)/.test(String(e?.message)) && /does not exist|could not find|schema cache/i.test(String(e?.message))) {
