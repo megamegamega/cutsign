@@ -265,18 +265,18 @@ test('sweep: a carded thread with a KEV listing after the card date is raised on
   const card = CARDS[0];
   const now = Date.parse('2026-10-28T13:00:00Z');
   // the catalog lists the thread's CVE the day after the card was written
-  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-102764', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
   const c1 = await hypeSweep(store, { run, fetchImpl: kevLate, now });
   assert.equal(c1.carded, 1); assert.equal(c1.stale, 1); assert.equal(c1.drafted, 1); assert.equal(c1.nominated, 0); assert.equal(c1.errors, 0, JSON.stringify(c1));
   const nudge = out.discord.find((l) => l.startsWith(`Cutsign ▲ card ${card.slug}`));
-  assert.ok(nudge, out.discord.join('\n')); assert.match(nudge, /CISA KEV listed CVE-2026-1 on 2026-10-24 \(federal due 2026-10-27\)/); assert.match(nudge, /AI re-issue draft follows/);
+  assert.ok(nudge, out.discord.join('\n')); assert.match(nudge, /CISA KEV listed CVE-2026-102764 on 2026-10-24 \(federal due 2026-10-27\)/); assert.match(nudge, /AI re-issue draft follows/);
   assert.ok(out.discord.some((l) => l.includes(`AI re-issue draft for card ${card.slug}`)));
   assert.equal(calls.length, 1);
   assert.match(calls[0].messages[0].content, new RegExp(`<existing_card slug="${card.slug}" as_of="${card.date}">`));
-  assert.match(calls[0].messages[0].content, /<changes>CISA KEV listed CVE-2026-1/);
+  assert.match(calls[0].messages[0].content, /<changes>CISA KEV listed CVE-2026-102764/);
   const [d] = await store.listCardDrafts();
-  assert.ok(d.surfaced_at, 're-issue drafts are always surfaced'); assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-1 on 2026-10-24 (federal due 2026-10-27)']);
-  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-1']);
+  assert.ok(d.surfaced_at, 're-issue drafts are always surfaced'); assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-102764 on 2026-10-24 (federal due 2026-10-27)']);
+  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-102764']);
   // next tick: the same development is not raised or drafted again
   const c2 = await hypeSweep(store, { run, fetchImpl: kevLate, now: now + 3600_000 });
   assert.equal(c2.stale, 0); assert.equal(c2.drafted + c2.revised, 0); assert.equal(calls.length, 1);
@@ -287,7 +287,7 @@ test('sweep: a carded thread with a KEV listing after the card date is raised on
   const c3 = await hypeSweep(store, { run, fetchImpl: kevLate, now: now + 7200_000 });
   assert.equal(c3.stale, 1); assert.equal(c3.revised, 1); assert.equal(calls.length, 2);
   assert.match(calls[1].messages[0].content, /<prior_draft version="1">/);
-  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-1', 'event:ev1']);
+  assert.deepEqual((await store.getStory(hot.id)).raw_iocs.hype.card_devs, ['kev:CVE-2026-102764', 'event:ev1']);
 });
 
 test('a draft takes its Detect section from the thread\'s proposer hunts instead of inventing queries', async () => {
@@ -328,15 +328,41 @@ test('a model-written hunt renders its ES|QL twin beside the Splunk search, and 
 });
 
 test('cardDevelopments: nothing before the card date, KEV and HIGH events after it', () => {
-  const card = { slug: 'x', date: '2026-10-23', cves: ['CVE-2026-1'] };
-  const thread = [{ id: 's1', cves: ['CVE-2026-2'] }];
-  const kev = new Map([['CVE-2026-1', '2026-10-20'], ['CVE-2026-2', { dateAdded: '2026-10-25', dueDate: null }]]);
+  const card = { slug: 'x', date: '2026-10-23', cves: ['CVE-2026-1'], story_ids: ['s1'] };
+  const thread = [{ id: 's1', cves: ['CVE-2026-1'] }];
+  const kev = new Map([['CVE-2026-1', { dateAdded: '2026-10-25', dueDate: null }]]);
   const events = [
     { id: 'a', watch_story_id: 's1', level: 'HIGH', created_at: '2026-10-22T00:00:00Z', kind: 'kev_added' },
     { id: 'b', watch_story_id: 's1', level: 'LOW', created_at: '2026-10-26T00:00:00Z', kind: 'poc_repo' },
     { id: 'c', watch_story_id: 's1', level: 'HIGH', created_at: '2026-10-26T00:00:00Z', kind: 'page_change', summary: 'Vendor confirms exploitation.' },
   ];
-  assert.deepEqual(cardDevelopments({ card, thread, kev, events }).map((x) => x.key), ['kev:CVE-2026-2', 'event:c']);
+  assert.deepEqual(cardDevelopments({ card, thread, kev, events }).map((x) => x.key), ['kev:CVE-2026-1', 'event:c']);
+});
+
+test('cardDevelopments: other campaigns in the thread do not re-issue the card (Java4Shell v5, 2026-11-25)', () => {
+  const card = { slug: 'java4shell-2026', date: '2026-11-22', cves: ['CVE-2026-114938'], story_ids: ['j1'] };
+  const thread = [
+    { id: 'j1', cves: ['CVE-2026-114938'] },
+    { id: 'r2', cves: ['CVE-2026-114938', 'CVE-2026-76466'] }, // a later roundup row that still names the card's CVE
+    { id: 'o3', cves: ['CVE-2026-123890'] },                   // another campaign reached through the update chain
+  ];
+  const kev = new Map([['CVE-2026-76466', '2026-11-20'], ['CVE-2026-123890', '2026-11-23'], ['CVE-2026-114938', '2026-11-24']]);
+  const events = [
+    { id: 'e1', watch_story_id: 'o3', level: 'HIGH', created_at: '2026-11-24T00:00:00Z', kind: 'new_source', summary: 'Armory Castle chain.' },
+    { id: 'e2', watch_story_id: 'r2', level: 'HIGH', created_at: '2026-11-24T00:00:00Z', kind: 'poc_repo', summary: 'PoC for CVE-2026-76466 published' },
+    { id: 'e3', watch_story_id: 'r2', level: 'HIGH', created_at: '2026-11-24T00:00:00Z', kind: 'new_source', summary: 'Exploitation of CVE-2026-114938 seen' },
+    { id: 'e4', watch_story_id: 'j1', level: 'HIGH', created_at: '2026-11-24T00:00:00Z', kind: 'page_change', summary: 'Red Hat ships Keycloak image fix' },
+  ];
+  const got = cardDevelopments({ card, thread, kev, events }).map((x) => x.key);
+  assert.deepEqual(got, ['kev:CVE-2026-114938', 'event:e3', 'event:e4']);
+});
+
+test('cardDevelopments: a card with no declared CVE keeps its own story events and lists no KEV', () => {
+  const card = { slug: 'ssrf', date: '2026-11-21', cves: [], story_ids: ['p1'] };
+  const thread = [{ id: 'p1', cves: ['CVE-2026-9'] }];
+  const kev = new Map([['CVE-2026-9', '2026-11-25']]);
+  const events = [{ id: 'z', watch_story_id: 'p1', level: 'HIGH', created_at: '2026-11-25T00:00:00Z', kind: 'page_change', summary: 'CVE-2026-9 note' }];
+  assert.deepEqual(cardDevelopments({ card, thread, kev, events }).map((x) => x.key), ['event:z']);
 });
 
 test('draft input carries only stored facts; the schema has no slot for a coverage claim', () => {
@@ -919,8 +945,8 @@ test('a hand-written card reached through two briefs raises a development once, 
   const card = CARDS[0];
   const runA = await briefRun(store, '2026-10-27'); const runB = await briefRun(store, '2026-10-28');
   // two of the card's manifest rows, each in its own brief
-  store._tables.stories.push(story(1, { id: card.story_ids[0], run_id: runA.id, cves: ['CVE-2026-1'] }), story(2, { id: card.story_ids[1], run_id: runB.id, cves: ['CVE-2026-1'] }));
-  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24' }] }), { status: 200 });
+  store._tables.stories.push(story(1, { id: card.story_ids[0], run_id: runA.id, cves: ['CVE-2026-102764'] }), story(2, { id: card.story_ids[1], run_id: runB.id, cves: ['CVE-2026-102764'] }));
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-102764', dateAdded: '2026-10-24' }] }), { status: 200 });
   const now = Date.parse('2026-10-28T13:00:00Z');
   const cA = await hypeSweep(store, { run: runA, fetchImpl: kevLate, now });
   assert.equal(cA.stale, 1); assert.equal(calls.length, 1);
@@ -1107,7 +1133,7 @@ test('batched: a hand-written card\'s re-issue draft goes through the batch too 
   const { out, store, run, calls, hot } = await batched(t, { publish: false, carded: true });
   const card = CARDS[0];
   const fake = installFakeBatch(() => DRAFT);
-  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-1', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
+  const kevLate = async () => new Response(JSON.stringify({ vulnerabilities: [{ cveID: 'CVE-2026-102764', dateAdded: '2026-10-24', dueDate: '2026-10-27' }] }), { status: 200 });
   const now = Date.parse('2026-10-28T13:00:00Z');
   const c1 = await hypeSweep(store, { run, fetchImpl: kevLate, now });
   assert.equal(c1.stale, 1); assert.equal(c1.submitted, 1, JSON.stringify(c1)); assert.equal(c1.drafted, 0); assert.equal(calls.length, 0);
@@ -1118,8 +1144,8 @@ test('batched: a hand-written card\'s re-issue draft goes through the batch too 
   const j = await collectJobs(store, { fetchImpl: kevLate, now: now + 3600_000 });
   assert.equal(j.landed, 1, JSON.stringify(j));
   const [d] = await store.listCardDrafts();
-  assert.ok(d.surfaced_at); assert.deepEqual(JSON.parse(d.fingerprint), { card: card.slug, devs: ['kev:CVE-2026-1'] });
-  assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-1 on 2026-10-24 (federal due 2026-10-27)']);
+  assert.ok(d.surfaced_at); assert.deepEqual(JSON.parse(d.fingerprint), { card: card.slug, devs: ['kev:CVE-2026-102764'] });
+  assert.deepEqual(d.draft.changes_since_prior, ['CISA KEV listed CVE-2026-102764 on 2026-10-24 (federal due 2026-10-27)']);
   assert.ok(out.discord.some((l) => l.includes(`AI re-issue draft for card ${card.slug}`)), out.discord.join('\n'));
   assert.equal(out.emails.filter((m) => /AI draft ready to publish/.test(m.subject)).length, 1);
   assert.equal((await store.getStory(hot.id)).raw_iocs.hype.draft_id, d.id);
