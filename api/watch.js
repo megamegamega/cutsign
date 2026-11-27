@@ -10,7 +10,7 @@
 //   GET /api/watch?h=NN   Authorization: Bearer $CRON_SECRET
 
 import { supabaseStore } from '../lib/db.js';
-import { runWatchTick, ensureWatches } from '../lib/watch.js';
+import { runWatchTick, ensureWatches, openMissingWatches } from '../lib/watch.js';
 import { authorized } from '../lib/auth.js';
 import { postDiscord } from '../lib/discord.js';
 import { hypeSweep, coverageOnlySweep, actionsOnlySweep, enrichOnlySweep } from '../lib/hype.js';
@@ -74,8 +74,9 @@ export default async function handler(req, res) {
     } catch (e) { updates = { error: String(e?.message || e).slice(0, 160) }; await postDiscord(`Cutsign ✖ inbox poll on the watch tick failed: ${updates.error}`); }
     // every CVE story of the last 30 days has a watch: what an older rule skipped (quick reads) is opened
     // here without anyone finding it; nothing is extended, so watches still expire on their own
+    // (the active watches are read once for all of these runs: lib/watch.js openMissingWatches)
     const opened = { watches_created: 0 };
-    try { for (const run of await store.listRecentSentRuns(30)) opened.watches_created += (await ensureWatches(store, run, { extend: false })).watches_created; } catch (e) { opened.error = String(e?.message || e).slice(0, 160); }
+    try { opened.watches_created = (await openMissingWatches(store, await store.listRecentSentRuns(30))).watches_created; } catch (e) { opened.error = String(e?.message || e).slice(0, 160); }
     // 240 s, not 270 (2026-11-14: a tick answered at 274 s of the 300 s, which is the plan's ceiling). The
     // watches start a model read with as little as 20 s left on this clock and a read can take a minute:
     // now the last one starts by 220 s. A watch not reached is held, not marked read, for the next tick.

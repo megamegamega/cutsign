@@ -5,7 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor, aiCard, publishedRows, PUBLISHED_MAX, ARCHIVED_MAX } from "../lib/cards.js";
+import { CARDS, STATUSES, cardByStory, cardForStory, cardByCve, activeCards, archiveCandidates, cardIndex, slugFor, aiCard, publishedRows, PUBLISHED_MAX, ARCHIVED_MAX, SHORT_COLUMNS } from "../lib/cards.js";
+import { memoryStore } from '../lib/store-memory.js';
 import { ESQL_ALLOW } from '../lib/lint.js';
 
 const dir = new URL('../public/cards/', import.meta.url);
@@ -189,4 +190,60 @@ test('AI cards: the archive mark on the row makes the card archived; published r
   const q = await publishedRows(plain);
   assert.deepEqual([q.active.map((r) => r.id), q.archived.map((r) => r.id)], [['a'], ['b']]);
   assert.equal(said.length, 1); assert.match(said[0], /archive filter not usable \(db: no such operator\)/);
+});
+
+test('published rows in short: a page that only links stories to cards reads no card text and links the same cards', async () => {
+  const store = memoryStore();
+  const text = 'LONG-CARD-TEXT '.repeat(200);
+  const draft = (over = {}) => ({ lane: 'Patch now', verdict: 'Patch today.', cves: ['CVE-2026-424242'], sections: text, coverage: { checked_at: '2026-11-20T12:00:00Z', lanes: [{ text }] }, actions: { steps: [{ text }] }, enrich: { k: text }, ...over });
+  const A = await store.insertCardDraft({ title: 'Widgetry RCE exploited', thread_ids: ['s-a1', 's-a2'], score: 9, reasons: [], draft: draft(), status: 'promoted', promoted_slug: 'widgetry-rce-2026', version: 3 });
+  await store.insertCardDraft({ title: 'Old thing', thread_ids: ['s-b'], score: 7, reasons: [], draft: draft({ cves: ['CVE-2026-424243'], archived_on: '2026-11-05', lane: 'Patch', verdict: 'Was urgent.' }), status: 'promoted', promoted_slug: 'old-thing-2026', version: 1 });
+  await store.insertCardDraft({ title: 'Not published', thread_ids: ['s-c'], score: 5, reasons: [], draft: draft(), status: 'draft' });
+  const asked = []; const list = store.listCardDrafts.bind(store); store.listCardDrafts = async (o) => { asked.push(o); return list(o); };
+
+  const whole = await publishedRows(store);
+  const short = await publishedRows(store, { full: false });
+  assert.deepEqual(asked.map((o) => [o.status, o.archived, o.limit, o.columns || '*']), [
+    ['promoted', false, PUBLISHED_MAX, '*'], ['promoted', true, ARCHIVED_MAX, SHORT_COLUMNS],
+    ['promoted', false, PUBLISHED_MAX, SHORT_COLUMNS], ['promoted', true, ARCHIVED_MAX, SHORT_COLUMNS]]);
+  assert.ok(!/(^|,)draft(,|$)/.test(SHORT_COLUMNS), 'the short read never asks for the whole draft');
+  assert.ok(JSON.stringify(whole.active).includes('LONG-CARD-TEXT'));
+  assert.ok(!JSON.stringify(short).includes('LONG-CARD-TEXT'), 'no card text, coverage, actions or lookups in a short read');
+  assert.ok(JSON.stringify(short.active).length * 10 < JSON.stringify(whole.active).length, 'and it is a small fraction of the full read');
+  assert.deepEqual([short.active.length, short.archived.length], [1, 1]);
+
+  // what a link needs is the same either way; only the coverage, which no linking view shows, is absent
+  const a = cardIndex([...whole.active, ...whole.archived]); const b = cardIndex([...short.active, ...short.archived]);
+  const ai = (idx) => idx.cards.filter((c) => c.source === 'ai');
+  assert.deepEqual(ai(b).map(({ coverage, ...c }) => c), ai(a).map(({ coverage, ...c }) => c));
+  assert.equal(ai(b).find((c) => c.slug === 'widgetry-rce-2026').coverage, null);
+  assert.deepEqual(ai(b).find((c) => c.slug === 'widgetry-rce-2026'), { slug: 'widgetry-rce-2026', title: 'Widgetry RCE exploited', date: A.created_at.slice(0, 10), lane: 'Patch now', summary: 'Patch today.',
+    cves: ['CVE-2026-424242'], story_ids: ['s-a1', 's-a2'], status: 'active', archived_on: null, superseded_by: null, source: 'ai', url: '/cards/widgetry-rce-2026', draft_id: A.id, version: 3, coverage: null });
+  for (const story of [{ id: 's-a2' }, { id: 'later', updates_story_id: 's-a1' }, { id: 'sibling', cves: ['CVE-2026-424242'] }, { id: 's-b' }, { id: 'nothing' }]) {
+    assert.deepEqual(b.cardForStory(story)?.url || null, a.cardForStory(story)?.url || null, `story ${story.id}`);
+  }
+  assert.equal(b.cardForStory({ id: 'later', updates_story_id: 's-a1' }).url, '/cards/widgetry-rce-2026');
+
+  // a store that cannot filter falls back to the full rows, as before
+  const plain = { listCardDrafts: async (o) => { if (o.archived != null) throw new Error('db: no such operator'); return list({ status: 'promoted', limit: 10 }); } };
+  const warn = console.warn; console.warn = () => {};
+  try { assert.deepEqual((await publishedRows(plain, { full: false })).active.map((r) => r.promoted_slug), ['widgetry-rce-2026']); } finally { console.warn = warn; }
+});
+
+test('the page handler reads the cards in full only in the views that show card content', () => {
+  const page = readFileSync(new URL('../api/page.js', import.meta.url), 'utf8');
+  assert.ok(page.includes("const FULL_CARD_VIEWS = new Set(['card', 'cards', 'exposure', 'actions']);"));
+  // every use of the rows or of the card list sits in one of those four branches, which follow each
+  // other in the handler; a view added later that shows card content has to join the set
+  const at = (x) => { const i = page.indexOf(x); assert.ok(i > 0, x); return i; };
+  const from = at("    if (req.query.view === 'card') {"); const to = at("    if (req.query.view === 'actors') {");
+  assert.deepEqual([...page.slice(from, to).matchAll(/^    if \(req\.query\.view === '(\w+)'\) \{/gm)].map((m) => m[1]), ['card', 'cards', 'exposure', 'actions']);
+  const load = at('IDX = cardIndex([...aiRows, ...oldRows]);');
+  const uses = [...page.matchAll(/IDX\.cards\b|\baiRows\b/g)].map((m) => m.index).filter((i) => i > load + 40);
+  assert.ok(uses.length >= 5);
+  for (const i of uses) assert.ok(i > from && i < to, `card content used outside the full-read views: ${page.slice(i - 40, i + 40).replace(/\s+/g, ' ')}`);
+  // a story's chip needs only a card's address and kind, and a draft's id, version and thread
+  assert.ok(page.includes("columns: 'id,thread_ids,version,surfaced_at'"));
+  const chips = page.slice(at('const verdictChip = '), at('const updateChip = '));
+  assert.deepEqual([...new Set([...chips.matchAll(/\b(?:c|x)\.(\w+)/g)].map((m) => m[1]))].sort(), ['id', 'source', 'thread_ids', 'url', 'version']);
 });

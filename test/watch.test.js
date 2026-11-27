@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { memoryStore } from '../lib/store-memory.js';
 import { intake } from '../lib/intake.js';
 import { driveRuns } from '../lib/pipeline.js';
-import { runWatchTick, addedText, lineHashes, itemMatches, parseFeed, foldKevEvents, watchMatchesStory, normUrl, mergeDuplicateWatches, modelFailure, majorKinds, mailWorthy, knownContext } from '../lib/watch.js';
+import { runWatchTick, ensureWatches, openMissingWatches, addedText, lineHashes, itemMatches, parseFeed, foldKevEvents, watchMatchesStory, normUrl, mergeDuplicateWatches, modelFailure, majorKinds, mailWorthy, knownContext } from '../lib/watch.js';
 import { _setEmailSink } from '../lib/email.js';
 import { dedupeEvents, buildDigestData, renderHtml } from '../lib/render.js';
 import { fixtureMessage, withHeaders, fakeFetch, installFakeLLM, defaultResponder, captureOutputs, readFixture } from './helpers.js';
@@ -944,4 +944,72 @@ test('morning email: low-signal updates are a count, not a list; a watch with no
   assert.equal((web.match(/<p class="k">/g) || []).length, 2, 'the page keeps a group per watch');
   assert.match(web, /<details><summary class="s">list \(2\)<\/summary>/); assert.ok(web.includes('poc-two') && web.includes('poc-one'));
   assert.ok(!web.includes('Listed on the page'));
+});
+
+// ---- how much the tick reads: every active watch row carries its pages' line fingerprints ----------
+
+/** A store with one watched campaign (from the fixture brief) and two later runs of CVE stories. */
+async function manyRuns() {
+  const { store } = await setup({ next: () => assessment() });
+  const t = store._tables;
+  const story = (id, run, over = {}) => ({ id, run_id: run, ordinal: 1, status: 'extracted', selected: false, title: `Story ${id}`, cves: [], source_urls: [], raw_iocs: {}, threat_actor: null, malware_family: null, updates_story_id: null, ...over });
+  t.runs.push({ id: 'run-b', stage: 'sent', dry: false, brief_id: null, started_at: '2026-11-02T12:00:00Z' }, { id: 'run-c', stage: 'sent', dry: false, brief_id: null, started_at: '2026-11-03T12:00:00Z' });
+  t.stories.push(
+    story('st-b1', 'run-b', { cves: ['CVE-2026-700001'] }),
+    story('st-b2', 'run-b', { cves: ['CVE-2026-88779'], title: 'The watched campaign again' }), // the fixture's CVE: already watched
+    story('st-b3', 'run-b', { title: 'No CVE, quick read: not watched' }),
+    story('st-c1', 'run-c', { cves: ['CVE-2026-700001'], updates_story_id: 'st-b1', title: 'The same campaign a day later' }),
+    story('st-c2', 'run-c', { cves: ['CVE-2026-700002'], ordinal: 2 }),
+  );
+  return store;
+}
+// (a story id from the fixture brief is random per store, so a watch is named by its story's title)
+const watchFacts = (store) => store._tables.watches.map((w) => [w.status, w.title, [...(w.cves || [])].sort().join(','), store._tables.stories.find((s) => s.id === w.story_id)?.title || null, (w.urls || []).join(' '), w.expires_at ? 'expires' : '']).sort((a, b) => String(a).localeCompare(String(b)));
+
+test('the tick\'s safety net reads the active watches once for all runs, opens what is missing and extends nothing', async () => {
+  const store = await manyRuns();
+  const t = store._tables;
+  const first = structuredClone(t.watches[0]);
+  let reads = 0; const list = store.listActiveWatches.bind(store); store.listActiveWatches = async () => { reads++; return list(); };
+  const runs = await store.listRecentSentRuns(30);
+  assert.equal(runs.length, 3);
+  const c = await openMissingWatches(store, runs);
+  assert.equal(reads, 1, 'one read of the active watches, not one per run');
+  assert.equal(c.watches_created, 2, 'one watch per new campaign: the story a day later joins the watch opened a moment ago');
+  assert.deepEqual(t.watches.filter((w) => w.status === 'active').map((w) => (w.cves || []).join(',')).sort(), ['CVE-2026-700001', 'CVE-2026-700002', first.cves.join(',')].sort());
+  assert.deepEqual(t.watches[0], first, 'the watch that existed is not extended or rewritten');
+  // nothing to walk: nothing is read
+  reads = 0; assert.deepEqual(await openMissingWatches(store, []), { watches_created: 0 }); assert.equal(reads, 0);
+  // a second pass opens nothing more
+  assert.equal((await openMissingWatches(store, runs)).watches_created, 0);
+});
+
+test('the safety net leaves the same watches as asking run by run did', async () => {
+  const [a, b] = [await manyRuns(), await manyRuns()];
+  let created = 0; for (const run of await a.listRecentSentRuns(30)) created += (await ensureWatches(a, run, { extend: false })).watches_created;
+  const c = await openMissingWatches(b, await b.listRecentSentRuns(30));
+  assert.equal(c.watches_created, created);
+  assert.deepEqual(watchFacts(b), watchFacts(a));
+  // a run of its own still reads and extends as before; a list handed in is only used when nothing is extended
+  let reads = 0; const list = b.listActiveWatches.bind(b); b.listActiveWatches = async () => { reads++; return list(); };
+  const run = (await b.listRecentSentRuns(30)).find((r) => r.id === 'run-c');
+  const before = b._tables.watches.find((w) => (w.cves || []).includes('CVE-2026-700002')).expires_at;
+  await new Promise((r) => setTimeout(r, 5));
+  const ext = await ensureWatches(b, run, { active: [] });
+  assert.equal(reads, 1, 'extending reads the watches itself');
+  assert.deepEqual([ext.watches_created, ext.watches_extended], [0, 2], 'the empty list handed in was not believed');
+  assert.ok(b._tables.watches.find((w) => (w.cves || []).includes('CVE-2026-700002')).expires_at >= before);
+});
+
+test('a tick reads the active watches once; a watch past its end is expired and not checked', async () => {
+  const { store } = await setup({ next: () => assessment() });
+  const t = store._tables;
+  t.watches.push({ ...structuredClone(t.watches[0]), id: 'w-old', story_id: 'st-other', title: 'Ended yesterday', cves: ['CVE-2026-700009'], urls: ['https://vendor-fixture.test/ended'], expires_at: new Date(Date.now() - 86_400_000).toISOString() });
+  let reads = 0; const list = store.listActiveWatches.bind(store); store.listActiveWatches = async () => { reads++; return list(); };
+  const w = world();
+  const c = await runWatchTick(store, { fetchImpl: w.fetch });
+  assert.equal(reads, 1);
+  assert.equal(c.watches, 1, 'only the live watch is checked');
+  assert.equal(t.watches.find((x) => x.id === 'w-old').status, 'expired');
+  assert.equal(t.watches.filter((x) => x.status === 'active').length, 1);
 });

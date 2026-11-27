@@ -595,7 +595,8 @@ test('wiring: the three routes exist, the page handler serves them, and the card
   assert.ok(PUBLISHED_MAX >= 200);
   // (the active ones: lib/cards.js publishedRows reads them for both, and archived ones in short for the page)
   assert.ok(readFileSync(new URL('../lib/cards.js', import.meta.url), 'utf8').includes("listCardDrafts({ status: 'promoted', archived: false, limit: PUBLISHED_MAX })"));
-  assert.ok(page.includes('await publishedRows(store)') && !/status: 'promoted', limit: \d/.test(page));
+  // (a view that only links stories to cards asks for them in short: same rows, same limit, fewer columns)
+  assert.ok(page.includes('await publishedRows(store, { full: FULL_CARD_VIEWS.has(') && !/status: 'promoted', limit: \d/.test(page));
   const hype = readFileSync(new URL('../lib/hype.js', import.meta.url), 'utf8');
   assert.ok(hype.includes('publishedRows(store, { archived: false })') && !/status: 'promoted', limit: \d/.test(hype));
   // a single card's page reads its own row, so its URL outlives any limit; an archived one says so

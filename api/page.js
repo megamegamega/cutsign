@@ -22,6 +22,9 @@ import { actionsLookup, actionsReport, actionsTsv, actionsBody, actionsSummary, 
 // AI cards (card_drafts rows with status 'promoted'). Set per request from the same table state,
 // so an interleaved request overwriting it changes nothing.
 let IDX = cardIndex([]);
+// The views that show what a card says (its coverage, its response actions, its text) read the
+// published cards in full. Every other view only links a story to its card and reads them in short.
+const FULL_CARD_VIEWS = new Set(['card', 'cards', 'exposure', 'actions']);
 
 // (card) → its stored coverage check. An AI card carries its own; a hand-written card's rides on its
 // manifest story rows (lib/hype.js writes raw_iocs.hype.card_coverage), the newest one wins.
@@ -521,7 +524,7 @@ export default async function handler(req, res) {
     const oneCard = req.query.view === 'card' && !String(req.query.q || '').trim() ? String(req.query.slug || '').toLowerCase() : null;
     try {
       if (oneCard) aiRows = await store.listCardDrafts({ status: 'promoted', slug: oneCard, limit: 1 });
-      else ({ active: aiRows, archived: oldRows } = await publishedRows(store));
+      else ({ active: aiRows, archived: oldRows } = await publishedRows(store, { full: FULL_CARD_VIEWS.has(String(req.query.view || '')) }));
     } catch { aiRows = []; oldRows = []; }
     IDX = cardIndex([...aiRows, ...oldRows]);
 
@@ -832,7 +835,8 @@ export default async function handler(req, res) {
     const d = await buildDigestData(store, pick.run);
     // AI drafts (lib/hype.js) that crossed the surface bar: a chip on their story in the CISO view
     // and an ai_draft link in the agent JSON; the table may not exist before migration 0004
-    try { d.drafts = (await store.listCardDrafts({ status: 'draft', limit: 30 })).filter((x) => x.surfaced_at); } catch { d.drafts = []; }
+    // (in short: the chip needs the draft's id, version and thread, not its text)
+    try { d.drafts = (await store.listCardDrafts({ status: 'draft', limit: 30, columns: 'id,thread_ids,version,surfaced_at' })).filter((x) => x.surfaced_at); } catch { d.drafts = []; }
     try { // web view: recent watch events regardless of digested/notified state
       const cutoff = Date.now() - 48 * 3600 * 1000;
       d.watchEvents = dedupeEvents((await store.listWatchEvents({})).filter((e) => new Date(e.created_at).getTime() >= cutoff));
